@@ -1,0 +1,7 @@
+modLoader="javafml"
+loaderVersion="[1,)"
+license="All Rights Reserved"
+
+[[mods]]
+modId="cleanenv_tests"
+displayName="Clean Env: Tests"
