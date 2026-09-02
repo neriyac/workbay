@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Everything a CI server would run, run locally instead. Free, no minutes, no remote.
 #
-#   ./tools/verify.sh          build + gametests + doc caps
+#   ./tools/verify.sh          build + gametests + doc budget
 #   ./tools/verify.sh --fast   skip the gametest server (~15s faster)
 #
 # Also runs as the pre-push hook. Bypass a failing push with: git push --no-verify
@@ -43,7 +43,7 @@ else
   printf '%-16s SKIPPED (--fast)\n' "gametests"
 fi
 
-step "doc caps" ./tools/check-docs.sh
+step "doc budget" ./tools/check-docs.sh
 
 echo "----------------------------------------------"
 if [ -n "$fails" ]; then
