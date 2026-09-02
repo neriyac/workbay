@@ -1,4 +1,7 @@
 {
   "itemGroup.cleanenv": "Clean Env",
-  "block.cleanenv.placeholder_block": "Placeholder Block"
+  "block.cleanenv.placeholder_block": "Placeholder Block",
+  "block.cleanenv.counter_block": "Counter Block",
+  "item.cleanenv.placeholder_item": "Placeholder Item",
+  "screen.cleanenv.counter_block.count": "Count: %s"
 }

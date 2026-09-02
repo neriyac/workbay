@@ -20,7 +20,10 @@ public class CECreativeTabs {
             .title(Component.translatable("itemGroup.cleanenv"))
             .icon(() -> new ItemStack(CEBlocks.PLACEHOLDER_BLOCK.get()))
             .withTabsBefore(CreativeModeTabs.SPAWN_EGGS)
-            .displayItems((parameters, output) -> addAll(CEBlocks.ITEMS, parameters, output))
+            .displayItems((parameters, output) -> {
+                addAll(CEBlocks.ITEMS, parameters, output);
+                addAll(CEItems.ITEMS, parameters, output);
+            })
             .build());
 
     public static void register(IEventBus bus) {

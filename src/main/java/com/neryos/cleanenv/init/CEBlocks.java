@@ -1,6 +1,7 @@
 package com.neryos.cleanenv.init;
 
 import com.neryos.cleanenv.CleanEnv;
+import com.neryos.cleanenv.content.counter.CounterBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockBehaviour;
@@ -15,6 +16,9 @@ public class CEBlocks {
     public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(CleanEnv.MOD_ID);
 
     public static final DeferredBlock<Block> PLACEHOLDER_BLOCK = registerWithItem("placeholder_block", Block::new,
+        BlockBehaviour.Properties.ofFullCopy(Blocks.STONE));
+
+    public static final DeferredBlock<CounterBlock> COUNTER_BLOCK = registerWithItem("counter_block", CounterBlock::new,
         BlockBehaviour.Properties.ofFullCopy(Blocks.STONE));
 
     private static <B extends Block> DeferredBlock<B> registerWithItem(String name, Function<BlockBehaviour.Properties, ? extends B> func,

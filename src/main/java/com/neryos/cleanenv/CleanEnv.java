@@ -1,7 +1,10 @@
 package com.neryos.cleanenv;
 
+import com.neryos.cleanenv.init.CEBlockEntities;
 import com.neryos.cleanenv.init.CEBlocks;
 import com.neryos.cleanenv.init.CECreativeTabs;
+import com.neryos.cleanenv.init.CEItems;
+import com.neryos.cleanenv.init.CEMenus;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
@@ -17,6 +20,9 @@ public class CleanEnv {
 
     public CleanEnv(IEventBus modEventBus, ModContainer modContainer) {
         CEBlocks.register(modEventBus);
+        CEBlockEntities.register(modEventBus);
+        CEItems.register(modEventBus);
+        CEMenus.register(modEventBus);
         CECreativeTabs.register(modEventBus);
     }
 }

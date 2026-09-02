@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# The local stand-in for CI. Bypass with: git push --no-verify
+exec ./tools/verify.sh

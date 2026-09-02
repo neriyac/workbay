@@ -28,6 +28,10 @@ sourceSets.main.resources {
 
 // Gametests live in their own source set and their own mod, mirroring EnderIO's layout.
 sourceSets {
+    // Datagen classes never ship in the jar; their output does (src/generated/resources).
+    datagen {
+        compileClasspath += sourceSets.main.output
+    }
     gametest {
         compileClasspath += sourceSets.main.output
     }
@@ -62,6 +66,7 @@ neoForge {
     mods {
         "${mod_id}" {
             sourceSet(sourceSets.main)
+            sourceSet(sourceSets.datagen)
         }
 
         // The gametests are their own mod so they can be loaded only where they are wanted.
@@ -70,7 +75,8 @@ neoForge {
         }
     }
 
-    // Give the gametest source set the Minecraft/NeoForge classes to compile against.
+    // Give the extra source sets the Minecraft/NeoForge classes to compile against.
+    addModdingDependenciesTo(sourceSets.datagen)
     addModdingDependenciesTo(sourceSets.gametest)
 
     // Default run configurations.
@@ -99,6 +105,10 @@ neoForge {
 
         data {
             data()
+            sourceSet = sourceSets.datagen
+            // Only the mod itself. Without this the gametest mod is loaded too and fails
+            // to construct, because the test framework is not on the datagen classpath.
+            loadedMods = [mods.getByName(mod_id)]
             // example of overriding the workingDirectory set in configureEach above, uncomment if you want to use it
             // gameDirectory = project.file('run-data')
 
@@ -130,6 +140,10 @@ neoForge {
 // "optional", meaning it will not be pulled by dependents of this mod.
 configurations {
     runtimeClasspath.extendsFrom localRuntime
+
+    datagenImplementation.extendsFrom implementation
+    datagenCompileOnly.extendsFrom compileOnly
+    datagenRuntimeOnly.extendsFrom runtimeOnly
 
     gametestImplementation.extendsFrom implementation
     gametestCompileOnly.extendsFrom compileOnly
@@ -206,7 +220,7 @@ publishing {
 // 'build' would otherwise skip the gametest source set entirely, so a compile error in
 // src/gametest passes the build and only surfaces when someone runs runGameTestServer.
 tasks.named('check') {
-    dependsOn 'compileGametestJava'
+    dependsOn 'compileGametestJava', 'compileDatagenJava'
 }
 
 tasks.withType(JavaCompile).configureEach {

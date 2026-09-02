@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "cleanenv:block/counter_block"
+    }
+  }
+}
