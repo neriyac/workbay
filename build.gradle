@@ -98,6 +98,10 @@ neoForge {
             type = "gameTestServer"
             sourceSet = sourceSets.gametest
             loadedMods = [mods.getByName(mod_id), mods.getByName("${mod_id}_tests")]
+            // Its own game directory, wiped before every run by cleanGameTestWorld below. The
+            // Backshop is a persistent dimension, so sharing run/ with the client let one run's
+            // leftovers -- a furnace still burning coal from the last run -- seed the next one.
+            gameDirectory = project.file('run-gametest')
             // No 'neoforge.enabledGameTestNamespaces': NeoForge's test framework registers its
             // gametests under its own namespace, so any filter here drops every test. EnderIO
             // sets no filter either.
@@ -221,6 +225,15 @@ publishing {
 // src/gametest passes the build and only surfaces when someone runs runGameTestServer.
 tasks.named('check') {
     dependsOn 'compileGametestJava', 'compileDatagenJava'
+}
+
+// A gametest must not be able to see the previous run's world, or a test that only passes
+// because of what the last run left behind looks exactly like a test that passes.
+var cleanGameTestWorld = tasks.register('cleanGameTestWorld', Delete) {
+    delete project.file('run-gametest/world')
+}
+tasks.named('runGameTestServer') {
+    dependsOn cleanGameTestWorld
 }
 
 tasks.withType(JavaCompile).configureEach {

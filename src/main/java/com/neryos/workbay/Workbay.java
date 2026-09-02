@@ -2,6 +2,7 @@ package com.neryos.workbay;
 
 import com.neryos.workbay.init.WBBlocks;
 import com.neryos.workbay.init.WBItems;
+import com.neryos.workbay.world.WorkbayTickets;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
@@ -18,5 +19,6 @@ public class Workbay {
     public Workbay(IEventBus modEventBus, ModContainer modContainer) {
         WBBlocks.register(modEventBus);
         WBItems.register(modEventBus);
+        WorkbayTickets.register(modEventBus);
     }
 }
