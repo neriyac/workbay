@@ -203,6 +203,12 @@ publishing {
     }
 }
 
+// 'build' would otherwise skip the gametest source set entirely, so a compile error in
+// src/gametest passes the build and only surfaces when someone runs runGameTestServer.
+tasks.named('check') {
+    dependsOn 'compileGametestJava'
+}
+
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8' // Use the UTF-8 charset for Java compilation
 }
