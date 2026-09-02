@@ -11,14 +11,13 @@ cd "$(dirname "$0")/.." || exit 1
 
 # file:max_lines:why
 LIMITS="
-HANDOFF.md:200:current state, not a log; trim finished work instead of appending
-OPEN_ISSUES.md:200:sweep in batches; move fixed items to Resolved, then delete old ones
-MOD_MAP.md:400:one row per real discovery, not per repo that exists
-GLOSSARY.md:300:terms actually met in this codebase, not a modding encyclopedia
-ENDERIO_MAP.md:400:rows earn their place by having been used
-WORKPLAN.md:200:the plan, not its history
-CLAUDE.md:120:read every session; every line here is paid for on every turn
-TEMPLATE.md:150:setup steps only; explanation belongs in the file it describes
+HANDOFF.md:130:current state, not a log; trim finished work instead of appending
+OPEN_ISSUES.md:75:sweep in batches; move fixed items to Resolved, then delete old ones
+MOD_MAP.md:140:one row per real discovery, not per repo that exists
+ENDERIO_MAP.md:140:rows earn their place by having been used
+WORKPLAN.md:60:the plan, not its history
+CLAUDE.md:90:read every session; every line here is paid for on every turn
+TEMPLATE.md:80:setup steps only; explanation belongs in the file it describes
 "
 
 fail=0
