@@ -18,6 +18,7 @@ GLOSSARY.md:300:terms actually met in this codebase, not a modding encyclopedia
 ENDERIO_MAP.md:400:rows earn their place by having been used
 WORKPLAN.md:200:the plan, not its history
 CLAUDE.md:120:read every session; every line here is paid for on every turn
+TEMPLATE.md:150:setup steps only; explanation belongs in the file it describes
 "
 
 fail=0
