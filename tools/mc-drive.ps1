@@ -99,21 +99,21 @@ function CtrlKey([byte]$vk) {
   [W]::keybd_event(0x11, 0, $KEYEVENTF_KEYUP, [IntPtr]::Zero)
 }
 
-# A stray leading character (usually the T that opens chat landing inside an already-open box, or
-# a race between Set-Clipboard and the paste) has shown up often enough to be worth defending
-# against structurally: close whatever chat state exists first, then clear the box before pasting
-# rather than trust it started empty.
+# Commands used to arrive with a stray leading character -- "x/give ..." -- which Minecraft then
+# sends as chat instead of running. The cause is the T landing inside a chat box that a previous
+# call left open, so it types a letter instead of opening anything. Ctrl+A before the paste fixes
+# it whatever the residue was, because the paste then replaces a selection rather than appending to
+# it. Do NOT "helpfully" press Escape first: with nothing open, Escape opens the pause menu, and
+# every key after it goes nowhere.
 function Say([string]$text) {
   Assert-MC | Out-Null
-  Key 0x1B            # Escape, in case a chat box was already open from a previous call
-  Start-Sleep -Milliseconds 200
   Set-Clipboard -Value $text
   Start-Sleep -Milliseconds 300
   Key 0x54            # T
   Start-Sleep -Milliseconds 400
-  CtrlKey 0x41         # Ctrl+A: select whatever is already in the box, stray or not
+  CtrlKey 0x41         # select whatever is already in the box, stray or not
   Start-Sleep -Milliseconds 80
-  CtrlKey 0x56         # Ctrl+V: replaces the selection with the clipboard
+  CtrlKey 0x56         # replaces the selection with the clipboard
   Start-Sleep -Milliseconds 250
   Key 0x0D            # Return
   Start-Sleep -Milliseconds 350

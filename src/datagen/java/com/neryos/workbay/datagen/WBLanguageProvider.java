@@ -33,17 +33,16 @@ public class WBLanguageProvider extends LanguageProvider {
 
         // Chat, one-shot. SPEC.md §6 and §14's network model: a Workbay belongs to the player who
         // placed it, not to the specific item, so there is no code to lose.
-        add(WorkbayLang.messageKey("room_created"), "Workbay %s created and bound to your account. "
-            + "Lose the block and a fresh, uncrafted Workbay picks the same one back up.");
-        add(WorkbayLang.messageKey("network_reused"), "Workbay %s reconnected \u2014 same bays, "
-            + "same links, same upgrades as before.");
+        add(WorkbayLang.messageKey("room_created"), "Workbay network created and bound to your "
+            + "account. Lose the block and a fresh, uncrafted Workbay picks it straight back up.");
+        add(WorkbayLang.messageKey("network_reused"), "Workbay reconnected \u2014 same bays, same "
+            + "links, same upgrades as before.");
         add(WorkbayLang.messageKey("network_cap_reached"), "You already own the maximum of %s "
             + "Workbay network(s). Break one before starting another.");
         add(WorkbayLang.messageKey("network_deployed_full"), "This network already has %s Workbay(s) "
             + "placed. Break one of them before placing another.");
         add(WorkbayLang.messageKey("break_warning"), "Breaking this Workbay leaves its bays behind. "
-            + "The machines keep running \u2014 place any fresh Workbay to get back in, or find "
-            + "this one again with code %s.");
+            + "The machines keep running \u2014 place any fresh Workbay to get back in.");
         add(WorkbayLang.messageKey("locked"), "This Workbay is locked.");
 
         // Insert rejections. Action bar, RED. SPEC.md §6: say what happened, then why, then what
@@ -71,8 +70,8 @@ public class WBLanguageProvider extends LanguageProvider {
             + "It has no faces to connect to out here.");
 
         // The Connector, which is where every link comes from. SPEC.md §0.
-        add(WorkbayLang.messageKey("connector_paired"), "Connector paired to Workbay %s. Place it "
-            + "against the block you want to link.");
+        add(WorkbayLang.messageKey("connector_paired"), "Connector paired. Place it against the "
+            + "block you want to link.");
         add(WorkbayLang.messageKey("connector_unpaired"), "This Connector isn't paired yet. "
             + "Right-click a Workbay with it first.");
         add(WorkbayLang.messageKey("connector_linked"), "Linked to %s. Workbay %s has a row for it, "
@@ -196,6 +195,39 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("links.type.fluid"), "Carries fluids");
         add(WorkbayLang.guiKey("links.type.energy"), "Carries energy");
         add(WorkbayLang.guiKey("links.type.tip"), "Click to change what this link carries.");
+        add(WorkbayLang.guiKey("links.none.here"), "No links on this bay. %s on other bays \u2014 press Add to move one here.");
+        add(WorkbayLang.guiKey("links.adding"), "TO BAY %s");
+        add(WorkbayLang.guiKey("links.add"), "Add a link");
+        add(WorkbayLang.guiKey("links.add.close"), "Back to this bay's links");
+        add(WorkbayLang.guiKey("links.add.tip"), "Lists everything this bay could be attached "
+            + "to: a Connector another bay is holding, or another bay directly.");
+        add(WorkbayLang.guiKey("links.add.none.links"), "No links on other bays. Pair a Connector "
+            + "and place it on something.");
+        add(WorkbayLang.guiKey("links.add.none.bays"), "No other bays. Rack a second one first.");
+        add(WorkbayLang.guiKey("links.add.tab.connectors"), "Links other bays hold");
+        add(WorkbayLang.guiKey("links.add.tab.bays"), "Bays in this Workbay");
+        add(WorkbayLang.guiKey("links.add.tab.tip"), "Connectors already standing in the world, or "
+            + "the bays in this rack, which need no Connector at all.");
+        add(WorkbayLang.guiKey("links.add.apply"), "Attach %s ticked");
+        add(WorkbayLang.guiKey("links.add.apply.tip"), "Attaches everything ticked on both tabs in "
+            + "one go, then closes the picker.");
+        add(WorkbayLang.guiKey("links.add.link"), "%s, held by bay %s");
+        add(WorkbayLang.guiKey("links.add.link.tip"), "Hands this link to bay %s. The Connector "
+            + "stays where it is; only which bay it feeds changes.");
+        add(WorkbayLang.guiKey("links.add.bay"), "Bay %s");
+        add(WorkbayLang.guiKey("links.add.bay.tip"), "Makes a link straight to that bay. No "
+            + "Connector, no block in the world.");
+        add(WorkbayLang.guiKey("links.add.nowire"), "no wire");
+        add(WorkbayLang.guiKey("links.face.any"), "Any face");
+        add(WorkbayLang.guiKey("links.face.down"), "Bottom face");
+        add(WorkbayLang.guiKey("links.face.up"), "Top face");
+        add(WorkbayLang.guiKey("links.face.north"), "North face");
+        add(WorkbayLang.guiKey("links.face.south"), "South face");
+        add(WorkbayLang.guiKey("links.face.west"), "West face");
+        add(WorkbayLang.guiKey("links.face.east"), "East face");
+        add(WorkbayLang.guiKey("links.face.tip"), "Which side of the target block this link "
+            + "reaches into. Machines that keep their input and output in separate slots expose "
+            + "them on separate faces, so pin one. Any face uses whichever answers first.");
         add(WorkbayLang.guiKey("links.mode.insert"), "Sends into the target");
         add(WorkbayLang.guiKey("links.mode.extract"), "Pulls out of the target");
         add(WorkbayLang.guiKey("links.mode.tip"), "Click to turn this link around.");
@@ -281,6 +313,6 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.tooltipKey("code"), "Code %s");
         add(WorkbayLang.tooltipKey("connector_unpaired"), "Not paired. Right-click a Workbay with "
             + "this to pair it.");
-        add(WorkbayLang.tooltipKey("connector_paired"), "Paired to %s, bay %s");
+        add(WorkbayLang.tooltipKey("connector_paired"), "Paired \u00b7 bay %s");
     }
 }

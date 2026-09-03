@@ -184,6 +184,10 @@ dependencies {
     // the harder partner on purpose: owner UUIDs written in setPlacedBy, sided config, and the
     // read-only null-side handler SPEC.md §9 warns about.
     gametestRuntimeOnly "mekanism:Mekanism:${mekanism_version}"
+    // And in runClient, so the same claim can be checked by hand: rack a real Enrichment Chamber,
+    // point links at it, watch it run. gametestRuntimeOnly does not reach the client run, and the
+    // gametest classpath does not extend localRuntime, so it is declared for both.
+    localRuntime "mekanism:Mekanism:${mekanism_version}"
 
     // NeoForge's test framework, used by the gametest source set (same as EnderIO).
     gametestImplementation("net.neoforged:testframework:${neo_version}") { transitive = false }

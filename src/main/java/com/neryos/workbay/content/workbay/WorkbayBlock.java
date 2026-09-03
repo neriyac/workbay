@@ -133,14 +133,11 @@ public class WorkbayBlock extends BaseEntityBlock {
         workbay.rememberPosition();
 
         if (placer instanceof Player player) {
-            player.sendSystemMessage(reused != null
-                ? WorkbayLang.message("network_reused", Component_aqua(record.code()))
-                : WorkbayLang.message("room_created", Component_aqua(record.code())));
+            // No code in the message. SPEC.md §14: the network is found by owner, so a code is
+            // something for a player to write down, mistype and ask about, and nothing else.
+            player.sendSystemMessage(WorkbayLang.message(
+                reused != null ? "network_reused" : "room_created"));
         }
-    }
-
-    private static net.minecraft.network.chat.Component Component_aqua(String text) {
-        return net.minecraft.network.chat.Component.literal(text).withStyle(ChatFormatting.AQUA);
     }
 
     /**
@@ -190,8 +187,7 @@ public class WorkbayBlock extends BaseEntityBlock {
             return net.minecraft.world.ItemInteractionResult.FAIL;
         }
         pair(stack, record, GlobalPos.of(level.dimension(), pos), firstOccupiedBay(record));
-        player.displayClientMessage(WorkbayLang.message("connector_paired",
-            Component_aqua(record.code())), true);
+        player.displayClientMessage(WorkbayLang.message("connector_paired"), true);
         return net.minecraft.world.ItemInteractionResult.CONSUME;
     }
 
@@ -242,8 +238,7 @@ public class WorkbayBlock extends BaseEntityBlock {
         if (level instanceof ServerLevel && level.getBlockEntity(pos) instanceof WorkbayBlockEntity workbay) {
             workbay.record().ifPresent(record -> {
                 if (!record.bays().isEmpty()) {
-                    player.sendSystemMessage(WorkbayLang.message("break_warning",
-                        Component_aqua(record.code())));
+                    player.sendSystemMessage(WorkbayLang.message("break_warning"));
                 }
             });
         }

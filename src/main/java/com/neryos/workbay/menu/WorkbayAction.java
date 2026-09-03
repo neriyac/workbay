@@ -29,10 +29,17 @@ public enum WorkbayAction {
     PASTE_BAY,
     /** {@code arg} is an item's registry id, or -1 to clear. {@code link} names the row. */
     SET_FILTER,
-    /** Bay to bay, no Connector. Creates a disabled link from the selected bay to the next one. */
+    /**
+     * Bay to bay, no Connector. {@code arg} is the bay to point at; an arg that names the source
+     * bay itself, or a bay this Workbay does not have, falls back to the next other bay.
+     */
     CREATE_INTERNAL_LINK,
+    /** {@code link} names the row and {@code arg} the bay to hand it to. */
+    LINK_ASSIGN_BAY,
     /** Internal links only. {@code link} names the row; steps its target to the next other bay. */
     LINK_CYCLE_TARGET_BAY,
+    /** {@code link} names the row; steps which face of the target block it reaches into. */
+    LINK_CYCLE_TARGET_FACE,
     /** {@code text} is the selected bay's new name; empty falls back to the machine's own. */
     SET_BAY_NAME,
     /** Cycles the selected bay's {@link com.neryos.workbay.world.RedstoneMode}. */

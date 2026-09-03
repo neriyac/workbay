@@ -165,6 +165,39 @@ public record BusConfig(
             machineFace, rate, speed, channel, enabled, filter, internal);
     }
 
+    /**
+     * Moves this link to another bay. SPEC.md §4's list is per bay: a link belongs to exactly one,
+     * and this is how a player hands it to a different one without breaking the Connector.
+     */
+    public BusConfig withBay(int newBay) {
+        return new BusConfig(id, name, newBay, resource, mode, connector, target, targetFace,
+            machineFace, rate, speed, channel, enabled, filter, internal);
+    }
+
+    /**
+     * Which face of the target block this link reaches into; empty means any face that answers.
+     *
+     * <p>Not cosmetic: a machine with a separate input and output slot exposes them on different
+     * faces, and a link with no face pinned takes whichever the block hands out first.
+     */
+    public BusConfig withTargetFace(Optional<Direction> newFace) {
+        return new BusConfig(id, name, bay, resource, mode, connector, target, newFace,
+            machineFace, rate, speed, channel, enabled, filter, internal);
+    }
+
+    /**
+     * The next face in the picker's cycle: any, then the six in the order
+     * {@link Direction#values()} declares, then back to any.
+     */
+    public static Optional<Direction> nextFace(Optional<Direction> face) {
+        if (face.isEmpty()) {
+            return Optional.of(Direction.values()[0]);
+        }
+        int next = face.get().ordinal() + 1;
+        return next >= Direction.values().length ? Optional.empty()
+            : Optional.of(Direction.values()[next]);
+    }
+
     /** True while the player has not renamed this link, so flipping its type may re-default it. */
     private boolean defaultNamed() {
         return name.equals(resource.defaultName(mode));

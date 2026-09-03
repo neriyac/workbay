@@ -754,4 +754,72 @@ public class BusTests {
                 .thenSucceed();
         });
     }
+
+    /**
+     * Handing a link to another bay, which is what the Add picker does. The assertion that matters
+     * is the second one: the runner caches a resolved capability per link, and that cache is keyed
+     * on the link but built from the bay it had at the time. Without dropping it on the edit, the
+     * link keeps pulling out of the bay it used to belong to and every screen in the mod says it
+     * belongs to the new one.
+     */
+    @GameTest(timeoutTicks = 900)
+    @TestHolder(description = "Reassigning a link to another bay moves where it actually pulls from.")
+    public static void assigningALinkToAnotherBayMovesWhereItPullsFrom(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos chestPos = helper.absolutePos(new BlockPos(3, 1, 0));
+            helper.setBlock(new BlockPos(3, 1, 0), Blocks.CHEST);
+
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.CHEST));
+            RoomRegistry registry = RoomRegistry.get(level.getServer());
+            WorkbayRecord record = workbay.record().orElseThrow();
+            registry.put(record.withUpgrades(new WorkbayRecord.Upgrades(1, 0, 0, 0, 0, 0)));
+            record = workbay.record().orElseThrow();
+
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BayHosting.rack(backshop, record.bayColumn(), 1, new ItemStack(Blocks.CHEST), player,
+                Direction.NORTH);
+            BlockPos bay0 = BayGeometry.machinePos(record.bayColumn(), 0);
+            BlockPos bay1 = BayGeometry.machinePos(record.bayColumn(), 1);
+            // Only bay 1 has anything. A link on bay 0 must move nothing until it is reassigned,
+            // and everything after.
+            if (backshop.getBlockEntity(bay1) instanceof Container hosted) {
+                hosted.setItem(0, new ItemStack(Items.GOLD_INGOT, 32));
+            }
+
+            BusConfig link = connect(helper, workbay, chestPos.above(), Direction.DOWN, player);
+            workbay.addBus(workbay.bus(link.id()).orElseThrow()
+                .withMode(BusConfig.Mode.INSERT).withEnabled(true).withRate(8).withSpeed(10));
+
+            player.moveTo(workbayPos.getX() + 0.5, workbayPos.getY(), workbayPos.getZ() + 0.5);
+            WorkbayMenu menu = new WorkbayMenu(1, player.getInventory(), workbay,
+                WorkbayMenu.build(workbay, player, 0));
+            menu.act(WorkbayAction.LINK_ASSIGN_BAY, 1, Optional.of(link.id()));
+
+            helper.assertValueEqual(workbay.bus(link.id()).orElseThrow().bay(), 1,
+                "the reassigned link's bay");
+
+            helper.startSequence()
+                .thenWaitUntil(() -> {
+                    if (countIn(level, chestPos, Items.GOLD_INGOT) < 32) {
+                        throw new GameTestAssertException("the reassigned link has moved "
+                            + countIn(level, chestPos, Items.GOLD_INGOT) + " of 32 gold out of "
+                            + "bay 2; status is " + workbay.busStatus(link.id()));
+                    }
+                })
+                .thenExecute(() -> {
+                    if (backshop.getBlockEntity(bay0) instanceof Container old
+                        && !old.isEmpty()) {
+                        helper.fail("the reassigned link touched bay 1, which it no longer "
+                            + "belongs to");
+                    }
+                })
+                .thenExecute(() -> tearDown(helper, workbayPos))
+                .thenSucceed();
+        });
+    }
 }

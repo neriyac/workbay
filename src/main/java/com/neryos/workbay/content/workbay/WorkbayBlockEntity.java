@@ -127,6 +127,13 @@ public class WorkbayBlockEntity extends BlockEntity {
             }
             if (existing >= 0) {
                 updated.set(existing, bus);
+                // The runner caches a resolved capability per link, and the position and face it
+                // was resolved against are baked into that cache. Any edit can move either one --
+                // retargeting an internal link at a different bay, pinning a target face -- so the
+                // cache is dropped on every replacement rather than only on removal. Re-resolving
+                // is a capability lookup on the next tick; getting it wrong is a link that quietly
+                // keeps talking to the block it used to point at.
+                runner.forget(bus.id());
             } else {
                 updated.add(bus);
             }

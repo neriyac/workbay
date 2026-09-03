@@ -180,12 +180,20 @@ public class WorkbayMenu extends AbstractContainerMenu {
             case LINK_CYCLE_RESOURCE -> editLink(linkId, link -> link.withResource(link.resource().next()));
             case LINK_TOGGLE_ENABLED -> editLink(linkId, link -> link.withEnabled(!link.enabled()));
             case LINK_REMOVE -> linkId.ifPresent(workbay::removeBus);
+            case LINK_CYCLE_TARGET_FACE ->
+                editLink(linkId, link -> link.withTargetFace(BusConfig.nextFace(link.targetFace())));
             case SET_FILTER -> editLink(linkId, link -> link.withFilter(filterItem(arg)));
             case SET_BAY_NAME -> editBay(serverPlayer, record,
                 bay -> bay.withName(text.orElse("").strip()));
             case CYCLE_REDSTONE -> editBay(serverPlayer, record,
                 bay -> bay.withRedstone(bay.redstone().next()));
-            case CREATE_INTERNAL_LINK -> createInternalLink(serverPlayer, record);
+            case CREATE_INTERNAL_LINK -> createInternalLink(serverPlayer, record, (int) arg);
+            case LINK_ASSIGN_BAY -> {
+                int bay = (int) arg;
+                if (bay >= 0 && bay < record.bayCapacity()) {
+                    editLink(linkId, link -> link.withBay(bay));
+                }
+            }
             case LINK_CYCLE_TARGET_BAY -> editLink(linkId, link -> link.internal()
                 ? link.withTarget(GlobalPos.of(WorkbayDimensions.BACKSHOP,
                     BayGeometry.machinePos(record.bayColumn(),
@@ -357,14 +365,18 @@ public class WorkbayMenu extends AbstractContainerMenu {
      * both ends of this one are bays in the same menu the player already has open, so there is
      * nothing in the world to find, break or audit that this screen does not already show.
      */
-    private void createInternalLink(ServerPlayer serverPlayer, WorkbayRecord record) {
+    private void createInternalLink(ServerPlayer serverPlayer, WorkbayRecord record, int wanted) {
         int capacity = record.bayCapacity();
         if (capacity < 2) {
             serverPlayer.displayClientMessage(
                 com.neryos.workbay.WorkbayLang.message("internal_link_needs_second_bay"), true);
             return;
         }
-        int targetBay = nextOtherBay(record, selectedBay, selectedBay);
+        // The picker names the bay it wants. A bay that is out of range, or the source bay itself,
+        // falls through to the next other bay rather than being refused: this action predates the
+        // picker and is still sent with no useful arg from a keybind or an older client.
+        boolean usable = wanted >= 0 && wanted < capacity && wanted != selectedBay;
+        int targetBay = usable ? wanted : nextOtherBay(record, selectedBay, selectedBay);
         GlobalPos anchor = GlobalPos.of(serverPlayer.level().dimension(), workbay.getBlockPos());
         GlobalPos target = GlobalPos.of(WorkbayDimensions.BACKSHOP,
             BayGeometry.machinePos(record.bayColumn(), targetBay));

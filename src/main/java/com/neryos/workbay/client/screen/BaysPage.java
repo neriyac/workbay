@@ -85,9 +85,10 @@ class BaysPage extends WorkbayPage {
     @org.jetbrains.annotations.Nullable
     private static FaceConfig copied;
 
-    // All bays, in the order links were made. A link belongs to one bay, but the list is the
-    // Workbay's, and hiding the other seven bays' links by default hides most of the machine.
-    private static Filter filter = Filter.ALL_BAYS;
+    // This bay, in the order links were made. The list is per bay the way XNet's channels are per
+    // controller-block: a link belongs to exactly one bay, and the screen you configure a bay on
+    // should show that bay's links and nothing else. ALL_BAYS is one click away on the funnel.
+    private static Filter filter = Filter.THIS_BAY;
     private static Sort sort = Sort.ADDED;
     private static BusConfig.Resource faceType = BusConfig.Resource.ITEM;
 
@@ -104,6 +105,33 @@ class BaysPage extends WorkbayPage {
     private static String previewSubject;
 
     private int scroll;
+
+    /**
+     * True while the list is showing what you could attach to this bay rather than what already is.
+     *
+     * <p>A picker, not a popup: it reuses the row list, its scrolling and its hit testing whole. A
+     * floating panel over the list would need its own version of all three, and would cover the
+     * bay rack the player is picking for.
+     */
+    private static boolean adding;
+
+    /**
+     * The picker's two lists. A Connector already standing in the world and a bay with no wire at
+     * all are attached the same way and end up as the same kind of link, but they are found in
+     * completely different ways -- one by walking your base, one by looking at this rack -- and
+     * mixing them into one scrolling list made both harder to find.
+     */
+    private enum AddTab { CONNECTORS, BAYS }
+
+    private static AddTab addTab = AddTab.CONNECTORS;
+
+    /**
+     * What is ticked in the picker, so several things can be attached in one go. Ticking is the
+     * whole reason the picker has a confirm button: attaching links one at a time closed the list
+     * after each one, which for a bay that needs six of them is five needless round trips.
+     */
+    private static final java.util.Set<UUID> pickedLinks = new java.util.LinkedHashSet<>();
+    private static final java.util.Set<Integer> pickedBays = new java.util.LinkedHashSet<>();
 
     BaysPage(WorkbayScreen screen) {
         super(screen);
@@ -529,18 +557,60 @@ class BaysPage extends WorkbayPage {
         var font = screen.font();
         WorkbaySnapshot snap = snapshot();
 
-        g.drawString(font, "LINKS", x(LIST_X + 4), y(linksY + 4), Draw.TEXT, false);
+        int pairX = x(LIST_X + LIST_W - 46);
+        int addX = pairX - 40;
 
-        iconButton(g, mouseX, mouseY, x(LIST_X + 44), y(linksY), WBIcons.FILTER, true,
+        if (adding) {
+            g.drawString(font, WorkbayScreen.gui("links.adding", snap.selectedBay() + 1).getString(),
+                x(LIST_X + 4), y(linksY + 4), Draw.TEXT, false);
+            // Laid out left to right with the widths written down, because the first version put
+            // the Bays tab and Back on top of each other: heading to LIST_X+52, two 44-wide tabs,
+            // then Back, then the confirm where Pair sits on the normal list.
+            tab(g, mouseX, mouseY, x(LIST_X + 56), AddTab.CONNECTORS, "Links");
+            tab(g, mouseX, mouseY, x(LIST_X + 102), AddTab.BAYS, "Bays");
+
+            // Confirm, where Pair sits on the normal list: the count is the whole point of the
+            // checkboxes, so it is on the button rather than anywhere the eye has to hunt for it.
+            int picked = pickedLinks.size() + pickedBays.size();
+            boolean confirmHover = screen.hovered(pairX, y(linksY), 46, 18, mouseX, mouseY);
+            Draw.button(g, pairX, y(linksY), 46, 18, confirmHover, false);
+            g.drawString(font, picked == 0 ? "Add" : "Add " + picked, pairX + 8, y(linksY + 5),
+                picked == 0 ? Draw.TEXT_FAINT : Draw.TEXT, false);
+            screen.hit(pairX, y(linksY), 46, 18, this::applyPicked,
+                WorkbayScreen.gui("links.add.apply", picked),
+                WorkbayScreen.gui("links.add.apply.tip"));
+
+            // No icon beside the word: "Back" is 22px and the icon another 12, which did not fit
+            // the 36 the button had and spilled over its right edge.
+            int backX = x(LIST_X + 160);
+            boolean backHover = screen.hovered(backX, y(linksY), 40, 18, mouseX, mouseY);
+            Draw.button(g, backX, y(linksY), 40, 18, backHover, false);
+            g.drawString(font, "Back", backX + 20 - font.width("Back") / 2, y(linksY + 5),
+                Draw.TEXT, false);
+            screen.hit(backX, y(linksY), 40, 18, this::closePicker,
+                WorkbayScreen.gui("links.add.close"), WorkbayScreen.gui("links.add.tip"));
+
+            candidates(g, mouseX, mouseY, snap);
+            return;
+        }
+
+        // Whose links these are. The list is per bay, so a heading that does not say which bay is
+        // the one thing that can make the whole screen lie to you.
+        g.drawString(font,
+            filter == Filter.THIS_BAY ? "LINKS · BAY " + (snap.selectedBay() + 1) : "LINKS",
+            x(LIST_X + 4), y(linksY + 4), Draw.TEXT, false);
+
+        // Clear of the heading, which is no longer the fixed-width word "LINKS": it now carries the
+        // bay number, and at LIST_X+44 the funnel sat on top of it.
+        iconButton(g, mouseX, mouseY, x(LIST_X + 86), y(linksY), WBIcons.FILTER, true,
             () -> filter = Filter.values()[(filter.ordinal() + 1) % Filter.values().length],
             WorkbayScreen.gui("links.filter." + filter.name().toLowerCase(java.util.Locale.ROOT)),
             WorkbayScreen.gui("links.filter.tip"));
-        iconButton(g, mouseX, mouseY, x(LIST_X + 66), y(linksY), WBIcons.SORT, true,
+        iconButton(g, mouseX, mouseY, x(LIST_X + 108), y(linksY), WBIcons.SORT, true,
             () -> sort = Sort.values()[(sort.ordinal() + 1) % Sort.values().length],
             WorkbayScreen.gui("links.sort." + sort.name().toLowerCase(java.util.Locale.ROOT)),
             WorkbayScreen.gui("links.sort.tip"));
 
-        int pairX = x(LIST_X + LIST_W - 46);
         boolean pairHover = screen.hovered(pairX, y(linksY), 46, 18, mouseX, mouseY);
         Draw.button(g, pairX, y(linksY), 46, 18, pairHover, false);
         // The Connector's own item, because the button only does anything while you are holding
@@ -551,14 +621,14 @@ class BaysPage extends WorkbayPage {
         screen.hit(pairX, y(linksY), 46, 18, () -> screen.send(WorkbayAction.PAIR),
             WorkbayScreen.gui("links.pair"), WorkbayScreen.gui("links.pair.tip"));
 
-        // Bay to bay, no Connector: the dashed-arrow flow from the flow map, made from here.
-        int bayLinkX = pairX - 40;
-        boolean bayLinkHover = screen.hovered(bayLinkX, y(linksY), 36, 18, mouseX, mouseY);
-        Draw.button(g, bayLinkX, y(linksY), 36, 18, bayLinkHover, false);
-        WBIcons.draw(g, WBIcons.PLUS, bayLinkX + 3, y(linksY + 3), Draw.TEXT);
-        g.drawString(font, "Bay", bayLinkX + 15, y(linksY + 5), Draw.TEXT, false);
-        screen.hit(bayLinkX, y(linksY), 36, 18, () -> screen.send(WorkbayAction.CREATE_INTERNAL_LINK),
-            WorkbayScreen.gui("links.internal"), WorkbayScreen.gui("links.internal.tip"));
+        boolean addHover = screen.hovered(addX, y(linksY), 36, 18, mouseX, mouseY);
+        Draw.button(g, addX, y(linksY), 36, 18, addHover, false);
+        WBIcons.draw(g, WBIcons.PLUS, addX + 3, y(linksY + 3), Draw.TEXT);
+        g.drawString(font, "Add", addX + 15, y(linksY + 5), Draw.TEXT, false);
+        screen.hit(addX, y(linksY), 36, 18, () -> {
+            adding = true;
+            scroll = 0;
+        }, WorkbayScreen.gui("links.add"), WorkbayScreen.gui("links.add.tip"));
 
         List<WorkbaySnapshot.Link> visible = visibleLinks(snap);
         Draw.well(g, x(LIST_X), y(rowY - 4), LIST_W, rows * ROW_PITCH + 8);
@@ -570,27 +640,20 @@ class BaysPage extends WorkbayPage {
         }
 
         if (visible.isEmpty()) {
-            g.drawString(font, WorkbayScreen.gui("links.none").getString(),
-                x(LIST_X + 8), y(rowY + 8), Draw.TEXT_FAINT, false);
+            // "No links yet. Pair a Connector" is a lie the moment the list is scoped to one bay
+            // and the links are all on another. Say which case this is.
+            int elsewhere = snap.links().size();
+            Component empty = filter == Filter.THIS_BAY && elsewhere > 0
+                ? WorkbayScreen.gui("links.none.here", elsewhere)
+                : WorkbayScreen.gui("links.none");
+            g.drawString(font, empty.getString(), x(LIST_X + 8), y(rowY + 8), Draw.TEXT_FAINT, false);
             return;
         }
         scroll = Math.clamp(scroll, 0, Math.max(0, visible.size() - rows));
+        scrollbar(g, visible.size());
         for (int visibleRow = 0; visibleRow < rows && visibleRow + scroll < visible.size(); visibleRow++) {
             row(g, mouseX, mouseY, visible.get(visibleRow + scroll), y(rowY + visibleRow * ROW_PITCH));
         }
-        if (visible.size() > rows) {
-            scrollbar(g, visible.size());
-        }
-    }
-
-    private void scrollbar(GuiGraphics g, int total) {
-        int trackX = x(LIST_X + LIST_W - 6);
-        int trackY = y(rowY);
-        int trackH = rows * ROW_PITCH;
-        g.fill(trackX, trackY, trackX + 4, trackY + trackH, Draw.EDGE_DARK);
-        int knob = Math.max(8, trackH * rows / total);
-        int offset = (trackH - knob) * scroll / Math.max(1, total - rows);
-        g.fill(trackX, trackY + offset, trackX + 4, trackY + offset + knob, Draw.EDGE_LIGHT);
     }
 
     /**
@@ -657,9 +720,9 @@ class BaysPage extends WorkbayPage {
             // may actually change from the row.
             String bayTarget = link.targetBay().map(b -> "→ Bay " + (b + 1))
                 .orElse(WorkbayScreen.gui("links.unknown").getString());
-            g.drawString(font, font.plainSubstrByWidth(bayTarget, 64), px + 136, py + 5,
+            g.drawString(font, font.plainSubstrByWidth(bayTarget, 48), px + 136, py + 5,
                 link.status().isProblem() ? statusColour(link.status()) : Draw.BLUE, false);
-            screen.hit(px + 136, py + 2, 64, ROW_PITCH - 4,
+            screen.hit(px + 136, py + 2, 48, ROW_PITCH - 4,
                 () -> screen.send(WorkbayAction.LINK_CYCLE_TARGET_BAY, config.id()),
                 WorkbayScreen.gui("links.internal.retarget"),
                 WorkbayScreen.gui("links.internal.retarget.tip"));
@@ -667,10 +730,11 @@ class BaysPage extends WorkbayPage {
             Component target = link.status().isProblem()
                 ? statusName(link.status())
                 : link.targetBlock().map(BaysPage::displayName).orElse(WorkbayScreen.gui("links.unknown"));
-            g.drawString(font, font.plainSubstrByWidth(target.getString(), 64), px + 136, py + 5,
+            g.drawString(font, font.plainSubstrByWidth(target.getString(), 48), px + 136, py + 5,
                 link.status().isProblem() ? statusColour(link.status()) : Draw.TEXT_DIM, false);
         }
 
+        faceButton(g, mouseX, mouseY, px + 188, py + 3, config);
         filterSlot(g, px + 206, py + 1, config);
 
         WBIcons.draw(g, WBIcons.CROSS, px + 228, py + 3,
@@ -678,6 +742,35 @@ class BaysPage extends WorkbayPage {
         screen.hit(px + 228, py + 3, 12, 12,
             () -> screen.send(WorkbayAction.LINK_REMOVE, config.id()),
             WorkbayScreen.gui("links.remove"), WorkbayScreen.gui("links.remove.tip"));
+    }
+
+    /**
+     * Which face of the target block this link reaches into.
+     *
+     * <p>The runner has honoured a pinned face since buses existed; nothing ever let a player set
+     * one. A machine with a separate input and output face is unusable without it — the link takes
+     * whichever face answers first, which is the wrong one about half the time.
+     *
+     * <p>Compass letters here, unlike on the preview cube: the target is a block out in the world
+     * standing at an orientation the mod did not choose, so "north side of it" is the only thing
+     * that means anything to somebody looking at their own base.
+     */
+    private void faceButton(GuiGraphics g, int mouseX, int mouseY, int px, int py,
+        BusConfig config) {
+        var font = screen.font();
+        Optional<net.minecraft.core.Direction> face = config.targetFace();
+        String letter = face
+            .map(d -> String.valueOf(Character.toUpperCase(d.getName().charAt(0))))
+            .orElse("-");
+        boolean hover = screen.hovered(px, py, 12, 12, mouseX, mouseY);
+        Draw.slot(g, px, py, 12, 12);
+        g.drawString(font, letter, px + 6 - font.width(letter) / 2, py + 2,
+            face.isPresent() ? (hover ? Draw.TEXT : Draw.AMBER) : Draw.TEXT_FAINT, false);
+        screen.hit(px, py, 12, 12,
+            () -> screen.send(WorkbayAction.LINK_CYCLE_TARGET_FACE, config.id()),
+            face.map(d -> WorkbayScreen.gui("links.face." + d.getSerializedName()))
+                .orElse(WorkbayScreen.gui("links.face.any")),
+            WorkbayScreen.gui("links.face.tip"));
     }
 
     /**
@@ -724,6 +817,167 @@ class BaysPage extends WorkbayPage {
         }
         screen.send(WorkbayAction.SET_FILTER,
             BuiltInRegistries.ITEM.getId(stack.getItem()), config.id());
+    }
+
+    /** One of the picker's two tabs, drawn as a button that stays pressed while it is the one shown. */
+    private void tab(GuiGraphics g, int mouseX, int mouseY, int px, AddTab which, String label) {
+        var font = screen.font();
+        boolean active = addTab == which;
+        boolean hover = screen.hovered(px, y(linksY), 44, 18, mouseX, mouseY);
+        Draw.button(g, px, y(linksY), 44, 18, hover, active);
+        g.drawString(font, label, px + 22 - font.width(label) / 2, y(linksY + 5),
+            active ? Draw.TEXT : Draw.TEXT_DIM, false);
+        screen.hit(px, y(linksY), 44, 18, () -> {
+            addTab = which;
+            scroll = 0;
+        }, WorkbayScreen.gui("links.add.tab." + which.name().toLowerCase(java.util.Locale.ROOT)),
+            WorkbayScreen.gui("links.add.tab.tip"));
+    }
+
+    private void closePicker() {
+        adding = false;
+        pickedLinks.clear();
+        pickedBays.clear();
+        scroll = 0;
+    }
+
+    /**
+     * Attaches everything that is ticked, then leaves the picker.
+     *
+     * <p>One action per pick rather than one action carrying a list. The two are different actions
+     * on the server -- handing over an existing link, and minting a new internal one -- and each
+     * already validates its own arguments, so a batching packet would buy nothing but a second
+     * place for the same rules to be written down.
+     */
+    private void applyPicked() {
+        int bay = snapshot().selectedBay();
+        pickedLinks.forEach(id -> screen.send(WorkbayAction.LINK_ASSIGN_BAY, bay, id));
+        pickedBays.forEach(target -> screen.send(WorkbayAction.CREATE_INTERNAL_LINK, target));
+        closePicker();
+    }
+
+    /**
+     * What the selected bay could be attached to: on the Links tab every link currently held by
+     * another bay, and on the Bays tab every other bay, for a link that needs no Connector.
+     *
+     * <p>Reassigning rather than creating is deliberate. A Connector is the link (SPEC.md §0), so a
+     * Connector already standing in the world is not a link waiting to be made -- it is a link
+     * belonging to the wrong bay, and the fix is to hand it over, not to make a second one.
+     */
+    private void candidates(GuiGraphics g, int mouseX, int mouseY, WorkbaySnapshot snap) {
+        var font = screen.font();
+        int selected = snap.selectedBay();
+
+        List<WorkbaySnapshot.Link> loose = snap.links().stream()
+            .filter(link -> link.config().bay() != selected)
+            .toList();
+        // Bays that exist and are not this one. A bay with no machine is still worth offering: the
+        // link outlives the machine, and racking one later is the normal order of work.
+        List<Integer> bays = java.util.stream.IntStream.range(0, snap.bayCapacity())
+            .filter(bay -> bay != selected)
+            .boxed()
+            .toList();
+
+        Draw.well(g, x(LIST_X), y(rowY - 4), LIST_W, rows * ROW_PITCH + 8);
+        int total = addTab == AddTab.CONNECTORS ? loose.size() : bays.size();
+        if (total == 0) {
+            g.drawString(font, WorkbayScreen.gui(addTab == AddTab.CONNECTORS
+                    ? "links.add.none.links" : "links.add.none.bays").getString(),
+                x(LIST_X + 8), y(rowY + 8), Draw.TEXT_FAINT, false);
+            return;
+        }
+        scroll = Math.clamp(scroll, 0, Math.max(0, total - rows));
+        scrollbar(g, total);
+
+        for (int visibleRow = 0; visibleRow < rows && visibleRow + scroll < total; visibleRow++) {
+            int index = visibleRow + scroll;
+            int py = y(rowY + visibleRow * ROW_PITCH);
+            int px = x(LIST_X + 4);
+            boolean hover = screen.hovered(px, py, LIST_W - 14, ROW_PITCH - 2, mouseX, mouseY);
+            if (hover) {
+                g.fill(px, py, px + LIST_W - 14, py + ROW_PITCH - 2, 0x18FFFFFF);
+            }
+
+            if (addTab == AddTab.CONNECTORS) {
+                WorkbaySnapshot.Link link = loose.get(index);
+                BusConfig config = link.config();
+                boolean ticked = pickedLinks.contains(config.id());
+                if (hover) {
+                    com.neryos.workbay.client.LinkHighlight.set(config.target());
+                }
+                checkbox(g, px, py + 3, ticked);
+                resourceIcon(g, config.resource(), px + 18, py + 3, 0.75F);
+                g.drawString(font, font.plainSubstrByWidth(config.name(), 70), px + 34, py + 5,
+                    ticked ? Draw.TEXT : Draw.TEXT_DIM, false);
+                // An internal link's target is a machine in the Backshop, which this client has
+                // never loaded, so asking for the block there gets air. Name the bay instead --
+                // the same branch the row itself makes.
+                String from = config.internal()
+                    ? link.targetBay().map(b -> "\u2192 Bay " + (b + 1))
+                        .orElse(WorkbayScreen.gui("links.unknown").getString())
+                    : link.targetBlock().map(BaysPage::displayName)
+                        .orElse(WorkbayScreen.gui("links.unknown")).getString();
+                g.drawString(font, font.plainSubstrByWidth(from, 90), px + 110, py + 5,
+                    config.internal() ? Draw.BLUE : Draw.TEXT_DIM, false);
+                g.drawString(font, "B" + (config.bay() + 1), px + 206, py + 5, Draw.TEXT_FAINT, false);
+                screen.hit(px, py, LIST_W - 14, ROW_PITCH - 2, () -> {
+                    if (!pickedLinks.remove(config.id())) {
+                        pickedLinks.add(config.id());
+                    }
+                }, WorkbayScreen.gui("links.add.link", config.name(), config.bay() + 1),
+                    WorkbayScreen.gui("links.add.link.tip", selected + 1));
+            } else {
+                int bay = bays.get(index);
+                boolean ticked = pickedBays.contains(bay);
+                WorkbaySnapshot.Bay other = snap.bays().size() > bay ? snap.bays().get(bay) : null;
+                checkbox(g, px, py + 3, ticked);
+                WBIcons.draw(g, WBIcons.ARROW_RIGHT, px + 18, py + 3, Draw.BLUE);
+                String label = "Bay " + (bay + 1)
+                    + (other == null || other.name().isEmpty() ? "" : " \u00b7 " + other.name());
+                g.drawString(font, font.plainSubstrByWidth(label, 120), px + 34, py + 5,
+                    ticked ? Draw.TEXT : Draw.TEXT_DIM, false);
+                g.drawString(font, WorkbayScreen.gui("links.add.nowire").getString(),
+                    px + 160, py + 5, Draw.TEXT_FAINT, false);
+                screen.hit(px, py, LIST_W - 14, ROW_PITCH - 2, () -> {
+                    if (!pickedBays.remove(Integer.valueOf(bay))) {
+                        pickedBays.add(bay);
+                    }
+                }, WorkbayScreen.gui("links.add.bay", bay + 1),
+                    WorkbayScreen.gui("links.add.bay.tip"));
+            }
+        }
+    }
+
+    /**
+     * The list's scrollbar, drawn only when the list actually scrolls.
+     *
+     * <p>Rows stop at {@code LIST_X + LIST_W - 10}, so the track lives in the ten pixels the well
+     * already leaves at its right edge and nothing has to move to make room. Without it the only
+     * clue that a list continued past the last visible row was the wheel doing something.
+     */
+    private void scrollbar(GuiGraphics g, int total) {
+        if (total <= rows) {
+            return;
+        }
+        int trackX = x(LIST_X + LIST_W - 9);
+        int trackY = y(rowY - 2);
+        int trackH = rows * ROW_PITCH + 4;
+        g.fill(trackX, trackY, trackX + 5, trackY + trackH, Draw.EDGE_DARK);
+
+        // At least six pixels tall: a thumb proportional to a thirty-row list is two pixels and
+        // reads as a speck of dirt on the screen rather than as a control.
+        int thumbH = Math.max(6, trackH * rows / total);
+        int travel = trackH - thumbH;
+        int thumbY = trackY + (total == rows ? 0 : travel * scroll / (total - rows));
+        g.fill(trackX + 1, thumbY, trackX + 4, thumbY + thumbH, Draw.TEXT_FAINT);
+    }
+
+    /** The same tick the row's on/off control uses, so ticked means the same thing on both lists. */
+    private void checkbox(GuiGraphics g, int px, int py, boolean ticked) {
+        Draw.slot(g, px, py, 12, 12);
+        if (ticked) {
+            WBIcons.draw(g, WBIcons.CHECK, px, py, Draw.GREEN);
+        }
     }
 
     private List<WorkbaySnapshot.Link> visibleLinks(WorkbaySnapshot snap) {
@@ -800,8 +1054,15 @@ class BaysPage extends WorkbayPage {
             return item.getDescription();
         }
         var block = BuiltInRegistries.BLOCK.get(id);
-        return block != net.minecraft.world.level.block.Blocks.AIR
-            ? block.getName()
+        if (block != net.minecraft.world.level.block.Blocks.AIR) {
+            return block.getName();
+        }
+        // Air is not a block the player put there — it is this client not having the target, which
+        // happens for anything in the Backshop and for a chunk nobody has loaded. Printing
+        // "minecraft:air" tells them the mod is broken; the raw id is still worth showing for a
+        // modded block whose registration this client really is missing.
+        return id.equals(ResourceLocation.withDefaultNamespace("air"))
+            ? WorkbayScreen.gui("links.unknown")
             : Component.literal(id.toString());
     }
 }
