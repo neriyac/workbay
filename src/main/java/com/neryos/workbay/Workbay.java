@@ -1,6 +1,9 @@
 package com.neryos.workbay;
 
+import com.neryos.workbay.init.WBBlockEntities;
 import com.neryos.workbay.init.WBBlocks;
+import com.neryos.workbay.init.WBCreativeTabs;
+import com.neryos.workbay.init.WBDataComponents;
 import com.neryos.workbay.init.WBItems;
 import com.neryos.workbay.world.WorkbayTickets;
 import net.minecraft.resources.ResourceLocation;
@@ -18,7 +21,10 @@ public class Workbay {
 
     public Workbay(IEventBus modEventBus, ModContainer modContainer) {
         WBBlocks.register(modEventBus);
+        WBBlockEntities.register(modEventBus);
         WBItems.register(modEventBus);
+        WBDataComponents.register(modEventBus);
+        WBCreativeTabs.register(modEventBus);
         WorkbayTickets.register(modEventBus);
     }
 }

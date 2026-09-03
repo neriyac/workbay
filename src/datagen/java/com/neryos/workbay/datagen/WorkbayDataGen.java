@@ -31,6 +31,7 @@ public class WorkbayDataGen {
 
         generator.addProvider(event.includeClient(), new WBBlockStateProvider(output, existingFileHelper));
         generator.addProvider(event.includeClient(), new WBItemModelProvider(output, existingFileHelper));
+        generator.addProvider(event.includeClient(), new WBLanguageProvider(output));
         generator.addProvider(event.includeServer(), new WBDatapackProvider(output, event.getLookupProvider()));
         generator.addProvider(event.includeServer(), new WBRecipeProvider(output, event.getLookupProvider()));
         generator.addProvider(event.includeServer(), new LootTableProvider(output, java.util.Set.of(),

@@ -1,10 +1,16 @@
 package com.neryos.workbay.datagen;
 
 import com.neryos.workbay.init.WBBlocks;
+import com.neryos.workbay.init.WBDataComponents;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.data.loot.BlockLootSubProvider;
 import net.minecraft.world.flag.FeatureFlags;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.storage.loot.LootPool;
+import net.minecraft.world.level.storage.loot.LootTable;
+import net.minecraft.world.level.storage.loot.entries.LootItem;
+import net.minecraft.world.level.storage.loot.functions.CopyComponentsFunction;
+import net.minecraft.world.level.storage.loot.providers.number.ConstantValue;
 
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -18,6 +24,14 @@ public class WBLootTableProvider extends BlockLootSubProvider {
 
     @Override
     protected void generate() {
+        // The dropped item has to carry its binding, or breaking a Workbay orphans its bays and
+        // leaves the player with no way back to machines that are still running. SPEC.md §14.
+        Block workbay = WBBlocks.WORKBAY.get();
+        add(workbay, LootTable.lootTable().withPool(LootPool.lootPool()
+            .setRolls(ConstantValue.exactly(1.0F))
+            .add(applyExplosionCondition(workbay, LootItem.lootTableItem(workbay)
+                .apply(CopyComponentsFunction.copyComponents(CopyComponentsFunction.Source.BLOCK_ENTITY)
+                    .include(WBDataComponents.BINDING.get()))))));
     }
 
     @Override

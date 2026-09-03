@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "A": {
+      "item": "workbay:shopsteel"
+    },
+    "E": {
+      "item": "minecraft:ender_eye"
+    },
+    "G": {
+      "item": "minecraft:glass"
+    },
+    "H": {
+      "item": "workbay:housing"
+    }
+  },
+  "pattern": [
+    "GAG",
+    "AHA",
+    "GEG"
+  ],
+  "result": {
+    "count": 1,
+    "id": "workbay:workbay"
+  }
+}

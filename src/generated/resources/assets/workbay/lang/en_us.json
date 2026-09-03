@@ -1,0 +1,12 @@
+{
+  "block.workbay.workbay": "Workbay",
+  "item.workbay.housing": "Housing",
+  "item.workbay.shopsteel": "Shopsteel",
+  "itemGroup.workbay": "Workbay",
+  "message.workbay.break_warning": "Breaking this Workbay leaves its bays behind. The machines keep running; you'll need code %s to get back in.",
+  "message.workbay.locked": "This Workbay is locked.",
+  "message.workbay.room_created": "Workbay %s created. Write this code down — if you lose the block, an operator can get you back in with it.",
+  "tooltip.workbay.buses": "Buses: %s configured",
+  "tooltip.workbay.code": "Code %s",
+  "tooltip.workbay.hosting": "Hosting: %s / %s machines"
+}
