@@ -1,5 +1,6 @@
 package com.neryos.workbay;
 
+import com.neryos.workbay.config.WorkbayConfig;
 import com.neryos.workbay.host.HostChecks;
 import com.neryos.workbay.host.HostResult;
 import com.neryos.workbay.init.WBBlockEntities;
@@ -11,6 +12,7 @@ import com.neryos.workbay.world.WorkbayTickets;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.common.Mod;
 
 @Mod(Workbay.MOD_ID)
@@ -22,6 +24,9 @@ public class Workbay {
     }
 
     public Workbay(IEventBus modEventBus, ModContainer modContainer) {
+        modContainer.registerConfig(ModConfig.Type.SERVER, WorkbayConfig.SERVER_SPEC);
+        modContainer.registerConfig(ModConfig.Type.CLIENT, WorkbayConfig.CLIENT_SPEC);
+
         WBBlocks.register(modEventBus);
         WBBlockEntities.register(modEventBus);
         WBItems.register(modEventBus);

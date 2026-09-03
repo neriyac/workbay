@@ -69,9 +69,14 @@ public record WorkbayRecord(
             lastKnownPos, List.copyOf(newBays), rooms);
     }
 
-    /** How many bays this Workbay may use: the base one, plus one per Expansion Plate. */
-    public int bayCapacity(int hardCeiling) {
-        return Math.min(1 + upgrades.expansionPlates(), hardCeiling);
+    /**
+     * How many bays this Workbay may use: the base one, plus one per Expansion Plate, capped by the
+     * server's {@code maxBaysPerWorkbay}. The cap is applied here rather than at install time so
+     * lowering it never destroys an Expansion Plate somebody already paid Levy for.
+     */
+    public int bayCapacity() {
+        return Math.min(1 + upgrades.expansionPlates(),
+            com.neryos.workbay.config.WorkbayConfig.SERVER.maxBaysPerWorkbay.get());
     }
 
     /**
