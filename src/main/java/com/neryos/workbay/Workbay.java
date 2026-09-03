@@ -1,5 +1,7 @@
 package com.neryos.workbay;
 
+import com.neryos.workbay.host.HostChecks;
+import com.neryos.workbay.host.HostResult;
 import com.neryos.workbay.init.WBBlockEntities;
 import com.neryos.workbay.init.WBBlocks;
 import com.neryos.workbay.init.WBCreativeTabs;
@@ -26,5 +28,11 @@ public class Workbay {
         WBDataComponents.register(modEventBus);
         WBCreativeTabs.register(modEventBus);
         WorkbayTickets.register(modEventBus);
+
+        // A Workbay in a Workbay is rejected here rather than by the denylist, so the player is
+        // told what they actually did instead of that the pack forbade it. SPEC.md §14.
+        HostChecks.register((state, stack) -> state.is(WBBlocks.WORKBAY.get())
+            ? HostResult.deny("recursion")
+            : HostResult.pass());
     }
 }
