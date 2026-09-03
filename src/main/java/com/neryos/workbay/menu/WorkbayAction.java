@@ -26,5 +26,7 @@ public enum WorkbayAction {
     /** {@code arg} is a {@link com.neryos.workbay.content.workbay.WorkbayUpgrade} ordinal. */
     INSTALL_UPGRADE,
     /** {@code arg} is a whole {@link com.neryos.workbay.world.FaceConfig} in bits. */
-    PASTE_BAY
+    PASTE_BAY,
+    /** {@code arg} is an item's registry id, or -1 to clear. {@code link} names the row. */
+    SET_FILTER
 }

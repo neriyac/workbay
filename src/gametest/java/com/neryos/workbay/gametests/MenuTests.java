@@ -359,4 +359,48 @@ public class MenuTests {
             helper.succeed();
         });
     }
+
+    /**
+     * A drag out of JEI or EMI arrives as one number: the item's registry id, the way every vanilla
+     * packet carries one. Asserted end to end because an id that survives the trip as the wrong
+     * item would be a filter that silently blocks everything.
+     */
+    @GameTest
+    @TestHolder(description = "The filter slot round-trips an item id, and -1 clears it.")
+    public static void theFilterSlotRoundTripsAnItemId(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos pos = helper.absolutePos(new BlockPos(1, 1, 1));
+            BlockPos targetPos = helper.absolutePos(new BlockPos(3, 1, 3));
+            level.setBlock(targetPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+
+            WorkbayBlockEntity workbay = placeWorkbay(helper, pos, player);
+            ItemStack connector = new ItemStack(WBBlocks.CONNECTOR.get());
+            WorkbayBlock.pair(connector, workbay.record().orElseThrow(),
+                GlobalPos.of(level.dimension(), pos), 0);
+            BlockState state = WBBlocks.CONNECTOR.get().defaultBlockState()
+                .setValue(ConnectorBlock.FACING, Direction.DOWN);
+            level.setBlock(targetPos.above(), state, Block.UPDATE_ALL);
+            WBBlocks.CONNECTOR.get().setPlacedBy(level, targetPos.above(), state, player, connector);
+
+            BusConfig link = workbay.buses().get(0);
+            WorkbayMenu menu = menuFor(workbay, player);
+
+            menu.act(WorkbayAction.SET_FILTER,
+                net.minecraft.core.registries.BuiltInRegistries.ITEM.getId(Items.REDSTONE),
+                Optional.of(link.id()));
+            helper.assertValueEqual(workbay.bus(link.id()).orElseThrow().filter(),
+                Optional.of(net.minecraft.core.registries.BuiltInRegistries.ITEM
+                    .getKey(Items.REDSTONE)),
+                "the filter after dropping redstone on the slot");
+
+            menu.act(WorkbayAction.SET_FILTER, -1, Optional.of(link.id()));
+            helper.assertValueEqual(workbay.bus(link.id()).orElseThrow().filter(), Optional.empty(),
+                "the filter after clicking the slot to clear it");
+            helper.succeed();
+        });
+    }
 }

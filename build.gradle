@@ -45,6 +45,19 @@ repositories {
         url = 'https://modmaven.dev'
         content { includeGroup 'mekanism' }
     }
+
+    // JEI and EMI, for their ghost-ingredient APIs only. Both are compileOnly: SPEC.md §5 requires
+    // every ghost slot in the mod to accept a drag from either, and neither may be needed to load.
+    maven {
+        name = 'Jared'
+        url = 'https://maven.blamejared.com/'
+        content { includeGroup 'mezz.jei' }
+    }
+    maven {
+        name = 'TerraformersMC'
+        url = 'https://maven.terraformersmc.com/'
+        content { includeGroup 'dev.emi' }
+    }
 }
 
 base {
@@ -177,12 +190,13 @@ dependencies {
     // Available at runtime in the client/server runs too, but not published as a dependency.
     localRuntime("net.neoforged:testframework:${neo_version}") { transitive = false }
 
-    // Example optional mod dependency with JEI
-    // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
-    // compileOnly "mezz.jei:jei-${mc_version}-common-api:${jei_version}"
-    // compileOnly "mezz.jei:jei-${mc_version}-neoforge-api:${jei_version}"
-    // We add the full version to localRuntime, not runtimeOnly, so that we do not publish a dependency on it
-    // localRuntime "mezz.jei:jei-${mc_version}-neoforge:${jei_version}"
+    // Ghost ingredients dragged out of the recipe viewer, SPEC.md §5. API only, and never
+    // published as a dependency: both plugins are guarded and the mod loads with neither mod
+    // installed. The full JEI is available to runClient so the drag can actually be tried.
+    compileOnly "mezz.jei:jei-${minecraft_version}-common-api:${jei_version}"
+    compileOnly "mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}"
+    localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
+    compileOnly "dev.emi:emi-neoforge:${emi_version}:api"
 
     // Example mod dependency using a mod jar from ./libs with a flat dir repository
     // This maps to ./libs/coolmod-${mc_version}-${coolmod_version}.jar

@@ -156,6 +156,12 @@ public class WorkbayMenu extends AbstractContainerMenu {
         if (record == null) {
             return;
         }
+        // The lock is checked once, for every action that changes something. Selecting a bay only
+        // changes what this player is looking at.
+        if (action != WorkbayAction.SELECT_BAY && action != WorkbayAction.TOGGLE_LOCK
+            && refused(serverPlayer, record)) {
+            return;
+        }
         switch (action) {
             case SELECT_BAY -> selectedBay = (int) Math.clamp(arg, 0, BayGeometry.MAX_BAYS - 1);
             case RACK -> rack(serverPlayer, record);
@@ -169,8 +175,23 @@ public class WorkbayMenu extends AbstractContainerMenu {
             case LINK_CYCLE_RESOURCE -> editLink(linkId, link -> link.withResource(link.resource().next()));
             case LINK_TOGGLE_ENABLED -> editLink(linkId, link -> link.withEnabled(!link.enabled()));
             case LINK_REMOVE -> linkId.ifPresent(workbay::removeBus);
+            case SET_FILTER -> editLink(linkId, link -> link.withFilter(filterItem(arg)));
         }
         refreshNow();
+    }
+
+    /**
+     * An item's registry id, the way every vanilla packet carries one, or nothing for -1 and for an
+     * id this server does not know. Never trusted into an array index.
+     */
+    private static Optional<ResourceLocation> filterItem(long networkId) {
+        if (networkId < 0 || networkId > Integer.MAX_VALUE) {
+            return Optional.empty();
+        }
+        var item = BuiltInRegistries.ITEM.byId((int) networkId);
+        return item == net.minecraft.world.item.Items.AIR
+            ? Optional.empty()
+            : Optional.ofNullable(BuiltInRegistries.ITEM.getKey(item));
     }
 
     private void editLink(Optional<UUID> linkId, java.util.function.UnaryOperator<BusConfig> edit) {

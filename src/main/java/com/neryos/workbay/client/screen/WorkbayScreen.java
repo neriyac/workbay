@@ -9,6 +9,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.Nullable;
 
@@ -34,6 +35,7 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
     public enum Page { BAYS, FLOW, UPGRADES }
 
     private final List<Hit> hits = new ArrayList<>();
+    private final List<Ghost> ghosts = new ArrayList<>();
     private Page page = Page.BAYS;
 
     @Nullable
@@ -112,6 +114,21 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         hits.add(new Hit(x, y, w, h, shape, onClick, tooltip.length == 0 ? null : List.of(tooltip)));
     }
 
+    /**
+     * A slot that takes an item dragged out of a recipe viewer. Collected while the page draws, the
+     * same way clicks are, so a slot's geometry is written once — and read by both the JEI and the
+     * EMI plugin, neither of which then knows anything about the layout.
+     */
+    public record Ghost(int x, int y, int w, int h, java.util.function.Consumer<ItemStack> accept) {}
+
+    public void ghost(int x, int y, int w, int h, java.util.function.Consumer<ItemStack> accept) {
+        ghosts.add(new Ghost(x, y, w, h, accept));
+    }
+
+    public List<Ghost> ghostTargets() {
+        return ghosts;
+    }
+
     public boolean hovered(int x, int y, int w, int h, double mx, double my) {
         return mx >= x && mx < x + w && my >= y && my < y + h;
     }
@@ -121,6 +138,7 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
     @Override
     protected void renderBg(GuiGraphics graphics, float partial, int mouseX, int mouseY) {
         hits.clear();
+        ghosts.clear();
         // Cleared here, not in the page: the flow and upgrade pages have no rows to hover, and a
         // highlight left behind by the bays page would outline a block nothing on screen mentions.
         com.neryos.workbay.client.LinkHighlight.clear();
@@ -215,6 +233,11 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
 
     public void send(WorkbayAction action, UUID link) {
         send(action, 0, Optional.of(link));
+    }
+
+    /** An action that needs both a number and a row: the filter slot is the only one so far. */
+    public void send(WorkbayAction action, long arg, UUID link) {
+        send(action, arg, Optional.of(link));
     }
 
     private void send(WorkbayAction action, long arg, Optional<UUID> link) {

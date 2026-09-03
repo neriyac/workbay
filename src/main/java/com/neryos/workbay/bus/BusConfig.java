@@ -48,7 +48,8 @@ public record BusConfig(
     int rate,
     int speed,
     DyeColor channel,
-    boolean enabled) {
+    boolean enabled,
+    Optional<net.minecraft.resources.ResourceLocation> filter) {
 
     /**
      * Legal speeds, in ticks. A fixed list rather than free entry so every one of them divides the
@@ -72,7 +73,9 @@ public record BusConfig(
         Codec.INT.fieldOf("Rate").forGetter(BusConfig::rate),
         Codec.INT.fieldOf("Speed").forGetter(BusConfig::speed),
         DyeColor.CODEC.optionalFieldOf("Channel", DyeColor.WHITE).forGetter(BusConfig::channel),
-        Codec.BOOL.optionalFieldOf("Enabled", true).forGetter(BusConfig::enabled)
+        Codec.BOOL.optionalFieldOf("Enabled", true).forGetter(BusConfig::enabled),
+        net.minecraft.resources.ResourceLocation.CODEC.optionalFieldOf("Filter")
+            .forGetter(BusConfig::filter)
     ).apply(i, BusConfig::new));
 
     /**
@@ -86,39 +89,50 @@ public record BusConfig(
     public static BusConfig create(UUID id, int bay, Resource resource, Mode mode,
         GlobalPos connector, GlobalPos target) {
         return new BusConfig(id, resource.defaultName(mode), bay, resource, mode, connector, target,
-            Optional.empty(), Optional.empty(), DEFAULT_RATE, DEFAULT_SPEED, DyeColor.WHITE, true);
+            Optional.empty(), Optional.empty(), DEFAULT_RATE, DEFAULT_SPEED, DyeColor.WHITE, true,
+            Optional.empty());
+    }
+
+    /**
+     * One item, or nothing. SPEC.md §5's filter <em>items</em> hold nine, eighteen or thirty-six
+     * and know about components; this is the ghost slot SPEC.md §4 already draws on every row, and
+     * it is what a drag out of JEI or EMI lands in.
+     */
+    public BusConfig withFilter(Optional<net.minecraft.resources.ResourceLocation> nowFilter) {
+        return new BusConfig(id, name, bay, resource, mode, connector, target, targetFace,
+            machineFace, rate, speed, channel, enabled, nowFilter);
     }
 
     public BusConfig withRate(int newRate) {
         return new BusConfig(id, name, bay, resource, mode, connector, target, targetFace,
-            machineFace, newRate, speed, channel, enabled);
+            machineFace, newRate, speed, channel, enabled, filter);
     }
 
     public BusConfig withSpeed(int newSpeed) {
         return new BusConfig(id, name, bay, resource, mode, connector, target, targetFace,
-            machineFace, rate, newSpeed, channel, enabled);
+            machineFace, rate, newSpeed, channel, enabled, filter);
     }
 
     public BusConfig withEnabled(boolean nowEnabled) {
         return new BusConfig(id, name, bay, resource, mode, connector, target, targetFace,
-            machineFace, rate, speed, channel, nowEnabled);
+            machineFace, rate, speed, channel, nowEnabled, filter);
     }
 
     public BusConfig withMode(Mode newMode) {
         return new BusConfig(id, defaultNamed() ? resource.defaultName(newMode) : name, bay,
             resource, newMode, connector, target, targetFace, machineFace, rate, speed, channel,
-            enabled);
+            enabled, filter);
     }
 
     public BusConfig withResource(Resource newResource) {
         return new BusConfig(id, defaultNamed() ? newResource.defaultName(mode) : name, bay,
             newResource, mode, connector, target, targetFace, machineFace, rate, speed, channel,
-            enabled);
+            enabled, filter);
     }
 
     public BusConfig withName(String newName) {
         return new BusConfig(id, newName, bay, resource, mode, connector, target, targetFace,
-            machineFace, rate, speed, channel, enabled);
+            machineFace, rate, speed, channel, enabled, filter);
     }
 
     /** True while the player has not renamed this link, so flipping its type may re-default it. */

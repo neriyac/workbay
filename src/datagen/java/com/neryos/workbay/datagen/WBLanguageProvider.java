@@ -170,6 +170,10 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("links.remove.tip"), "The Connector stays where it is. Right-click it "
             + "to link it again.");
         add(WorkbayLang.guiKey("links.filterslot"), "Filter");
+        add(WorkbayLang.guiKey("links.filterslot.tip"), "Drag an item here from the recipe list, "
+            + "or click while holding one, and this link moves only that item.");
+        add(WorkbayLang.guiKey("links.filterslot.set"), "Filter: %s");
+        add(WorkbayLang.guiKey("links.filterslot.clear"), "Click to clear it.");
         add(WorkbayLang.guiKey("links.unknown"), "not loaded");
 
         add(WorkbayLang.guiKey("status.running"), "Running");
@@ -194,6 +198,10 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("status.machine_no_port"), "Machine unreachable");
         add(WorkbayLang.guiKey("status.machine_no_port.tip"), "The hosted machine answers on none "
             + "of the faces this link may use. Check the cube, or eject and re-rack it.");
+        add(WorkbayLang.guiKey("status.resource_not_carried"), "Fluids not carried yet");
+        add(WorkbayLang.guiKey("status.resource_not_carried.tip"), "This link is set to fluids, "
+            + "which this version does not move. Click the row's type icon to set it back to "
+            + "items or energy.");
         add(WorkbayLang.guiKey("status.machine_no_face"), "No face for this");
         add(WorkbayLang.guiKey("status.machine_no_face.tip"), "This bay has faces set, but none "
             + "marked for this link's direction. Mark one in on the cube for a link that pulls, "

@@ -414,4 +414,57 @@ public class BusTests {
                 .thenSucceed();
         });
     }
+
+    /**
+     * The row's ghost slot, doing its job. SPEC.md §5: one item per link today, nine to thirty-six
+     * once the filter items exist, and they widen at exactly the predicate this asserts.
+     *
+     * <p>The hosted chest holds two items and the link is filtered to one, so a filter that is read
+     * but not applied — or applied to the destination rather than the source — cannot pass.
+     */
+    @GameTest(timeoutTicks = 900)
+    @TestHolder(description = "A filtered link moves its item and leaves everything else behind.")
+    public static void aFilteredLinkMovesOnlyItsItem(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos targetPos = helper.absolutePos(new BlockPos(4, 1, 4));
+
+            level.setBlock(targetPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.CHEST));
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+            if (backshop.getBlockEntity(machinePos) instanceof Container hosted) {
+                hosted.setItem(0, new ItemStack(Items.GOLD_INGOT, 16));
+                hosted.setItem(1, new ItemStack(Items.IRON_INGOT, 16));
+            }
+
+            BusConfig link = connect(helper, workbay, targetPos.above(), Direction.DOWN, player);
+            workbay.addBus(link.withRate(8).withSpeed(10).withFilter(
+                java.util.Optional.of(net.minecraft.core.registries.BuiltInRegistries.ITEM
+                    .getKey(Items.IRON_INGOT))));
+
+            helper.startSequence()
+                .thenWaitUntil(() -> {
+                    if (countIn(level, targetPos, Items.IRON_INGOT) < 16) {
+                        throw new GameTestAssertException("the filtered bus has moved "
+                            + countIn(level, targetPos, Items.IRON_INGOT) + " of 16 iron so far");
+                    }
+                })
+                // Long enough after the iron arrived that unfiltered gold would have followed it.
+                .thenIdle(60)
+                .thenExecute(() -> {
+                    helper.assertValueEqual(countIn(level, targetPos, Items.GOLD_INGOT), 0,
+                        "gold that reached the target past an iron-only filter");
+                    helper.assertValueEqual(countIn(backshop, machinePos, Items.GOLD_INGOT), 16,
+                        "gold left in the hosted chest");
+                })
+                .thenExecute(() -> tearDown(helper, workbayPos))
+                .thenSucceed();
+        });
+    }
 }

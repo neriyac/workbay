@@ -148,9 +148,10 @@ public class BusRunner {
         return switch (bus.resource()) {
             case ITEM -> runItems(bus, targetLevel, target.pos(), backshop, machinePos, faces);
             case ENERGY -> runEnergy(bus, targetLevel, target.pos(), backshop, machinePos, faces);
-            // Fluids use the same shape and are not wired up yet; a bus set to one simply idles
-            // rather than pretending to work.
-            case FLUID -> BusStatus.IDLE;
+            // Fluids use the same shape and are not wired up yet. Reported, not idled: the row's
+            // resource icon is one click away from the mode icon, so a link cycled to fluids by
+            // accident spent a session looking like a link with nothing to do.
+            case FLUID -> BusStatus.RESOURCE_NOT_CARRIED;
         };
     }
 
@@ -176,7 +177,8 @@ public class BusRunner {
         if (to == null) {
             return insert ? BusStatus.TARGET_NO_PORT : BusStatus.MACHINE_NO_PORT;
         }
-        IItemHandler from = source.resolve(BusRunner::hasAnything, sourceFaces);
+        java.util.function.Predicate<net.minecraft.world.item.ItemStack> allowed = allowed(bus);
+        IItemHandler from = source.resolve(h -> hasAnything(h, allowed), sourceFaces);
         if (from == null) {
             // Nothing came out. Two very different reasons, and one message for both is how a
             // dead link spends a session looking like a resting one.
@@ -184,7 +186,22 @@ public class BusRunner {
             return anyHandler ? BusStatus.IDLE
                 : insert ? BusStatus.MACHINE_NO_PORT : BusStatus.TARGET_NO_PORT;
         }
-        return BusTransfer.moveItems(from, to, bus.rate()) > 0 ? BusStatus.RUNNING : BusStatus.IDLE;
+        return BusTransfer.moveItems(from, to, bus.rate(), allowed) > 0
+            ? BusStatus.RUNNING : BusStatus.IDLE;
+    }
+
+    /**
+     * The link's ghost item, as a predicate. One item is the whole filter today; SPEC.md §5's
+     * filter items widen this to nine, eighteen or thirty-six entries with component matching, and
+     * they widen exactly here.
+     */
+    private static java.util.function.Predicate<net.minecraft.world.item.ItemStack> allowed(
+        BusConfig bus) {
+        if (bus.filter().isEmpty()) {
+            return stack -> true;
+        }
+        var wanted = net.minecraft.core.registries.BuiltInRegistries.ITEM.get(bus.filter().get());
+        return stack -> stack.is(wanted);
     }
 
     private BusStatus runEnergy(BusConfig bus, ServerLevel targetLevel, BlockPos targetPos,
@@ -222,9 +239,11 @@ public class BusRunner {
      * A source only counts if something could actually come out of it. Binding to the first handler
      * that merely exists is how a bus ends up wired to a read-only face and moves nothing forever.
      */
-    private static boolean hasAnything(IItemHandler handler) {
+    private static boolean hasAnything(IItemHandler handler,
+        java.util.function.Predicate<net.minecraft.world.item.ItemStack> allowed) {
         for (int slot = 0; slot < handler.getSlots(); slot++) {
-            if (!handler.extractItem(slot, 1, true).isEmpty()) {
+            net.minecraft.world.item.ItemStack sample = handler.extractItem(slot, 1, true);
+            if (!sample.isEmpty() && allowed.test(sample)) {
                 return true;
             }
         }
@@ -239,6 +258,8 @@ public class BusRunner {
         RUNNING, IDLE, DISABLED, CONNECTOR_GONE, TARGET_MISSING, TARGET_NOT_LOADED, TARGET_NO_PORT,
         /** The hosted machine answers on none of the faces this link may use. */
         MACHINE_NO_PORT,
+        /** Set to a resource this build does not move. Fluids, today. */
+        RESOURCE_NOT_CARRIED,
         /** The bay's cube has faces set, but none for this link's direction of travel. */
         MACHINE_NO_FACE;
 

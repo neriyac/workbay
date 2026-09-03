@@ -25,12 +25,21 @@ public final class BusTransfer {
      * @return how many items actually moved
      */
     public static int moveItems(IItemHandler from, IItemHandler to, int budget) {
+        return moveItems(from, to, budget, stack -> true);
+    }
+
+    /**
+     * @param allowed the link's filter. Applied to what the source offers, before anything is
+     *                committed, so a filtered link never has to put an item back.
+     */
+    public static int moveItems(IItemHandler from, IItemHandler to, int budget,
+        java.util.function.Predicate<ItemStack> allowed) {
         if (budget <= 0) {
             return 0;
         }
         for (int slot = 0; slot < from.getSlots(); slot++) {
             ItemStack available = from.extractItem(slot, budget, true);
-            if (available.isEmpty()) {
+            if (available.isEmpty() || !allowed.test(available)) {
                 continue;
             }
             // A handler may hand back more than a stack in one go; clamp so the foreign insert is

@@ -534,9 +534,7 @@ class BaysPage extends WorkbayPage {
         g.drawString(font, font.plainSubstrByWidth(target.getString(), 92), px + 104, py + 5,
             link.status().isProblem() ? statusColour(link.status()) : Draw.TEXT_DIM, false);
 
-        // The filter slot is drawn where SPEC.md §4 puts it; filters themselves are §5's.
-        unbuiltButton(g, px + 200, py + 1, 16, WBIcons.FILTER,
-            WorkbayScreen.gui("links.filterslot"), WorkbayScreen.gui("unbuilt"));
+        filterSlot(g, px + 200, py + 1, config);
 
         boolean open = config.id().equals(openGear);
         iconButton(g, mouseX, mouseY, px + 222, py, WBIcons.GEAR, open,
@@ -546,6 +544,52 @@ class BaysPage extends WorkbayPage {
         if (open) {
             gearMenu(g, mouseX, mouseY, config, px + 132, py + ROW_PITCH - 2);
         }
+    }
+
+    /**
+     * The row's ghost slot. One item, dragged in from JEI or EMI or picked off the cursor, and
+     * clicked to clear. SPEC.md §5's filter <em>items</em> hold nine to thirty-six entries and know
+     * about components; this is the one-item form the row has always drawn a slot for.
+     *
+     * <p>The item is washed white at pose Z+300 so it never reads as a real stack sitting in a
+     * slot, which is the anti-dupe convention §5 requires of every ghost slot in the mod.
+     */
+    private void filterSlot(GuiGraphics g, int px, int py, BusConfig config) {
+        Draw.slot(g, px, py, 16, 16);
+        Optional<ResourceLocation> filter = config.filter();
+        if (filter.isEmpty()) {
+            WBIcons.draw(g, WBIcons.FILTER, px + 2, py + 2, Draw.TEXT_FAINT);
+            screen.hit(px, py, 16, 16, () -> setFilterFromCursor(config),
+                WorkbayScreen.gui("links.filterslot"), WorkbayScreen.gui("links.filterslot.tip"));
+        } else {
+            ItemStack ghost = new ItemStack(BuiltInRegistries.ITEM.get(filter.get()));
+            g.renderItem(ghost, px, py);
+            g.pose().pushPose();
+            g.pose().translate(0, 0, 300);
+            g.fill(px, py, px + 16, py + 16, 0x60FFFFFF);
+            g.pose().popPose();
+            screen.hit(px, py, 16, 16,
+                () -> screen.send(WorkbayAction.SET_FILTER, -1L, config.id()),
+                WorkbayScreen.gui("links.filterslot.set", ghost.getHoverName()),
+                WorkbayScreen.gui("links.filterslot.clear"));
+        }
+        screen.ghost(px, py, 16, 16, dropped -> setFilter(config, dropped));
+    }
+
+    /** Clicking an empty slot while holding something is the no-recipe-viewer way in. */
+    private void setFilterFromCursor(BusConfig config) {
+        var minecraft = net.minecraft.client.Minecraft.getInstance();
+        if (minecraft.player != null) {
+            setFilter(config, minecraft.player.getMainHandItem());
+        }
+    }
+
+    private void setFilter(BusConfig config, ItemStack stack) {
+        if (stack.isEmpty()) {
+            return;
+        }
+        screen.send(WorkbayAction.SET_FILTER,
+            BuiltInRegistries.ITEM.getId(stack.getItem()), config.id());
     }
 
     /** The gear's two real controls. Everything else it will hold is SPEC.md §5's link settings. */
@@ -610,7 +654,8 @@ class BaysPage extends WorkbayPage {
             case TARGET_MISSING, CONNECTOR_GONE -> Draw.RED;
             // Amber is "you can fix this from here". The face config and an unreachable machine
             // both are; a target that has gone is not.
-            case TARGET_NOT_LOADED, TARGET_NO_PORT, MACHINE_NO_PORT, MACHINE_NO_FACE -> Draw.AMBER;
+            case TARGET_NOT_LOADED, TARGET_NO_PORT, MACHINE_NO_PORT, MACHINE_NO_FACE,
+                 RESOURCE_NOT_CARRIED -> Draw.AMBER;
         };
     }
 
