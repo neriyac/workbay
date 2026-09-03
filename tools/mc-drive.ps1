@@ -182,12 +182,21 @@ function Shot {
   Write-Output $f.FullName
 }
 
-# Screenshot pixels are framebuffer pixels; call this once the window is up so Click/Drag map 1:1.
+# Click/Drag take coordinates measured off an F2 screenshot and scale them to the window, so they
+# need the screenshot's own size. Read it from a real screenshot: GetClientRect returns LOGICAL
+# pixels and an F2 screenshot is FRAMEBUFFER pixels, so seeding this from FB (which it used to do)
+# is only right on an unscaled display and puts every click out by the scale factor otherwise.
+# Nothing persists between `powershell -Command` invocations, so call this in each one.
 function Sync-Shot {
-  $fb = FB
-  $script:ShotW = $fb.W
-  $script:ShotH = $fb.H
-  Write-Output "framebuffer $($fb.W)x$($fb.H)"
+  Add-Type -AssemblyName System.Drawing
+  $f = Get-ChildItem $script:Shots -Filter *.png | Sort-Object LastWriteTime -Descending |
+       Select-Object -First 1
+  if (-not $f) { throw "no screenshot yet - call Shot once before Sync-Shot" }
+  $img = [System.Drawing.Image]::FromFile($f.FullName)
+  $script:ShotW = $img.Width
+  $script:ShotH = $img.Height
+  $img.Dispose()
+  Write-Output "screenshot $($script:ShotW)x$($script:ShotH), window $((FB).W)x$((FB).H)"
 }
 
 # Placing a block against a container needs sneak, or the container swallows the right-click.
