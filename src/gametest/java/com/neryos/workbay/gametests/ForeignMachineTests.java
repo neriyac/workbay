@@ -10,6 +10,7 @@ import net.minecraft.gametest.framework.GameTestAssertException;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.GameType;
@@ -18,6 +19,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.energy.IEnergyStorage;
 import net.neoforged.testframework.DynamicTest;
 import net.neoforged.testframework.annotation.ForEachTest;
 import net.neoforged.testframework.annotation.TestHolder;
@@ -37,10 +39,13 @@ import java.util.UUID;
  * through the block registry and the standard capability interfaces — which is also exactly how
  * Workbay reaches a hosted machine, so this tests the real path rather than a friendlier one.
  *
- * <p>The load-bearing finding is {@link #foreignMachineExposesOnlyItsNullSide}, and it is a problem:
- * a Mekanism machine placed with {@code setBlock} + {@code setPlacedBy} exposes nothing on any of
- * its six faces. It is <em>not</em> a Backshop problem — the same placement in the overworld reads
- * exactly the same, which was the one comparison that mattered. OPEN_ISSUES #18.
+ * <p>These tests earned SPEC.md §10 its insert order. With only {@code setBlock} and
+ * {@code setPlacedBy}, a Mekanism machine exposes handlers on <em>none</em> of its six faces and
+ * only on the null side — the one side §9 forbids, because Mekanism's null-side handler is
+ * read-only and fails silently. Add steps 2 and 3 and all six faces answer. That is the difference
+ * between hosting Mekanism and a bay that reports "no ports" for every machine in the pack, and
+ * {@link #shortInsertOrderLeavesTheMachineUnreachable} is here to stop anyone tidying those two
+ * lines away again.
  */
 @ForEachTest(groups = "foreign_machine")
 public class ForeignMachineTests {
@@ -48,10 +53,12 @@ public class ForeignMachineTests {
     private static final ResourceLocation MACHINE = ResourceLocation.parse("mekanism:enrichment_chamber");
 
     private static final UUID STATE_OWNER = UUID.fromString("00000000-0000-0000-0000-00000000ba81");
-    private static final UUID SIDE_OWNER = UUID.fromString("00000000-0000-0000-0000-00000000ba82");
+    private static final UUID FACES_OWNER = UUID.fromString("00000000-0000-0000-0000-00000000ba82");
+    private static final UUID SHORT_OWNER = UUID.fromString("00000000-0000-0000-0000-00000000ba83");
 
     private static final ChunkPos STATE_CHUNK = new ChunkPos(2048, 192);
-    private static final ChunkPos SIDE_CHUNK = new ChunkPos(2048, 256);
+    private static final ChunkPos FACES_CHUNK = new ChunkPos(2048, 256);
+    private static final ChunkPos SHORT_CHUNK = new ChunkPos(2048, 320);
 
     private static ServerLevel backshop(ExtendedGameTestHelper helper) {
         ServerLevel backshop = helper.getLevel().getServer().getLevel(WorkbayDimensions.BACKSHOP);
@@ -70,13 +77,12 @@ public class ForeignMachineTests {
     }
 
     /**
-     * Places the machine the way SPEC.md §10 requires rather than with a bare setBlock:
-     * {@code setPlacedBy} is what records the owner UUID every Mekanism machine keeps, and skipping
-     * it leaves the machine owner-less and locked. It is wrapped because a foreign block throwing
-     * here is a real outcome the mod has to survive, not a test error.
+     * SPEC.md §10's insert order. With {@code fullOrder} false it stops after
+     * {@code setBlock} + {@code setPlacedBy}, which is what the order looked like before these
+     * tests, so the difference the two extra steps make is measurable rather than asserted.
      */
     private static BlockPos placeForeign(ExtendedGameTestHelper helper, ServerLevel backshop,
-        UUID owner, ChunkPos chunk, Block machine) {
+        UUID owner, ChunkPos chunk, Block machine, boolean fullOrder) {
         WorkbayTickets.force(backshop, owner, chunk);
         BlockPos pos = chunk.getMiddleBlockPosition(16);
         backshop.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
@@ -88,10 +94,20 @@ public class ForeignMachineTests {
         // has a connection the framework's CLIENT_SYNC feature then sends test-status packets down,
         // which throws straight out of the server tick loop.
         GameTestPlayer placer = helper.makeTickingMockServerPlayerInLevel(GameType.CREATIVE);
+        ItemStack stack = new ItemStack(machine);
         try {
-            machine.setPlacedBy(backshop, pos, state, placer, new ItemStack(machine));
+            if (fullOrder) {
+                BlockItem.updateCustomBlockEntityTag(backshop, placer, pos, stack);
+                BlockEntity placed = backshop.getBlockEntity(pos);
+                if (placed != null) {
+                    placed.applyComponentsFromItemStack(stack);
+                }
+            }
+            // Always: this is what records the owner UUID every Mekanism machine keeps, and
+            // setBlock alone never calls it.
+            machine.setPlacedBy(backshop, pos, state, placer, stack);
         } catch (Exception e) {
-            helper.fail("setPlacedBy threw for " + MACHINE + " in the Backshop: " + e);
+            helper.fail("the SPEC.md §10 insert order threw for " + MACHINE + ": " + e);
         }
         backshop.invalidateCapabilities(pos);
         return pos;
@@ -106,9 +122,6 @@ public class ForeignMachineTests {
             }
             if (level.getCapability(Capabilities.EnergyStorage.BLOCK, pos, side) != null) {
                 found.append(side).append(":energy ");
-            }
-            if (level.getCapability(Capabilities.FluidHandler.BLOCK, pos, side) != null) {
-                found.append(side).append(":fluid ");
             }
         }
         if (level.getCapability(Capabilities.ItemHandler.BLOCK, pos, null) != null) {
@@ -132,10 +145,97 @@ public class ForeignMachineTests {
     }
 
     /**
-     * The proof that matters: a machine from another mod, hosted in the Backshop, keeps its own
-     * state across a real chunk save and load. Compared as serialized NBT rather than through any
-     * Mekanism API, so it covers everything the machine chose to persist — owner, security, energy,
-     * side configuration — without compiling against a line of it.
+     * A foreign machine, hosted in the Backshop, is reachable exactly the way a bus will reach it:
+     * a real face, never the null side, and energy that actually moves.
+     */
+    @GameTest(timeoutTicks = 600)
+    @TestHolder(description = "A hosted Mekanism machine exposes real faces and takes energy through one.")
+    public static void foreignMachineIsReachableThroughRealFaces(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(1, 1, 1));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel backshop = backshop(helper);
+            Block machine = foreignMachine(helper);
+            BlockPos pos = placeForeign(helper, backshop, FACES_OWNER, FACES_CHUNK, machine, true);
+
+            BlockEntity be = backshop.getBlockEntity(pos);
+            helper.assertNotNull(be, "no block entity for " + MACHINE + " in the Backshop");
+            if (!be.getClass().getName().startsWith("mekanism.")) {
+                helper.fail("expected a Mekanism block entity, got " + be.getClass().getName());
+            }
+
+            if (realFaceCount(backshop, pos) == 0) {
+                helper.fail("the hosted " + MACHINE + " exposes nothing on any of its six faces, so "
+                    + "a bay would have nothing to connect to. faces=[" + describeFaces(backshop, pos) + "]");
+                return;
+            }
+
+            // SPEC.md §9's bind step: simulate on every real face, take the first that accepts.
+            Direction accepting = null;
+            for (Direction side : Direction.values()) {
+                IEnergyStorage e = backshop.getCapability(Capabilities.EnergyStorage.BLOCK, pos, side);
+                if (e != null && e.canReceive() && e.receiveEnergy(1000, true) > 0) {
+                    accepting = side;
+                    break;
+                }
+            }
+            if (accepting == null) {
+                helper.fail("no face of the hosted " + MACHINE + " would accept energy, so a bay "
+                    + "cannot power it. faces=[" + describeFaces(backshop, pos) + "]");
+                return;
+            }
+
+            IEnergyStorage energy = backshop.getCapability(Capabilities.EnergyStorage.BLOCK, pos, accepting);
+            int taken = energy.receiveEnergy(20_000, false);
+            if (taken <= 0 || energy.getEnergyStored() <= 0) {
+                helper.fail("a simulated insert on " + accepting + " succeeded but the real one moved "
+                    + taken + " FE, leaving " + energy.getEnergyStored() + " stored");
+            }
+
+            WorkbayTickets.release(backshop, FACES_OWNER, FACES_CHUNK);
+            helper.succeed();
+        });
+    }
+
+    /**
+     * The reason SPEC.md §10 steps 2 and 3 exist, kept executable. Place the same machine without
+     * {@code updateCustomBlockEntityTag} and {@code applyComponentsFromItemStack} and it answers on
+     * no real face at all — a bay would call it inert and every Mekanism machine in the pack would
+     * look broken.
+     *
+     * <p>If this ever goes green-by-accident because the short order started working, delete it. If
+     * it fails because the short order still leaves a face exposed, the two steps may have become
+     * unnecessary. Either way the order is the thing under test, not Mekanism.
+     */
+    @GameTest(timeoutTicks = 600)
+    @TestHolder(description = "Skipping SPEC §10 steps 2 and 3 leaves a hosted Mekanism machine unreachable.")
+    public static void shortInsertOrderLeavesTheMachineUnreachable(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(1, 1, 1));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel backshop = backshop(helper);
+            Block machine = foreignMachine(helper);
+            BlockPos pos = placeForeign(helper, backshop, SHORT_OWNER, SHORT_CHUNK, machine, false);
+
+            helper.startSequence()
+                .thenIdle(5)
+                .thenExecute(() -> {
+                    if (realFaceCount(backshop, pos) != 0) {
+                        helper.fail("the short insert order now exposes real faces: ["
+                            + describeFaces(backshop, pos) + "]. SPEC.md §10 steps 2 and 3 may no "
+                            + "longer be load-bearing - check, then update the spec and delete this test.");
+                    }
+                })
+                .thenExecute(() -> WorkbayTickets.release(backshop, SHORT_OWNER, SHORT_CHUNK))
+                .thenSucceed();
+        });
+    }
+
+    /**
+     * A machine from another mod keeps its own state across a real chunk save and load. Compared as
+     * serialized NBT rather than through any Mekanism API, so it covers everything the machine chose
+     * to persist — owner, security, energy, side configuration — without compiling against a line
+     * of it.
      */
     @GameTest(timeoutTicks = 900)
     @TestHolder(description = "A hosted Mekanism machine keeps its own state across a Backshop chunk save and load.")
@@ -145,12 +245,17 @@ public class ForeignMachineTests {
         test.onGameTest(ExtendedGameTestHelper.class, helper -> {
             ServerLevel backshop = backshop(helper);
             Block machine = foreignMachine(helper);
-            BlockPos pos = placeForeign(helper, backshop, STATE_OWNER, STATE_CHUNK, machine);
+            BlockPos pos = placeForeign(helper, backshop, STATE_OWNER, STATE_CHUNK, machine, true);
 
             BlockEntity be = backshop.getBlockEntity(pos);
             helper.assertNotNull(be, "no block entity for " + MACHINE + " in the Backshop");
-            if (!be.getClass().getName().startsWith("mekanism.")) {
-                helper.fail("expected a Mekanism block entity, got " + be.getClass().getName());
+
+            // Give it something of its own to remember, through the same faces a bus would use.
+            for (Direction side : Direction.values()) {
+                IEnergyStorage e = backshop.getCapability(Capabilities.EnergyStorage.BLOCK, pos, side);
+                if (e != null && e.receiveEnergy(20_000, false) > 0) {
+                    break;
+                }
             }
 
             CompoundTag[] frozen = { null };
@@ -192,50 +297,6 @@ public class ForeignMachineTests {
                     }
                 })
                 .thenExecute(() -> WorkbayTickets.release(backshop, STATE_OWNER, STATE_CHUNK))
-                .thenSucceed();
-        });
-    }
-
-    /**
-     * Pins a finding, not a feature. A Mekanism machine written into the world with
-     * {@code setBlock} + {@code setPlacedBy} exposes item and energy handlers <em>only</em> for the
-     * null side — the one side SPEC.md §9 forbids a bus from using, because Mekanism's null-side
-     * handler is read-only and fails silently. All six real faces answer null, before and after it
-     * has ticked, in the Backshop and in the overworld alike.
-     *
-     * <p>So SPEC.md §11's {@code no_ports} check and §4's probe would mark every Mekanism machine
-     * inert today. Something in Mekanism's own placement path is not being run by this order;
-     * finding it is OPEN_ISSUES #18, and it blocks driving Mekanism machines from a bus.
-     *
-     * <p><b>When this test goes red, that is good news.</b> It means a real face started answering.
-     * Read #18, delete this test, and assert the real behaviour instead.
-     */
-    @GameTest(timeoutTicks = 600)
-    @TestHolder(description = "Pins OPEN_ISSUES #18: a programmatically placed Mekanism machine answers only on its null side.")
-    public static void foreignMachineExposesOnlyItsNullSide(final DynamicTest test) {
-        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(1, 1, 1));
-
-        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
-            ServerLevel backshop = backshop(helper);
-            Block machine = foreignMachine(helper);
-            BlockPos pos = placeForeign(helper, backshop, SIDE_OWNER, SIDE_CHUNK, machine);
-
-            helper.startSequence()
-                .thenIdle(5)
-                .thenExecute(() -> {
-                    String faces = describeFaces(backshop, pos);
-                    if (backshop.getCapability(Capabilities.ItemHandler.BLOCK, pos, null) == null) {
-                        helper.fail("the hosted " + MACHINE + " exposes nothing at all, not even a "
-                            + "null-side handler. faces=[" + faces + "]");
-                        return;
-                    }
-                    if (realFaceCount(backshop, pos) != 0) {
-                        helper.fail("a real face of the hosted " + MACHINE + " now answers: faces=["
-                            + faces + "]. That is the good outcome - read OPEN_ISSUES #18, delete "
-                            + "this test and assert the real behaviour instead.");
-                    }
-                })
-                .thenExecute(() -> WorkbayTickets.release(backshop, SIDE_OWNER, SIDE_CHUNK))
                 .thenSucceed();
         });
     }
