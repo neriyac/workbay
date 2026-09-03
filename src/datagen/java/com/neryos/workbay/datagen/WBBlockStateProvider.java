@@ -27,6 +27,9 @@ public class WBBlockStateProvider extends BlockStateProvider {
             .modelFile(model)
             .rotationY((int) state.getValue(HorizontalDirectionalBlock.FACING).toYRot())
             .build());
+
+        // A Port is only ever seen by a player standing in a room, which cannot happen in v1.
+        simpleBlock(WBBlocks.PORT.get(), models().cubeAll("port", mcBlock("chiseled_polished_blackstone")));
     }
 
     private static ResourceLocation mcBlock(String path) {

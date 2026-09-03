@@ -1,6 +1,7 @@
 package com.neryos.workbay.init;
 
 import com.neryos.workbay.Workbay;
+import com.neryos.workbay.content.port.PortBlock;
 import com.neryos.workbay.content.workbay.WorkbayBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -24,6 +25,20 @@ public class WBBlocks {
             .sound(SoundType.METAL)
             .strength(3.5F)
             .noOcclusion());
+
+    /**
+     * Generated into a bay, never given to a player. No BlockItem at all, so it cannot be crafted,
+     * picked or given, and -1 hardness so it cannot be broken. SPEC.md §2: a bay with a missing wall
+     * is an unrecoverable state.
+     */
+    public static final DeferredBlock<PortBlock> PORT = BLOCKS.register("port", () ->
+        new PortBlock(BlockBehaviour.Properties.of()
+            .mapColor(MapColor.COLOR_BLACK)
+            .sound(SoundType.METAL)
+            .strength(-1.0F, 3600000.0F)
+            .noLootTable()
+            .pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK)
+            .isValidSpawn((state, level, pos, type) -> false)));
 
     static <B extends Block> DeferredBlock<B> registerWithItem(String name,
         Function<BlockBehaviour.Properties, ? extends B> func, BlockBehaviour.Properties props) {

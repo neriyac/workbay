@@ -22,6 +22,7 @@ public class WBLanguageProvider extends LanguageProvider {
         add("itemGroup." + Workbay.MOD_ID, "Workbay");
 
         addBlock(WBBlocks.WORKBAY, "Workbay");
+        addBlock(WBBlocks.PORT, "Port");
         addItem(WBItems.SHOPSTEEL, "Shopsteel");
         addItem(WBItems.HOUSING, "Housing");
 

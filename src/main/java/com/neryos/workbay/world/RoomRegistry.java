@@ -80,6 +80,15 @@ public class RoomRegistry extends SavedData {
         return id == null ? Optional.empty() : byId(id);
     }
 
+    /**
+     * Which Workbay owns a bay column. The Backshop side of the mod only ever knows a position, so
+     * this is how a Port or a bay maps back to the Workbay it belongs to.
+     */
+    public Optional<WorkbayRecord> byBayColumn(ChunkPos column) {
+        long key = column.toLong();
+        return byId.values().stream().filter(r -> r.bayColumn().toLong() == key).findFirst();
+    }
+
     public List<WorkbayRecord> ownedBy(UUID owner) {
         return byId.values().stream().filter(r -> r.owner().equals(owner)).toList();
     }
