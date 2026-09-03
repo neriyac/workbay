@@ -123,17 +123,18 @@ public class DuplicationTests {
     }
 
     /**
-     * Loose on the floor. A drop is not a loss, but an uncounted drop hides one.
+     * Loose on the floor, inside this test's own structure and a little around it.
      *
-     * <p><b>Call this once per census, never once per position.</b> The box is wide enough to hold
-     * a whole test structure, so two calls around two positions in the same structure count every
-     * dropped stack twice - which reads exactly like a duplication bug in the mod and was the first
-     * thing this file "found".
+     * <p><b>Bounded by {@code helper.getBounds()}, not by a radius around a position.</b> Two
+     * things go wrong with a radius. Two calls around two positions in the same structure count
+     * every dropped stack twice; and a box wide enough to be safe reaches into the <em>next</em>
+     * gametest's structure, so a neighbour's spilled chest lands in this census. Both read exactly
+     * like a duplication bug in the mod, and this file "found" each of them once.
      */
-    private static int loose(ServerLevel level, BlockPos around, Item item) {
+    private static int loose(ExtendedGameTestHelper helper, Item item) {
         int total = 0;
-        for (ItemEntity entity : level.getEntitiesOfClass(ItemEntity.class,
-            new AABB(around).inflate(24))) {
+        for (ItemEntity entity : helper.getLevel().getEntitiesOfClass(ItemEntity.class,
+            helper.getBounds().inflate(2))) {
             total += count(entity.getItem(), item);
         }
         return total;
@@ -214,12 +215,12 @@ public class DuplicationTests {
             player.getInventory().clearContent();
             rack(menu, player, 0, new ItemStack(Blocks.FURNACE, 1));
 
-            int afterRack = onPlayer(player, Items.FURNACE) + loose(level, workbayPos, Items.FURNACE)
+            int afterRack = onPlayer(player, Items.FURNACE) + loose(helper, Items.FURNACE)
                 + (backshop.getBlockState(machinePos).is(Blocks.FURNACE) ? 1 : 0);
             helper.assertValueEqual(afterRack, 1, "furnaces in existence after racking one");
 
             menu.act(WorkbayAction.EJECT, 0, Optional.empty());
-            int afterEject = onPlayer(player, Items.FURNACE) + loose(level, workbayPos, Items.FURNACE)
+            int afterEject = onPlayer(player, Items.FURNACE) + loose(helper, Items.FURNACE)
                 + (backshop.getBlockState(machinePos).is(Blocks.FURNACE) ? 1 : 0);
             helper.assertValueEqual(afterEject, 1, "furnaces in existence after ejecting it again");
             helper.succeed();
@@ -260,7 +261,7 @@ public class DuplicationTests {
             theirs.act(WorkbayAction.EJECT, 0, Optional.empty());
 
             int total = onPlayer(first, Items.FURNACE) + onPlayer(second, Items.FURNACE)
-                + loose(level, workbayPos, Items.FURNACE)
+                + loose(helper, Items.FURNACE)
                 + (backshop.getBlockState(machinePos).isAir() ? 0 : 1);
             helper.assertValueEqual(total, 1, "furnaces after two players both clicked eject");
             helper.succeed();
@@ -299,11 +300,11 @@ public class DuplicationTests {
             menu.act(WorkbayAction.EJECT, 0, Optional.empty());
 
             helper.assertValueEqual(onPlayer(player, Items.RAW_IRON)
-                + loose(level, workbayPos, Items.RAW_IRON), 5, "raw iron after the eject");
+                + loose(helper, Items.RAW_IRON), 5, "raw iron after the eject");
             helper.assertValueEqual(onPlayer(player, Items.COAL)
-                + loose(level, workbayPos, Items.COAL), 3, "coal after the eject");
+                + loose(helper, Items.COAL), 3, "coal after the eject");
             helper.assertValueEqual(onPlayer(player, Items.IRON_INGOT)
-                + loose(level, workbayPos, Items.IRON_INGOT), 2, "iron ingots after the eject");
+                + loose(helper, Items.IRON_INGOT), 2, "iron ingots after the eject");
             helper.assertValueEqual(inContainer(backshop, machinePos, Items.RAW_IRON), 0,
                 "raw iron left standing in an emptied bay");
             helper.succeed();
@@ -336,7 +337,7 @@ public class DuplicationTests {
 
             level.destroyBlock(workbayPos, true, player);
 
-            int furnaces = onPlayer(player, Items.FURNACE) + loose(level, workbayPos, Items.FURNACE)
+            int furnaces = onPlayer(player, Items.FURNACE) + loose(helper, Items.FURNACE)
                 + (backshop.getBlockState(machinePos).is(Blocks.FURNACE) ? 1 : 0);
             helper.assertValueEqual(furnaces, 1, "furnaces after breaking the Workbay around one");
             helper.assertValueEqual(inContainer(backshop, machinePos, Items.RAW_IRON), 7,
@@ -426,7 +427,7 @@ public class DuplicationTests {
             helper.assertValueEqual(carried(view, Items.EMERALD), 6,
                 "emeralds still on the cursor after clicking into a bay that no longer has a machine");
             int diamonds = carried(view, Items.DIAMOND) + onPlayer(player, Items.DIAMOND)
-                + loose(level, workbayPos, Items.DIAMOND);
+                + loose(helper, Items.DIAMOND);
             helper.assertValueEqual(diamonds, 4,
                 "diamonds after the chest holding them was ejected under an open Bay View");
             helper.succeed();
@@ -465,7 +466,7 @@ public class DuplicationTests {
             view.removed(player);
             int total = carried(view, Items.DIAMOND) + onPlayer(player, Items.DIAMOND)
                 + inContainer(backshop, machinePos, Items.DIAMOND)
-                + loose(level, workbayPos, Items.DIAMOND);
+                + loose(helper, Items.DIAMOND);
             helper.assertValueEqual(total, 9, "diamonds after the screen closed with them in flight");
             helper.assertValueEqual(carried(view, Items.DIAMOND), 0,
                 "diamonds left stranded on a closed menu's cursor");
@@ -515,11 +516,75 @@ public class DuplicationTests {
             view.clicked(0, 0, ClickType.QUICK_MOVE, player);
             int total = onPlayer(player, Items.IRON_INGOT)
                 + inContainer(backshop, machinePos, Items.IRON_INGOT)
-                + carried(view, Items.IRON_INGOT) + loose(level, workbayPos, Items.IRON_INGOT);
+                + carried(view, Items.IRON_INGOT) + loose(helper, Items.IRON_INGOT);
             helper.assertValueEqual(total, 37, "iron ingots after a round trip through Bay View");
             helper.assertValueEqual(onPlayer(player, Items.IRON_INGOT), 37,
                 "iron ingots back in the player's inventory");
             helper.succeed();
+        });
+    }
+
+    /**
+     * Bay View feeding a bay that already has a link running on it, which is the shape of the
+     * actual loop: put something in by hand, and the automation picks it up.
+     *
+     * <p>Written after walking it in {@code runClient} and briefly believing the mod had eaten two
+     * items. It had not - they went into the racked chest and the link carried them out to its
+     * target within the same second, which is <em>correct</em> and looks identical to a leak from
+     * the screen. The census is what tells the two apart, and this test is what stops the next
+     * person spending ten minutes on it.
+     */
+    @GameTest(timeoutTicks = 400)
+    @TestHolder(description = "Items put into a bay by hand and carried straight out by its link are never lost.")
+    public static void bayViewFeedsARunningLinkWithoutLosingAnything(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos targetPos = helper.absolutePos(new BlockPos(4, 1, 4));
+            level.setBlock(targetPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+
+            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = backshop(helper);
+            WorkbayTickets.force(backshop, record.id(), record.bayColumn());
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+
+            player.getInventory().clearContent();
+            rack(menuFor(workbay, player), player, 0, new ItemStack(Blocks.CHEST, 1));
+            connect(helper, workbay, 0, targetPos.above(), player);
+            player.getInventory().add(new ItemStack(Items.IRON_INGOT, 37));
+
+            BayViewMenu view = bayView(2, player, workbay, 0);
+            int playerSlot = view.machineSlots();
+            for (int slot = view.machineSlots(); slot < view.slots.size(); slot++) {
+                if (view.slots.get(slot).getItem().is(Items.IRON_INGOT)) {
+                    playerSlot = slot;
+                    break;
+                }
+            }
+            int handSlot = playerSlot;
+            helper.startSequence()
+                .thenExecute(() -> view.clicked(handSlot, 0, ClickType.QUICK_MOVE, player))
+                .thenWaitUntil(() -> {
+                    if (inContainer(level, targetPos, Items.IRON_INGOT) <= 0) {
+                        throw new GameTestAssertException("the link has not carried anything out of "
+                            + "the bay Bay View just filled");
+                    }
+                })
+                .thenIdle(40)
+                .thenExecute(() -> {
+                    int total = onPlayer(player, Items.IRON_INGOT)
+                        + inContainer(backshop, machinePos, Items.IRON_INGOT)
+                        + inContainer(level, targetPos, Items.IRON_INGOT)
+                        + carried(view, Items.IRON_INGOT)
+                        + loose(helper, Items.IRON_INGOT);
+                    helper.assertValueEqual(total, 37,
+                        "iron ingots after Bay View fed a bay whose link was already running");
+                })
+                .thenSucceed();
         });
     }
 
@@ -568,10 +633,10 @@ public class DuplicationTests {
                 })
                 .thenIdle(40)
                 .thenExecute(() -> {
-                    // One loose() call: the chest spilled what had arrived, and the boxes around
-                    // the two positions overlap.
+                    // One loose() call: the chest spilled what had arrived, and the census box
+                    // covers the whole structure.
                     int total = inContainer(backshop, machinePos, Items.IRON_INGOT)
-                        + loose(level, workbayPos, Items.IRON_INGOT);
+                        + loose(helper, Items.IRON_INGOT);
                     helper.assertValueEqual(total, 64,
                         "iron ingots after the link's target was destroyed mid-transfer");
                 })
@@ -620,7 +685,7 @@ public class DuplicationTests {
                 .thenExecute(() -> {
                     int total = inContainer(backshop, machinePos, Items.IRON_INGOT)
                         + inContainer(level, targetPos, Items.IRON_INGOT)
-                        + loose(level, workbayPos, Items.IRON_INGOT);
+                        + loose(helper, Items.IRON_INGOT);
                     helper.assertValueEqual(total, 64,
                         "iron ingots after the Connector was broken mid-transfer");
                 })

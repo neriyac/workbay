@@ -123,12 +123,17 @@ public class BayViewMenu extends AbstractContainerMenu {
     }
 
     /**
-     * Where the player's own inventory starts. The forty pixels above it are not padding: SPEC.md
+     * Where the player's own inventory starts. The sixty pixels above it are not padding: SPEC.md
      * §5 requires a permanent line naming what this screen cannot reach, and a screen that mimics a
      * machine's and silently lacks half its controls reads as a broken mod rather than a limit.
+     *
+     * <p>Sixty and not forty because that sentence wraps to <b>four</b> lines at this panel's
+     * width, not the two it looks like in the source. At forty it ran straight through the
+     * Inventory label and the first row of the player's own slots - seen in {@code runClient}, and
+     * the exact same class of fault as the skim chip that overran the link name last session.
      */
     public static int inventoryY(int slots) {
-        return GRID_Y + rows(slots) * SLOT_SIZE + 40;
+        return GRID_Y + rows(slots) * SLOT_SIZE + 60;
     }
 
     public static int height(int slots) {
