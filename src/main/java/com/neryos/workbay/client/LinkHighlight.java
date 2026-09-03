@@ -1,16 +1,11 @@
 package com.neryos.workbay.client;
 
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.BufferBuilder;
-import com.mojang.blaze3d.vertex.BufferUploader;
-import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.Tesselator;
-import com.mojang.blaze3d.vertex.VertexFormat;
 import com.neryos.workbay.Workbay;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -26,9 +21,11 @@ import org.jetbrains.annotations.Nullable;
  * <p>It is the only real answer to "which chest is this row?", which stops being a rhetorical
  * question at about the fourth link. LaserIO and XNet both do it.
  *
- * <p><b>Drawn without a depth test</b>, so a target behind the Workbay, a wall or the player's own
- * base is still findable — a highlight you can only see when you are already looking at the thing
- * is a highlight for the case that does not need one.
+ * <p>Drawn as vanilla's own block outline, through {@code RenderType.lines()} and the level's
+ * buffer source. A hand-rolled no-depth pass was tried first, to make a target behind a wall
+ * findable, and drew nothing at all: the level's pose stack already carries the camera, so a
+ * direct {@code BufferUploader} draw is transformed twice. An x-ray outline needs its own
+ * {@code RenderType}, which is not worth a custom render type until somebody asks.
  *
  * <p>One static field rather than a per-screen listener: the screen sets it while it draws and the
  * world consumes it on the next frame, which is a frame of lag nobody can see and no plumbing.
@@ -65,25 +62,15 @@ public final class LinkHighlight {
 
         Vec3 camera = event.getCamera().getPosition();
         // Fractionally larger than the block, or the outline z-fights with the block's own faces.
-        AABB box = new AABB(at.pos()).inflate(0.004);
+        AABB box = new AABB(at.pos()).inflate(0.004).move(-camera.x, -camera.y, -camera.z);
 
         PoseStack pose = event.getPoseStack();
         pose.pushPose();
-        pose.translate(-camera.x, -camera.y, -camera.z);
-
-        RenderSystem.setShader(GameRenderer::getRendertypeLinesShader);
-        RenderSystem.disableDepthTest();
-        RenderSystem.enableBlend();
-        RenderSystem.defaultBlendFunc();
-        RenderSystem.lineWidth(3.0F);
-        BufferBuilder lines = Tesselator.getInstance()
-            .begin(VertexFormat.Mode.LINES, DefaultVertexFormat.POSITION_COLOR_NORMAL);
-        LevelRenderer.renderLineBox(pose, lines, box, 0.35F, 0.66F, 0.90F, 0.9F);
-        BufferUploader.drawWithShader(lines.buildOrThrow());
-        RenderSystem.lineWidth(1.0F);
-        RenderSystem.disableBlend();
-        RenderSystem.enableDepthTest();
-
+        MultiBufferSource.BufferSource buffers =
+            minecraft.renderBuffers().bufferSource();
+        LevelRenderer.renderLineBox(pose, buffers.getBuffer(RenderType.lines()), box,
+            0.35F, 0.66F, 0.90F, 0.9F);
+        buffers.endBatch(RenderType.lines());
         pose.popPose();
     }
 }
