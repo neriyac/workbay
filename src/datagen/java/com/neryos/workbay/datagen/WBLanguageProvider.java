@@ -66,6 +66,14 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.messageKey("reject.protected"), "You can't take %s from here.");
         add(WorkbayLang.messageKey("reject.no_bay"), "Every bay is full. Install an Expansion Plate "
             + "for another.");
+        // OPEN_ISSUES #27: a bay slot that refuses in silence is unexplainable. Every branch of
+        // WorkbayMenu#rack now names itself.
+        add(WorkbayLang.messageKey("reject.bay_occupied"), "This bay already has something standing "
+            + "in it. Pick an empty bay, or eject what is there first.");
+        add(WorkbayLang.messageKey("reject.empty_hand"), "Hold the machine you want to rack, then "
+            + "click the bay.");
+        add(WorkbayLang.messageKey("reject.rack_failed"), "%s wouldn't stand up in a bay, so nothing "
+            + "was placed. You still have it.");
         add(WorkbayLang.messageKey("reject.assay_needs_bay"), "The Assay only works racked in a bay. "
             + "It has no faces to connect to out here.");
 
@@ -327,6 +335,29 @@ public class WBLanguageProvider extends LanguageProvider {
 
         // The skim. SPEC.md §3: goods going missing must be explained exactly where the loss is
         // noticed, so the rate is on the dial, on the bays screen and on every row it applies to.
+        // The bays screen's Levy readout. On that screen and not only the upgrades one because a
+        // player who has to change screens to find out whether they are earning does not change
+        // screens - they conclude the dial does nothing.
+        // Bay View. SPEC.md §5: our own screen, and a permanent line saying what it cannot reach.
+        add(WorkbayLang.guiKey("bayview.title"), "Bay View · Bay %s");
+        add(WorkbayLang.guiKey("bayview.limits"), "Recipe modes, side configuration and upgrade "
+            + "slots stay on the machine. Eject it to change those.");
+        add(WorkbayLang.guiKey("button.bayview"), "Bay View");
+        add(WorkbayLang.guiKey("button.bayview.tip"), "Opens this machine's item slots so you can "
+            + "put things in and take them out by hand, without a link.");
+        add(WorkbayLang.messageKey("bayview_unreachable"), "Nothing in this bay answers by hand. "
+            + "A machine with no item slots is reached by a link or not at all.");
+        add(WorkbayLang.guiKey("levy"), "Levy %s");
+        add(WorkbayLang.guiKey("levy.name"), "Levy banked: %s");
+        add(WorkbayLang.guiKey("levy.batch"), "%s / %s to the next");
+        add(WorkbayLang.guiKey("levy.tip"), "The Assay is converting. Every batch of skimmed goods "
+            + "becomes one Levy, and Levy is what installs upgrades.");
+        add(WorkbayLang.guiKey("levy.no_assay"), "No Assay racked");
+        add(WorkbayLang.guiKey("levy.no_assay.tip"), "Nothing is being earned. Rack an Assay in a "
+            + "bay, then turn the skim dial up on the upgrades screen.");
+        add(WorkbayLang.guiKey("levy.dial_off"), "Skim at 0%");
+        add(WorkbayLang.guiKey("levy.dial_off.tip"), "Nothing is being earned. The Assay is racked "
+            + "but the skim dial is at zero, so your links are keeping everything they carry.");
         add(WorkbayLang.guiKey("skim"), "Skim %s%%");
         add(WorkbayLang.guiKey("skim.name"), "Skim: %s%% of the goods your links carry");
         add(WorkbayLang.guiKey("skim.tip"), "Items your links move that count as refined goods are "

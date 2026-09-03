@@ -195,6 +195,12 @@ public class WorkbayMenu extends AbstractContainerMenu {
             case CYCLE_REDSTONE -> editBay(serverPlayer, record,
                 bay -> bay.withRedstone(bay.redstone().step(back)));
             case SET_SKIM -> setSkim(serverPlayer, record, back);
+            case OPEN_BAY_VIEW -> {
+                if (!BayViewMenu.open(serverPlayer, workbay, record, selectedBay)) {
+                    serverPlayer.displayClientMessage(
+                        com.neryos.workbay.WorkbayLang.message("bayview_unreachable"), true);
+                }
+            }
             case CREATE_INTERNAL_LINK -> createInternalLink(serverPlayer, record, (int) arg);
             case LINK_ASSIGN_BAY -> {
                 int bay = (int) arg;
@@ -265,12 +271,23 @@ public class WorkbayMenu extends AbstractContainerMenu {
             return;
         }
         ServerLevel backshop = serverPlayer.server.getLevel(WorkbayDimensions.BACKSHOP);
-        if (backshop == null || !backshop.getBlockState(
+        if (backshop == null) {
+            return;
+        }
+        // OPEN_ISSUES #27. Every other refusal in this method says why; these two returned in
+        // silence, so clicking the bay slot did nothing at all and the only way to find out what
+        // was wrong was to read the Backshop with /execute in workbay:backshop. A button that
+        // does nothing is the worst failure a screen has, because there is no next thing to try.
+        if (!backshop.getBlockState(
             BayGeometry.machinePos(record.bayColumn(), selectedBay)).isAir()) {
+            serverPlayer.displayClientMessage(
+                com.neryos.workbay.WorkbayLang.message("reject.bay_occupied"), true);
             return;
         }
         ItemStack held = serverPlayer.getMainHandItem();
         if (held.isEmpty()) {
+            serverPlayer.displayClientMessage(
+                com.neryos.workbay.WorkbayLang.message("reject.empty_hand"), true);
             return;
         }
         HostResult verdict = HostChecks.evaluate(held);
@@ -281,6 +298,11 @@ public class WorkbayMenu extends AbstractContainerMenu {
         ItemStack one = held.copyWithCount(1);
         if (!BayHosting.rack(backshop, record.bayColumn(), selectedBay, one, serverPlayer,
             Direction.NORTH)) {
+            // The placement was undone (SPEC.md §10 step 4: setPlacedBy threw). Say so rather
+            // than leaving the click looking like it was ignored.
+            serverPlayer.displayClientMessage(
+                com.neryos.workbay.WorkbayLang.message("reject.rack_failed",
+                    one.getHoverName()), true);
             return;
         }
         held.shrink(1);
@@ -503,7 +525,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
         return new WorkbaySnapshot(record.code(), record.locked(), record.bayCapacity(), selected,
             workbay.energy().getEnergyStored(), workbay.energy().getMaxEnergyStored(),
             bays, links, record.upgrades(), record.assay().levy(), record.assay().rate(),
-            record.deployedCount(),
+            record.assay().skimmed(), record.deployedCount(),
             com.neryos.workbay.config.WorkbayConfig.SERVER.maxDeployedWorkbaysPerNetwork.get());
     }
 

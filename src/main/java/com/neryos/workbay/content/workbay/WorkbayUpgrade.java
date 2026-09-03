@@ -30,9 +30,9 @@ public enum WorkbayUpgrade implements StringRepresentable {
      */
     EXPANSION_PLATE("expansion_plate",
         () -> WorkbayConfig.SERVER.maxBaysPerWorkbay.get() - WorkbayRecord.BASE_BAYS,
-        2, 2, () -> WBItems.EXPANSION_PLATE.get()),
-    RESONATOR("resonator", () -> 1, 8, 0, () -> WBItems.RESONATOR.get()),
-    MULTICHANNEL("multichannel", () -> 1, 8, 0, () -> WBItems.MULTICHANNEL.get());
+        2, 6, () -> WBItems.EXPANSION_PLATE.get()),
+    RESONATOR("resonator", () -> 1, 24, 0, () -> WBItems.RESONATOR.get()),
+    MULTICHANNEL("multichannel", () -> 1, 24, 0, () -> WBItems.MULTICHANNEL.get());
 
     private final String name;
     private final IntSupplier max;
@@ -61,6 +61,12 @@ public enum WorkbayUpgrade implements StringRepresentable {
      * What installing the next one costs in Levy. SPEC.md §1: "rising", which a crafting recipe
      * cannot express - a recipe costs the same the tenth time as the first. The rise lives here,
      * where the install happens and the screen can name it.
+     *
+     * <p><b>The first rung is cheap and the climb is steep.</b> Plate 1 costs 2 and plate 6 costs
+     * 32, so the whole ladder is 102 Levy where it used to be 42. That is where the entry cost
+     * went: SPEC.md §0 prices the upgrades, not the entry, and the recipes below the first Workbay
+     * were carrying weight that belongs here. A first plate the player reaches in a couple of
+     * minutes is what teaches them the dial is worth turning; everything after it is the game.
      */
     public int levyCost(int installed) {
         return baseCost + costStep * Math.max(0, installed);

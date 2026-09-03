@@ -1,11 +1,11 @@
 {
   "parent": "minecraft:recipes/root",
   "criteria": {
-    "has_housing": {
+    "has_shopsteel": {
       "conditions": {
         "items": [
           {
-            "items": "workbay:housing"
+            "items": "workbay:shopsteel"
           }
         ]
       },
@@ -21,7 +21,7 @@
   "requirements": [
     [
       "has_the_recipe",
-      "has_housing"
+      "has_shopsteel"
     ]
   ],
   "rewards": {

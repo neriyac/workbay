@@ -45,5 +45,10 @@ public enum WorkbayAction {
     /** Cycles the selected bay's {@link com.neryos.workbay.world.RedstoneMode}. */
     CYCLE_REDSTONE,
     /** Steps the Assay's skim rate up by five, or down by five on a right-click. SPEC.md §3. */
-    SET_SKIM
+    SET_SKIM,
+    /**
+     * Opens Bay View on the selected bay (SPEC.md §5). A second menu rather than a page of this
+     * one: it is the only screen in the mod with real slots, and this menu deliberately has none.
+     */
+    OPEN_BAY_VIEW
 }

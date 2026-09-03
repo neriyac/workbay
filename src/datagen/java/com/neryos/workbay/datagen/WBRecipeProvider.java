@@ -26,16 +26,21 @@ public class WBRecipeProvider extends RecipeProvider {
 
     @Override
     protected void buildRecipes(RecipeOutput output) {
-        // SPEC.md §3 describes Shopsteel as "iron ingot + amethyst shard + ender pearl, blasting".
-        // A blast furnace takes one ingredient, so that cannot be read literally without inventing
-        // an intermediate item §2 does not list. Shapeless keeps the three costs exactly.
-        ShapelessRecipeBuilder.shapeless(RecipeCategory.MISC, WBItems.SHOPSTEEL.get())
+        // Two vanilla materials, no ender pearl, two out per craft. SPEC.md §3: the entry is
+        // priced to be walked past, not saved up for - the ladder above it is where the cost is,
+        // and that cost is Levy, which only exists once the player is already running the mod.
+        // The old recipe was a third of an ender pearl per Shopsteel and the first Workbay wanted
+        // twenty-three of them, which is twenty minutes of killing endermen before the dial the
+        // mod is actually about.
+        ShapelessRecipeBuilder.shapeless(RecipeCategory.MISC, WBItems.SHOPSTEEL.get(), 2)
             .requires(Items.IRON_INGOT)
             .requires(Items.AMETHYST_SHARD)
-            .requires(Items.ENDER_PEARL)
-            .unlockedBy("has_ender_pearl", has(Items.ENDER_PEARL))
+            .unlockedBy("has_amethyst", has(Items.AMETHYST_SHARD))
             .save(output);
 
+        // Housing is the upgrade tier's material and nothing else's. It is deliberately the
+        // expensive intermediate: SPEC.md §0 prices the upgrades, not the entry, so the obsidian
+        // and the ender eye sit above the first Workbay rather than in front of it.
         ShapedRecipeBuilder.shaped(RecipeCategory.MISC, WBItems.HOUSING.get())
             .pattern("SOS")
             .pattern("OEO")
@@ -46,18 +51,17 @@ public class WBRecipeProvider extends RecipeProvider {
             .unlockedBy("has_shopsteel", has(WBItems.SHOPSTEEL.get()))
             .save(output);
 
-        // Reachable the same evening a player first visits the End, and deliberately cheaper than
-        // Mekanism's QIO Drive Array. No Levy anywhere in it: SPEC.md §1's no-circular-dependency
-        // rule means the first Workbay must be buildable from vanilla materials alone.
+        // Glass, Shopsteel and one ender eye: four iron, four amethyst and the eye. No Housing,
+        // because Housing is what the ladder above this block is made of. Reachable the same
+        // evening a player first visits the End, and now genuinely in one sitting.
         ShapedRecipeBuilder.shaped(RecipeCategory.MISC, WBBlocks.WORKBAY.get())
             .pattern("GAG")
-            .pattern("AHA")
-            .pattern("GEG")
+            .pattern("AEA")
+            .pattern("GAG")
             .define('G', Blocks.GLASS)
             .define('A', WBItems.SHOPSTEEL.get())
-            .define('H', WBItems.HOUSING.get())
             .define('E', Items.ENDER_EYE)
-            .unlockedBy("has_housing", has(WBItems.HOUSING.get()))
+            .unlockedBy("has_shopsteel", has(WBItems.SHOPSTEEL.get()))
             .save(output);
 
         // The Connector is deliberately cheap: a link the player will not make because it costs too
@@ -69,15 +73,15 @@ public class WBRecipeProvider extends RecipeProvider {
             .unlockedBy("has_shopsteel", has(WBItems.SHOPSTEEL.get()))
             .save(output);
 
-        // The mod's only machine. SPEC.md §3: Housing + Shopsteel + a diamond, and it does nothing
-        // at all until it is racked in a bay.
+        // The mod's only machine, and the first thing a player wants after the Workbay itself -
+        // nothing earns a single Levy until it is racked. So it is priced like the Workbay, not
+        // like an upgrade: five Shopsteel and the diamond, no Housing.
         ShapedRecipeBuilder.shaped(RecipeCategory.MISC, WBBlocks.ASSAY.get())
             .pattern("SDS")
-            .pattern("SHS")
+            .pattern("SSS")
             .define('S', WBItems.SHOPSTEEL.get())
             .define('D', Items.DIAMOND)
-            .define('H', WBItems.HOUSING.get())
-            .unlockedBy("has_housing", has(WBItems.HOUSING.get()))
+            .unlockedBy("has_shopsteel", has(WBItems.SHOPSTEEL.get()))
             .save(output);
 
         // The upgrade ladder. Materials here, Levy at install: SPEC.md §1 says the Levy cost

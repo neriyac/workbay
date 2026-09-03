@@ -163,6 +163,7 @@ class BaysPage extends WorkbayPage {
         summary(g, mouseX, mouseY);
         rack(g, mouseX, mouseY);
         machine(g, mouseX, mouseY);
+        levy(g, mouseX, mouseY);
         faces(g, mouseX, mouseY);
         links(g, mouseX, mouseY);
     }
@@ -350,9 +351,9 @@ class BaysPage extends WorkbayPage {
         g.drawString(font, font.plainSubstrByWidth(statusLine(bay).getString(), statusRoom),
             x(98), y(82), statusColour(bay.state()), false);
 
-        // The button row at y=98, 20x20 on a 24px pitch. Bay View is not here: SPEC.md §4 says a
-        // control whose screen is not built is hidden, not drawn faint, because faint is honest for
-        // one session and furniture after two.
+        // The button row at y=98, 20x20 on a 24px pitch. Bay View is the last of the six and is
+        // real now: SPEC.md §4's rule is that a control whose screen is not built is hidden rather
+        // than drawn faint, and the corollary is that it appears the moment the screen exists.
         //
         // All five are drawn glyphs, not item sprites. An item says what a thing is made of, not
         // what it does: a sheet of paper does not read as "copy" and a boot reads as nothing at
@@ -384,6 +385,44 @@ class BaysPage extends WorkbayPage {
             () -> screen.send(WorkbayAction.PASTE_BAY, copied.bits()),
             WorkbayScreen.gui("button.paste"),
             WorkbayScreen.gui(copied == null ? "button.paste.empty" : "button.paste.tip"));
+
+        // Bay View. SPEC.md §1 grants it to the base Workbay, which is what settles §5's stray
+        // "unlocked by the first Expansion Plate": a racked container that cannot be filled by hand
+        // is a hole in the loop, not a feature to sell an upgrade with.
+        actionButton(g, mouseX, mouseY, x(170), WBIcons.SCREEN, !empty, false,
+            () -> screen.send(WorkbayAction.OPEN_BAY_VIEW),
+            WorkbayScreen.gui("button.bayview"), WorkbayScreen.gui("button.bayview.tip"));
+    }
+
+    /**
+     * The Levy readout, in the strip the machine block and the LINKS list leave empty.
+     *
+     * <p>It is on <b>this</b> screen because the alternative is a player changing screens to find
+     * out whether the dial they turned is doing anything, and a player who has to go and look does
+     * not look. The banked total alone cannot answer that - it moves once every 200 ticks - so the
+     * line under it is the batch filling up, which moves while they watch. With nothing coming it
+     * says which nothing it is: no Assay racked, or the dial still at zero.
+     */
+    private void levy(GuiGraphics g, int mouseX, int mouseY) {
+        WorkbaySnapshot snap = snapshot();
+        var font = screen.font();
+        boolean assay = hasAssay(snap);
+        boolean earning = skimming(snap);
+
+        String value = WorkbayScreen.gui("levy", snap.levy()).getString();
+        g.drawString(font, value, x(50), y(124), earning ? Draw.AMBER : Draw.TEXT_DIM, false);
+
+        Component state = !assay ? WorkbayScreen.gui("levy.no_assay")
+            : snap.skimRate() == 0 ? WorkbayScreen.gui("levy.dial_off")
+            : WorkbayScreen.gui("levy.batch", snap.skimmed(),
+                com.neryos.workbay.content.assay.AssayBlock.ITEMS_PER_LEVY);
+        g.drawString(font, state.getString(), x(50), y(136),
+            earning ? Draw.TEXT_DIM : Draw.TEXT_FAINT, false);
+
+        int w = Math.max(font.width(value), font.width(state.getString())) + 4;
+        screen.hit(x(48), y(122), w, 26, () -> { },
+            WorkbayScreen.gui("levy.name", snap.levy()),
+            WorkbayScreen.gui(earning ? "levy.tip" : assay ? "levy.dial_off.tip" : "levy.no_assay.tip"));
     }
 
     private static net.minecraft.world.item.ItemStack resourceItem(BusConfig.Resource resource) {

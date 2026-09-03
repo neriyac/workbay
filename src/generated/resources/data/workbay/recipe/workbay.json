@@ -10,15 +10,12 @@
     },
     "G": {
       "item": "minecraft:glass"
-    },
-    "H": {
-      "item": "workbay:housing"
     }
   },
   "pattern": [
     "GAG",
-    "AHA",
-    "GEG"
+    "AEA",
+    "GAG"
   ],
   "result": {
     "count": 1,

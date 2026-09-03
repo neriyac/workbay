@@ -5,16 +5,13 @@
     "D": {
       "item": "minecraft:diamond"
     },
-    "H": {
-      "item": "workbay:housing"
-    },
     "S": {
       "item": "workbay:shopsteel"
     }
   },
   "pattern": [
     "SDS",
-    "SHS"
+    "SSS"
   ],
   "result": {
     "count": 1,

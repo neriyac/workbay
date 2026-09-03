@@ -16,5 +16,7 @@ public final class WorkbayClient {
     @SubscribeEvent
     static void screens(RegisterMenuScreensEvent event) {
         event.register(WBMenus.WORKBAY.get(), WorkbayScreen::new);
+        event.register(WBMenus.BAY_VIEW.get(),
+            com.neryos.workbay.client.screen.BayViewScreen::new);
     }
 }

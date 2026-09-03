@@ -21,6 +21,15 @@ public class WBMenus {
     public static final DeferredHolder<MenuType<?>, MenuType<WorkbayMenu>> WORKBAY =
         MENUS.register("workbay", () -> IMenuTypeExtension.create(WorkbayMenu::new));
 
+    /**
+     * Bay View (SPEC.md §5). Its own menu type because it is the only screen in the mod with real
+     * slots: {@link WorkbayMenu} deliberately has none, and bolting a grid onto it would give every
+     * other screen a player inventory it does not want.
+     */
+    public static final DeferredHolder<MenuType<?>, MenuType<com.neryos.workbay.menu.BayViewMenu>>
+        BAY_VIEW = MENUS.register("bay_view",
+            () -> IMenuTypeExtension.create(com.neryos.workbay.menu.BayViewMenu::new));
+
     public static void register(IEventBus bus) {
         MENUS.register(bus);
     }

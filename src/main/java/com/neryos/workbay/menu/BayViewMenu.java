@@ -1,0 +1,411 @@
+package com.neryos.workbay.menu;
+
+import com.neryos.workbay.content.workbay.WorkbayBlockEntity;
+import com.neryos.workbay.init.WBMenus;
+import com.neryos.workbay.world.BayGeometry;
+import com.neryos.workbay.world.WorkbayDimensions;
+import com.neryos.workbay.world.WorkbayRecord;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.item.ItemStack;
+import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.items.IItemHandler;
+import net.neoforged.neoforge.items.IItemHandlerModifiable;
+import net.neoforged.neoforge.items.ItemHandlerHelper;
+import net.neoforged.neoforge.items.ItemStackHandler;
+import net.neoforged.neoforge.items.SlotItemHandler;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.Optional;
+
+/**
+ * Bay View. SPEC.md §5: our own screen over a hosted machine's item slots, read entirely through
+ * the standard capability the buses already use, so it works for every mod with zero per-mod code
+ * and zero kick risk.
+ *
+ * <p><b>This is the mod's largest duplication surface</b>, and everything unusual here is about
+ * that. A machine in a bay can be ejected, its chunk can unload, and the block can stop existing
+ * while a player is holding one of its stacks on the cursor — none of which can happen to the chest
+ * a vanilla screen is bound to. The rule this class is written against is the one in ROADMAP §2:
+ * <em>the item exists in exactly one place at the end of every tick</em>.
+ *
+ * <p>Three decisions carry that:
+ *
+ * <ul>
+ * <li><b>{@link Live} re-resolves the capability on every single call</b> and answers "nothing,
+ *     and no" once the machine is gone. It never caches a handler, because a cached handler
+ *     belonging to a removed block entity accepts writes that reach nobody — items into a void.
+ * <li><b>A gone machine refuses rather than swallows.</b> {@code isItemValid} and {@code extractItem}
+ *     both come back empty, so vanilla's {@code Slot#mayPlace} and {@code mayPickup} are false and
+ *     every click path in {@code AbstractContainerMenu#doClick} declines to move anything. Silently
+ *     accepting the click is what deletes the cursor stack.
+ * <li><b>{@link #quickMoveStack} never uses {@code moveItemStackTo} on a machine slot.</b> That
+ *     helper grows the stack it got from {@code getStackInSlot} in place and calls
+ *     {@code setChanged}, which is correct for a vanilla container and silently does nothing for
+ *     any handler that hands out a copy — the carried stack shrinks and the items are gone.
+ * </ul>
+ */
+public class BayViewMenu extends AbstractContainerMenu {
+
+    /** Six rows of nine. More than any machine has, and the most a screen fits. */
+    public static final int MAX_SLOTS = 54;
+
+    private static final int SLOT_SIZE = 18;
+    public static final int COLUMNS = 9;
+
+    /** Where the machine grid starts, and where the player's own inventory starts under it. */
+    public static final int GRID_X = 8;
+    public static final int GRID_Y = 40;
+
+    @Nullable
+    private final WorkbayBlockEntity workbay;
+
+    private final int bay;
+
+    /** What was standing in the bay when this opened. It changing is how the menu knows to close. */
+    private final Optional<ResourceLocation> machineId;
+
+    private final int machineSlots;
+
+    private final IItemHandler machine;
+
+    /** Client side: everything the screen needs rides the menu-open buffer, like SPEC.md §4's. */
+    public BayViewMenu(int containerId, Inventory inventory, RegistryFriendlyByteBuf buffer) {
+        this(containerId, inventory, null, buffer.readVarInt(),
+            buffer.readOptional(net.minecraft.network.FriendlyByteBuf::readResourceLocation),
+            buffer.readVarInt(), null);
+    }
+
+    public BayViewMenu(int containerId, Inventory inventory, @Nullable WorkbayBlockEntity workbay,
+        int bay, Optional<ResourceLocation> machineId, int machineSlots,
+        @Nullable IItemHandler machine) {
+        super(WBMenus.BAY_VIEW.get(), containerId);
+        this.workbay = workbay;
+        this.bay = bay;
+        this.machineId = machineId;
+        this.machineSlots = Math.clamp(machineSlots, 0, MAX_SLOTS);
+        // The client has no capability to reach, so it mirrors into a plain handler and lets the
+        // ordinary slot sync fill it. Nothing on the client is ever the source of truth.
+        this.machine = machine != null ? machine : new ItemStackHandler(this.machineSlots);
+
+        for (int index = 0; index < this.machineSlots; index++) {
+            addSlot(new SlotItemHandler(this.machine, index,
+                GRID_X + (index % COLUMNS) * SLOT_SIZE,
+                GRID_Y + (index / COLUMNS) * SLOT_SIZE));
+        }
+
+        int inventoryY = inventoryY(machineSlots());
+        for (int row = 0; row < 3; row++) {
+            for (int column = 0; column < 9; column++) {
+                addSlot(new Slot(inventory, 9 + row * 9 + column,
+                    GRID_X + column * SLOT_SIZE, inventoryY + row * SLOT_SIZE));
+            }
+        }
+        for (int column = 0; column < 9; column++) {
+            addSlot(new Slot(inventory, column, GRID_X + column * SLOT_SIZE, inventoryY + 58));
+        }
+    }
+
+    public int rows() {
+        return rows(machineSlots);
+    }
+
+    private static int rows(int slots) {
+        return Math.max(1, (slots + COLUMNS - 1) / COLUMNS);
+    }
+
+    /**
+     * Where the player's own inventory starts. The forty pixels above it are not padding: SPEC.md
+     * §5 requires a permanent line naming what this screen cannot reach, and a screen that mimics a
+     * machine's and silently lacks half its controls reads as a broken mod rather than a limit.
+     */
+    public static int inventoryY(int slots) {
+        return GRID_Y + rows(slots) * SLOT_SIZE + 40;
+    }
+
+    public static int height(int slots) {
+        return inventoryY(slots) + 58 + SLOT_SIZE + 7;
+    }
+
+    public int machineSlots() {
+        return machineSlots;
+    }
+
+    public int bay() {
+        return bay;
+    }
+
+    public Optional<ResourceLocation> machineId() {
+        return machineId;
+    }
+
+    /**
+     * Everything a Bay View menu is built from, worked out once on the server.
+     *
+     * <p>A record rather than the menu itself because the menu's container id belongs to the
+     * player's connection and is only handed out inside {@code openMenu}. It is public so the
+     * gametests can build the same menu the same way without a client attached — the alternative
+     * is a test-only constructor, and a test that assembles the thing differently from the game
+     * is a test of the assembly, not of the mod.
+     */
+    public record Opening(Optional<ResourceLocation> machineId, int slots, IItemHandler handler) {}
+
+    /**
+     * What is reachable in one bay, or null if nothing is. Never loads a chunk to find out: a
+     * screen must not be the thing that drags a Backshop chunk in on the server thread (SPEC.md §9).
+     */
+    @Nullable
+    public static Opening opening(ServerPlayer viewer, WorkbayRecord record, int bay) {
+        ServerLevel backshop = viewer.server.getLevel(WorkbayDimensions.BACKSHOP);
+        if (backshop == null || bay < 0 || bay >= record.bayCapacity()) {
+            return null;
+        }
+        BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), bay);
+        if (!backshop.isLoaded(machinePos)) {
+            return null;
+        }
+        Live live = new Live(backshop, machinePos);
+        IItemHandler now = live.now();
+        if (now == null || now.getSlots() <= 0) {
+            return null;
+        }
+        return new Opening(record.bay(bay).hosted(), Math.min(now.getSlots(), MAX_SLOTS), live);
+    }
+
+    /**
+     * Opens Bay View on one bay. SPEC.md §5.
+     *
+     * @return false if there is nothing to open on, so the caller can say so out loud
+     */
+    public static boolean open(ServerPlayer viewer, WorkbayBlockEntity workbay,
+        WorkbayRecord record, int bay) {
+        Opening opening = opening(viewer, record, bay);
+        if (opening == null) {
+            return false;
+        }
+        viewer.openMenu(new net.minecraft.world.SimpleMenuProvider(
+            (containerId, inventory, who) -> new BayViewMenu(containerId, inventory, workbay, bay,
+                opening.machineId(), opening.slots(), opening.handler()),
+            com.neryos.workbay.WorkbayLang.gui("bayview.title", bay + 1)),
+            buffer -> {
+                buffer.writeVarInt(bay);
+                buffer.writeOptional(opening.machineId(),
+                    (buf, value) -> buf.writeResourceLocation(value));
+                buffer.writeVarInt(opening.slots());
+            });
+        return true;
+    }
+
+    /**
+     * The Workbay must still be there, the player still beside it, and — the one that matters —
+     * the bay must still hold the machine this menu was opened on. Ejecting it closes the screen
+     * on the next tick rather than leaving a grid of slots pointed at air.
+     */
+    @Override
+    public boolean stillValid(Player who) {
+        if (workbay == null) {
+            return true;
+        }
+        if (workbay.isRemoved()) {
+            return false;
+        }
+        BlockPos pos = workbay.getBlockPos();
+        if (who.distanceToSqr(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5) > 64.0) {
+            return false;
+        }
+        return workbay.record()
+            .map(record -> record.bay(bay).hosted().equals(machineId))
+            .orElse(false);
+    }
+
+    /**
+     * Shift-click, written against {@link IItemHandler} alone.
+     *
+     * <p>Vanilla's {@code moveItemStackTo} is safe for the player's own slots and <b>not</b> for a
+     * foreign machine's: it grows the stack {@code getStackInSlot} handed back and calls
+     * {@code setChanged}, so a handler that returns a copy — which several do — accepts the shrink
+     * on the player's side and keeps nothing on its own. Everything crossing into the machine here
+     * goes through {@code insertItem}, and everything leaving it through {@code extractItem}, with
+     * whatever will not fit put back before this method returns.
+     */
+    @Override
+    public ItemStack quickMoveStack(Player who, int index) {
+        if (index < 0 || index >= slots.size()) {
+            return ItemStack.EMPTY;
+        }
+        if (index < machineSlots) {
+            return outOfMachine(who, index);
+        }
+        return intoMachine(index);
+    }
+
+    private ItemStack outOfMachine(Player who, int index) {
+        int held = machine.getStackInSlot(index).getCount();
+        if (held <= 0) {
+            return ItemStack.EMPTY;
+        }
+        ItemStack available = machine.extractItem(index, held, true);
+        if (available.isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+        ItemStack taken = machine.extractItem(index, available.getCount(), false);
+        if (taken.isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+        ItemStack remainder = taken.copy();
+        moveItemStackTo(remainder, machineSlots, slots.size(), true);
+        if (!remainder.isEmpty()) {
+            // The player's inventory would not take all of it. Put it back where it came from, and
+            // if the machine now refuses what it just handed over, give it to the player rather
+            // than let it stop existing.
+            ItemStack refused = ItemHandlerHelper.insertItemStacked(machine, remainder, false);
+            if (!refused.isEmpty()) {
+                who.getInventory().placeItemBackInInventory(refused);
+            }
+        }
+        return ItemStack.EMPTY;
+    }
+
+    private ItemStack intoMachine(int index) {
+        Slot from = slots.get(index);
+        ItemStack held = from.getItem();
+        if (held.isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+        ItemStack refused = ItemHandlerHelper.insertItemStacked(machine, held.copy(), false);
+        int moved = held.getCount() - refused.getCount();
+        if (moved <= 0) {
+            return ItemStack.EMPTY;
+        }
+        from.remove(moved);
+        from.setChanged();
+        return ItemStack.EMPTY;
+    }
+
+    /**
+     * The hosted machine's item handler, resolved fresh on every call and never held.
+     *
+     * <p>The null side first, then the six faces. Null is "no particular side" and is what gives a
+     * chest all twenty-seven of its slots and a furnace all three of its own rather than the one
+     * that happens to face north — a player reaching in by hand is not a pipe, and the bay's own
+     * face config is about what the buses may use, not about what the owner may touch. The faces
+     * are the fallback for a machine that answers on nothing else.
+     *
+     * <p>SPEC.md §9's rule against passing a null side to a foreign handler is a <em>bus</em> rule:
+     * a read-only null handler makes a bus report RUNNING while moving nothing, which is the silent
+     * failure that rule exists to prevent. Here the handler simply refuses the click and the player
+     * sees it refuse. OPEN_ISSUES #29 tracks proving that against real Mekanism.
+     */
+    static final class Live implements IItemHandlerModifiable {
+        private final ServerLevel level;
+        private final BlockPos pos;
+
+        Live(ServerLevel level, BlockPos pos) {
+            this.level = level;
+            this.pos = pos.immutable();
+        }
+
+        @Nullable
+        IItemHandler now() {
+            if (!level.isLoaded(pos)) {
+                return null;
+            }
+            IItemHandler handler =
+                level.getCapability(Capabilities.ItemHandler.BLOCK, pos, null);
+            if (handler != null) {
+                return handler;
+            }
+            for (Direction side : Direction.values()) {
+                handler = level.getCapability(Capabilities.ItemHandler.BLOCK, pos, side);
+                if (handler != null) {
+                    return handler;
+                }
+            }
+            return null;
+        }
+
+        /** The live handler only if it still has this slot; null is "there is nothing to write to". */
+        @Nullable
+        private IItemHandler at(int slot) {
+            IItemHandler handler = now();
+            return handler != null && slot >= 0 && slot < handler.getSlots() ? handler : null;
+        }
+
+        @Override
+        public int getSlots() {
+            IItemHandler handler = now();
+            return handler == null ? 0 : handler.getSlots();
+        }
+
+        @Override
+        public ItemStack getStackInSlot(int slot) {
+            IItemHandler handler = at(slot);
+            return handler == null ? ItemStack.EMPTY : handler.getStackInSlot(slot);
+        }
+
+        /** Refusing by handing the whole stack back is what stops a dead machine eating it. */
+        @Override
+        public ItemStack insertItem(int slot, ItemStack stack, boolean simulate) {
+            IItemHandler handler = at(slot);
+            return handler == null ? stack : handler.insertItem(slot, stack, simulate);
+        }
+
+        @Override
+        public ItemStack extractItem(int slot, int amount, boolean simulate) {
+            IItemHandler handler = at(slot);
+            return handler == null ? ItemStack.EMPTY : handler.extractItem(slot, amount, simulate);
+        }
+
+        @Override
+        public int getSlotLimit(int slot) {
+            IItemHandler handler = at(slot);
+            return handler == null ? 0 : handler.getSlotLimit(slot);
+        }
+
+        /**
+         * False for a machine that is gone, which is the whole guard: {@code Slot#mayPlace} reads
+         * this, and every insert path in {@code doClick} is behind it.
+         */
+        @Override
+        public boolean isItemValid(int slot, ItemStack stack) {
+            IItemHandler handler = at(slot);
+            return handler != null && handler.isItemValid(slot, stack);
+        }
+
+        /**
+         * {@code SlotItemHandler#set} casts to this interface, so it has to exist — but a blind
+         * overwrite of a foreign machine's slot is exactly how a proxy screen becomes a duplication
+         * bug, so it is emulated with extract-then-insert against a handler that may refuse either.
+         * A handler that is genuinely modifiable is written to directly, which is what a vanilla
+         * container screen does to the chest it is bound to.
+         */
+        @Override
+        public void setStackInSlot(int slot, ItemStack stack) {
+            IItemHandler handler = at(slot);
+            if (handler == null) {
+                return;
+            }
+            if (handler instanceof IItemHandlerModifiable modifiable) {
+                modifiable.setStackInSlot(slot, stack);
+                return;
+            }
+            ItemStack current = handler.getStackInSlot(slot);
+            if (!current.isEmpty()
+                && handler.extractItem(slot, current.getCount(), false).getCount()
+                    < current.getCount()) {
+                return;
+            }
+            if (!stack.isEmpty()) {
+                handler.insertItem(slot, stack.copy(), false);
+            }
+        }
+    }
+}
