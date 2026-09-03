@@ -25,6 +25,20 @@ public class WBBlockTagProvider extends BlockTagsProvider {
 
     @Override
     protected void addTags(HolderLookup.Provider registries) {
+        // Both blocks copy their BlockBehaviour.Properties from Blocks.IRON_BLOCK, which carries
+        // requiresCorrectToolForDrops(). Without this tag no tool is ever "correct" for them: they
+        // mine at unmodified speed (no pickaxe bonus) and drop nothing at all when broken in
+        // survival, silently, because the game never recognises a diamond pickaxe as suitable for
+        // an untagged block. Found in play, not in review, then reproduced (workbayDropsWhenMined).
+        tag(BlockTags.MINEABLE_WITH_PICKAXE)
+            .add(WBBlocks.WORKBAY.get())
+            .add(WBBlocks.CONNECTOR.get());
+        // Iron block's own tier: at least a stone pickaxe. Copying the properties did not copy
+        // tag membership, so this has to be stated again explicitly.
+        tag(BlockTags.NEEDS_STONE_TOOL)
+            .add(WBBlocks.WORKBAY.get())
+            .add(WBBlocks.CONNECTOR.get());
+
         tag(HostChecks.HOST_DENIED)
             .addTag(BlockTags.BEDS)
             .addTag(BlockTags.DOORS)

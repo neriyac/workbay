@@ -169,4 +169,55 @@ public class WorkbayBlockTests {
             helper.succeed();
         });
     }
+
+    /**
+     * Reported from play: mining a Workbay with a diamond pickaxe took a long time and then it
+     * just vanished, no item. {@link #bindingSurvivesBreakAndPlace} did not catch this because it
+     * breaks the block through {@code Block.getDrops} directly, which is the loot table's own
+     * query path and skips the step that actually failed.
+     *
+     * <p>The real path is {@code ServerPlayerGameMode#destroyBlock}, and it only calls
+     * {@code Block#playerDestroy} — which is what queries the loot table — when
+     * {@code player.hasCorrectToolForDrops(state)} is true. That in turn is
+     * {@code !state.requiresCorrectToolForDrops() || tool.isCorrectToolForDrops(state)}, checked
+     * against the block's own {@code minecraft:mineable/*} tag membership. Both Workbay and
+     * Connector copy their properties from {@code Blocks.IRON_BLOCK}, which sets
+     * {@code requiresCorrectToolForDrops()} — but copying properties does not copy tag
+     * membership, and neither block was ever added to {@code minecraft:mineable/pickaxe}. So no
+     * tool was ever "correct", the correct-tool branch never ran, and the block was simply removed
+     * with nothing dropped — silently, because {@code destroyBlock} returns {@code true} either
+     * way and nothing here throws.
+     */
+    @GameTest
+    @TestHolder(description = "A player mining a Workbay with a pickaxe gets the item back.")
+    public static void workbayDropsWhenMinedByAPlayer(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos pos = helper.absolutePos(new BlockPos(1, 1, 1));
+            place(helper, level, pos, player, new ItemStack(WBBlocks.WORKBAY.get()));
+            player.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND,
+                new ItemStack(net.minecraft.world.item.Items.DIAMOND_PICKAXE));
+
+            // The exact call ServerPlayerGameMode.destroyBlock makes when a player finishes
+            // mining — not helper.destroyBlock, which is the creative-style instant removal and
+            // would not have caught this either.
+            player.gameMode.destroyBlock(pos);
+
+            if (!level.getBlockState(pos).isAir()) {
+                helper.fail("the Workbay was still there after destroyBlock");
+                return;
+            }
+            var drops = level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
+                new net.minecraft.world.phys.AABB(pos).inflate(1.5));
+            if (drops.stream().noneMatch(e -> e.getItem().is(WBBlocks.WORKBAY.get().asItem()))) {
+                helper.fail("mining a Workbay with a diamond pickaxe dropped nothing. Check the "
+                    + "minecraft:mineable/pickaxe block tag.");
+                return;
+            }
+            helper.succeed();
+        });
+    }
 }

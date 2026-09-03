@@ -200,4 +200,46 @@ public class ConnectorTests {
             helper.succeed();
         });
     }
+
+    /**
+     * The Connector's half of {@link WorkbayBlockTests#workbayDropsWhenMinedByAPlayer}: the same
+     * missing {@code minecraft:mineable/pickaxe} tag would silently swallow a Connector too, and a
+     * player who mines one back up expects it back in hand like any other block.
+     */
+    @GameTest
+    @TestHolder(description = "A player mining a Connector with a pickaxe gets the item back.")
+    public static void connectorDropsWhenMinedByAPlayer(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos chestPos = helper.absolutePos(new BlockPos(1, 1, 1));
+            BlockPos connectorPos = chestPos.above();
+
+            level.setBlock(chestPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            BlockState state = WBBlocks.CONNECTOR.get().defaultBlockState()
+                .setValue(ConnectorBlock.FACING, Direction.DOWN);
+            level.setBlock(connectorPos, state, Block.UPDATE_ALL);
+            WBBlocks.CONNECTOR.get().setPlacedBy(level, connectorPos, state, player,
+                new ItemStack(WBBlocks.CONNECTOR.get()));
+            player.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND,
+                new ItemStack(net.minecraft.world.item.Items.DIAMOND_PICKAXE));
+
+            player.gameMode.destroyBlock(connectorPos);
+
+            if (!level.getBlockState(connectorPos).isAir()) {
+                helper.fail("the Connector was still there after destroyBlock");
+                return;
+            }
+            var drops = level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
+                new net.minecraft.world.phys.AABB(connectorPos).inflate(1.5));
+            if (drops.stream().noneMatch(e -> e.getItem().is(WBBlocks.CONNECTOR.get().asItem()))) {
+                helper.fail("mining a Connector with a diamond pickaxe dropped nothing. Check the "
+                    + "minecraft:mineable/pickaxe block tag.");
+                return;
+            }
+            helper.succeed();
+        });
+    }
 }

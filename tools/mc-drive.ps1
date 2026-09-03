@@ -18,6 +18,7 @@ public class W {
   [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, IntPtr extra);
   [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr h, out RECT r);
   [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr h, ref POINT p);
+  [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr h, int x, int y, int w, int hh, bool repaint);
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
   [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
 }
@@ -49,20 +50,35 @@ function Focus-MC {
   [W]::SetForegroundWindow($h) | Out-Null
   [W]::AttachThreadInput($me, $ot, $false) | Out-Null
   Start-Sleep -Milliseconds 400
-  if ([W]::GetForegroundWindow() -ne $h) {
+  if (-not (In-Front $p.Id)) {
     [W]::ShowWindow($h, 6) | Out-Null   # SW_MINIMIZE
     Start-Sleep -Milliseconds 300
     [W]::ShowWindow($h, 9) | Out-Null   # SW_RESTORE
     Start-Sleep -Milliseconds 600
   }
-  return ([W]::GetForegroundWindow() -eq $h)
+  return (In-Front $p.Id)
+}
+
+function In-Front([int]$processId) {
+  $owner = [uint32]0
+  [W]::GetWindowThreadProcessId([W]::GetForegroundWindow(), [ref]$owner) | Out-Null
+  return ($owner -eq $processId)
 }
 
 # Never send input into whatever the human is using. OPEN_ISSUES #22.
+# Compared by process id, not window handle: going fullscreen gives GLFW a different window and
+# Process.MainWindowHandle is a snapshot, so a handle comparison starts failing on a window that
+# is in fact in front.
 function Assert-MC {
-  $h = (Get-MC).MainWindowHandle
-  if ([W]::GetForegroundWindow() -ne $h) { throw "Minecraft is NOT in the foreground - refusing to send input" }
-  return $h
+  $p = Get-MC
+  if (-not (In-Front $p.Id)) {
+    # Something took the foreground back -- the launcher finishing, the desktop app, a redraw.
+    # One retry, then refuse: the guard is what stops keystrokes landing in the human's window.
+    Focus-MC | Out-Null
+    Start-Sleep -Milliseconds 300
+  }
+  if (-not (In-Front $p.Id)) { throw "Minecraft is NOT in the foreground - refusing to send input" }
+  return [W]::GetForegroundWindow()
 }
 
 function Key([byte]$vk, [int]$hold = 40) {
@@ -93,7 +109,7 @@ function Say([string]$text) {
 
 # GUI coordinates are in framebuffer pixels; the window rect is not, on a scaled display.
 function FB {
-  $h = (Get-MC).MainWindowHandle
+  $h = Assert-MC
   $r = New-Object W+RECT
   [W]::GetClientRect($h, [ref]$r) | Out-Null
   return @{ W = $r.R; H = $r.B }
@@ -171,4 +187,25 @@ function SneakClick([int]$gx, [int]$gy) {
   Start-Sleep -Milliseconds 250
   [W]::keybd_event(0xA0, 0, $KEYEVENTF_KEYUP, [IntPtr]::Zero)
   Start-Sleep -Milliseconds 200
+}
+
+# The window size drifts across focus cycles, and GUI coordinates depend on it. Pin it.
+function Size-MC([int]$w = 1600, [int]$h = 900) {
+  $handle = Assert-MC
+  [W]::MoveWindow($handle, 40, 40, $w, $h, $true) | Out-Null
+  Start-Sleep -Milliseconds 800
+  FB
+}
+
+# Text into a focused EditBox (not chat, which Say is for): clipboard, same reason as Say.
+function PasteText([string]$text) {
+  Assert-MC | Out-Null
+  Set-Clipboard -Value $text
+  Start-Sleep -Milliseconds 200
+  [W]::keybd_event(0x11, 0, 0, [IntPtr]::Zero)
+  [W]::keybd_event(0x56, 0, 0, [IntPtr]::Zero)
+  Start-Sleep -Milliseconds 60
+  [W]::keybd_event(0x56, 0, $KEYEVENTF_KEYUP, [IntPtr]::Zero)
+  [W]::keybd_event(0x11, 0, $KEYEVENTF_KEYUP, [IntPtr]::Zero)
+  Start-Sleep -Milliseconds 250
 }
