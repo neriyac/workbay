@@ -13,6 +13,7 @@ import com.neryos.workbay.init.WBMenus;
 import com.neryos.workbay.network.SnapshotPacket;
 import com.neryos.workbay.world.BayGeometry;
 import com.neryos.workbay.world.BayHosting;
+import com.neryos.workbay.world.FaceConfig;
 import com.neryos.workbay.world.RoomRegistry;
 import com.neryos.workbay.world.WorkbayDimensions;
 import com.neryos.workbay.world.WorkbayRecord;
@@ -146,7 +147,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
      * Every action from every screen. Guarded once, here, rather than in each handler: a spectator
      * or a player whose menu has moved on must not be able to eject somebody's machine.
      */
-    public void act(WorkbayAction action, int arg, Optional<UUID> linkId) {
+    public void act(WorkbayAction action, long arg, Optional<UUID> linkId) {
         if (workbay == null || !(player instanceof ServerPlayer serverPlayer)
             || player.isSpectator() || !stillValid(player)) {
             return;
@@ -156,13 +157,14 @@ public class WorkbayMenu extends AbstractContainerMenu {
             return;
         }
         switch (action) {
-            case SELECT_BAY -> selectedBay = Math.clamp(arg, 0, BayGeometry.MAX_BAYS - 1);
+            case SELECT_BAY -> selectedBay = (int) Math.clamp(arg, 0, BayGeometry.MAX_BAYS - 1);
             case RACK -> rack(serverPlayer, record);
             case EJECT -> eject(serverPlayer, record);
             case TOGGLE_LOCK -> toggleLock(serverPlayer, record);
-            case CYCLE_FACE -> cycleFace(record, arg);
+            case CYCLE_FACE -> cycleFace(serverPlayer, record, (int) arg);
             case PAIR -> pair(serverPlayer, record);
-            case INSTALL_UPGRADE -> install(serverPlayer, record, arg);
+            case INSTALL_UPGRADE -> install(serverPlayer, record, (int) arg);
+            case PASTE_BAY -> pasteBay(serverPlayer, record, arg);
             case LINK_FLIP_MODE -> editLink(linkId, link -> link.withMode(link.mode().flip()));
             case LINK_CYCLE_RESOURCE -> editLink(linkId, link -> link.withResource(link.resource().next()));
             case LINK_TOGGLE_ENABLED -> editLink(linkId, link -> link.withEnabled(!link.enabled()));
@@ -180,9 +182,21 @@ public class WorkbayMenu extends AbstractContainerMenu {
      * message naming the category — the item stays in hand, which is the whole point of rejecting
      * at the registry level rather than after placement (SPEC.md §11).
      */
+    /**
+     * A locked Workbay only lets its owner change anything. One guard for every mutation: rack and
+     * eject each carried a copy of this and {@code cycleFace} carried none, so anyone could rewrite
+     * a locked Workbay's face config.
+     */
+    private boolean refused(ServerPlayer who, WorkbayRecord record) {
+        if (!record.locked() || record.owner().equals(who.getUUID())) {
+            return false;
+        }
+        who.displayClientMessage(com.neryos.workbay.WorkbayLang.message("locked"), true);
+        return true;
+    }
+
     private void rack(ServerPlayer serverPlayer, WorkbayRecord record) {
-        if (record.locked() && !record.owner().equals(serverPlayer.getUUID())) {
-            serverPlayer.displayClientMessage(com.neryos.workbay.WorkbayLang.message("locked"), true);
+        if (refused(serverPlayer, record)) {
             return;
         }
         if (selectedBay >= record.bayCapacity()) {
@@ -215,8 +229,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
     }
 
     private void eject(ServerPlayer serverPlayer, WorkbayRecord record) {
-        if (record.locked() && !record.owner().equals(serverPlayer.getUUID())) {
-            serverPlayer.displayClientMessage(com.neryos.workbay.WorkbayLang.message("locked"), true);
+        if (refused(serverPlayer, record)) {
             return;
         }
         ServerLevel backshop = serverPlayer.server.getLevel(WorkbayDimensions.BACKSHOP);
@@ -242,14 +255,32 @@ public class WorkbayMenu extends AbstractContainerMenu {
         RoomRegistry.get(serverPlayer.server).put(record.withLocked(!record.locked()));
     }
 
-    private void cycleFace(WorkbayRecord record, int packed) {
+    private void cycleFace(ServerPlayer serverPlayer, WorkbayRecord record, int packed) {
+        if (refused(serverPlayer, record)) {
+            return;
+        }
         BusConfig.Resource resource = BusConfig.Resource.values()[
             Math.clamp(packed & 0xF, 0, BusConfig.Resource.values().length - 1)];
         Direction face = Direction.values()[
             Math.clamp((packed >> 4) & 0xF, 0, Direction.values().length - 1)];
         WorkbayRecord.Bay bay = record.bay(selectedBay);
-        RoomRegistry.get(((ServerPlayer) player).server)
-            .put(record.withBay(bay.withFaces(bay.faces().cycled(resource, face))));
+        setFaces(serverPlayer, record, bay.faces().cycled(resource, face));
+    }
+
+    /**
+     * Screen 1's paste. Faces only, which is everything a bay carries today; the redstone mode and
+     * the filter join it when they exist, and the action already carries the room for them.
+     */
+    private void pasteBay(ServerPlayer serverPlayer, WorkbayRecord record, long bits) {
+        if (refused(serverPlayer, record)) {
+            return;
+        }
+        setFaces(serverPlayer, record, FaceConfig.fromBits(bits));
+    }
+
+    private void setFaces(ServerPlayer serverPlayer, WorkbayRecord record, FaceConfig faces) {
+        RoomRegistry.get(serverPlayer.server)
+            .put(record.withBay(record.bay(selectedBay).withFaces(faces)));
         // The link's cached endpoint was bound to a face that may no longer be allowed.
         workbay.forgetBay(selectedBay);
     }

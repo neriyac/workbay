@@ -24,5 +24,7 @@ public enum WorkbayAction {
     LINK_TOGGLE_ENABLED,
     LINK_REMOVE,
     /** {@code arg} is a {@link com.neryos.workbay.content.workbay.WorkbayUpgrade} ordinal. */
-    INSTALL_UPGRADE
+    INSTALL_UPGRADE,
+    /** {@code arg} is a whole {@link com.neryos.workbay.world.FaceConfig} in bits. */
+    PASTE_BAY
 }

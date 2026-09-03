@@ -121,6 +121,9 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
     @Override
     protected void renderBg(GuiGraphics graphics, float partial, int mouseX, int mouseY) {
         hits.clear();
+        // Cleared here, not in the page: the flow and upgrade pages have no rows to hover, and a
+        // highlight left behind by the bays page would outline a block nothing on screen mentions.
+        com.neryos.workbay.client.LinkHighlight.clear();
         Draw.panel(graphics, leftPos, topPos, imageWidth, imageHeight);
         if (current != null) {
             current.render(graphics, mouseX, mouseY);
@@ -141,6 +144,12 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
                 return;
             }
         }
+    }
+
+    @Override
+    public void removed() {
+        super.removed();
+        com.neryos.workbay.client.LinkHighlight.clear();
     }
 
     @Override
@@ -200,7 +209,7 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         send(action, 0, Optional.empty());
     }
 
-    public void send(WorkbayAction action, int arg) {
+    public void send(WorkbayAction action, long arg) {
         send(action, arg, Optional.empty());
     }
 
@@ -208,11 +217,11 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         send(action, 0, Optional.of(link));
     }
 
-    private void send(WorkbayAction action, int arg, Optional<UUID> link) {
+    private void send(WorkbayAction action, long arg, Optional<UUID> link) {
         PacketDistributor.sendToServer(new ActionPacket(menu.containerId, action, arg, link));
         // Applied here as well so the selection tracks the click rather than the round trip.
         if (action == WorkbayAction.SELECT_BAY) {
-            menu.setSelectedBayClientSide(arg);
+            menu.setSelectedBayClientSide((int) arg);
         }
     }
 

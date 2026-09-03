@@ -76,6 +76,14 @@ class BaysPage extends WorkbayPage {
 
     private enum Sort { BAY, TYPE, STATUS }
 
+    /**
+     * What Copy holds. Static and client-side on purpose: the point of copying a bay is pasting it
+     * onto the next seven, and the server is told the whole config in the paste action itself, so
+     * there is no second clipboard anywhere to disagree with this one.
+     */
+    @org.jetbrains.annotations.Nullable
+    private static FaceConfig copied;
+
     private static Filter filter = Filter.THIS_BAY;
     private static Sort sort = Sort.STATUS;
     private static BusConfig.Resource faceType = BusConfig.Resource.ITEM;
@@ -274,23 +282,36 @@ class BaysPage extends WorkbayPage {
         g.drawString(font, font.plainSubstrByWidth(statusLine(bay).getString(), room),
             x(98), y(82), statusColour(bay.state()), false);
 
-        // Four 20x20 buttons at y=98. Only Eject does anything: Bay View, rename and the redstone
-        // gate are SPEC.md §5's and are drawn faint rather than hidden, so the layout is honest
-        // about what is not built rather than quietly missing three controls.
-        unbuiltButton(g, x(50), y(98), 20, WBIcons.SCREEN,
-            WorkbayScreen.gui("button.bay_view"), WorkbayScreen.gui("unbuilt"));
+        // The button row at y=98, 20x20 on a 24px pitch. Bay View is not here: SPEC.md §4 says a
+        // control whose screen is not built is hidden, not drawn faint, because faint is honest for
+        // one session and furniture after two.
         boolean canEject = !empty;
-        boolean hoverEject = screen.hovered(x(74), y(98), 20, 20, mouseX, mouseY);
-        Draw.button(g, x(74), y(98), 20, 20, hoverEject && canEject, false, canEject);
-        WBIcons.draw(g, WBIcons.EJECT, x(78), y(102), canEject ? Draw.TEXT : Draw.TEXT_FAINT);
-        if (canEject) {
-            screen.hit(x(74), y(98), 20, 20, () -> screen.send(WorkbayAction.EJECT),
-                WorkbayScreen.gui("button.eject"), WorkbayScreen.gui("button.eject.tip"));
-        }
-        unbuiltButton(g, x(98), y(98), 20, WBIcons.RENAME,
+        actionButton(g, mouseX, mouseY, x(50), WBIcons.EJECT, canEject,
+            () -> screen.send(WorkbayAction.EJECT),
+            WorkbayScreen.gui("button.eject"), WorkbayScreen.gui("button.eject.tip"));
+        unbuiltButton(g, x(74), y(98), 20, WBIcons.RENAME,
             WorkbayScreen.gui("button.rename"), WorkbayScreen.gui("unbuilt"));
-        unbuiltButton(g, x(122), y(98), 20, WBIcons.REDSTONE,
+        unbuiltButton(g, x(98), y(98), 20, WBIcons.REDSTONE,
             WorkbayScreen.gui("button.redstone"), WorkbayScreen.gui("unbuilt"));
+
+        // Copy and paste. Eight bays running the same machine is the first complaint this mod will
+        // get, and Mekanism answers it with a Configuration Card (SPEC.md §7).
+        actionButton(g, mouseX, mouseY, x(122), WBIcons.COPY, true,
+            () -> copied = bay.faces(),
+            WorkbayScreen.gui("button.copy"), WorkbayScreen.gui("button.copy.tip"));
+        actionButton(g, mouseX, mouseY, x(146), WBIcons.PASTE, copied != null,
+            () -> screen.send(WorkbayAction.PASTE_BAY, copied.bits()),
+            WorkbayScreen.gui("button.paste"),
+            WorkbayScreen.gui(copied == null ? "button.paste.empty" : "button.paste.tip"));
+    }
+
+    /** A 20x20 button in the machine row: enabled draws lit and clicks, disabled draws sunken. */
+    private void actionButton(GuiGraphics g, int mouseX, int mouseY, int px, String[] icon,
+        boolean enabled, Runnable onClick, Component name, Component tip) {
+        boolean hover = screen.hovered(px, y(98), 20, 20, mouseX, mouseY);
+        Draw.button(g, px, y(98), 20, 20, hover && enabled, false, enabled);
+        WBIcons.draw(g, icon, px + 4, y(102), enabled ? Draw.TEXT : Draw.TEXT_FAINT);
+        screen.hit(px, y(98), 20, 20, enabled ? onClick : () -> { }, name, tip);
     }
 
     /**
@@ -477,6 +498,8 @@ class BaysPage extends WorkbayPage {
         boolean rowHover = screen.hovered(px, py, LIST_W - 14, ROW_PITCH - 2, mouseX, mouseY);
         if (rowHover) {
             g.fill(px, py, px + LIST_W - 14, py + ROW_PITCH - 2, 0x18FFFFFF);
+            // And outline the block it points at, out in the world. SPEC.md §7.
+            com.neryos.workbay.client.LinkHighlight.set(config.target());
         }
 
         g.fill(px, py + 4, px + 10, py + 14, Draw.EDGE_DARK);

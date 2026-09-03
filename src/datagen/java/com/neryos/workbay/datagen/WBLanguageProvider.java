@@ -103,6 +103,13 @@ public class WBLanguageProvider extends LanguageProvider {
             + "everything inside it.");
         add(WorkbayLang.guiKey("button.rename"), "Rename");
         add(WorkbayLang.guiKey("button.redstone"), "Redstone");
+        add(WorkbayLang.guiKey("button.copy"), "Copy this bay");
+        add(WorkbayLang.guiKey("button.copy.tip"), "Copies this bay's face settings, so the next "
+            + "seven do not have to be set by hand.");
+        add(WorkbayLang.guiKey("button.paste"), "Paste onto this bay");
+        add(WorkbayLang.guiKey("button.paste.tip"), "Replaces this bay's face settings with the "
+            + "ones you copied.");
+        add(WorkbayLang.guiKey("button.paste.empty"), "Copy a bay first.");
 
         add(WorkbayLang.guiKey("bay.n"), "Bay %s");
         add(WorkbayLang.guiKey("bay.empty"), "Empty bay");

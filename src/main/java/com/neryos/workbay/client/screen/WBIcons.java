@@ -137,6 +137,38 @@ public final class WBIcons {
     };
 
     /** Items: a crate. */
+    /** Two sheets, the back one offset — the copy idiom every desktop has taught since 1984. */
+    public static final String[] COPY = {
+        "............",
+        "..#######...",
+        "..#.....#...",
+        "..#..######.",
+        "..#..#....#.",
+        "..#..#....#.",
+        "..####....#.",
+        ".....#....#.",
+        ".....#....#.",
+        ".....######.",
+        "............",
+        "............",
+    };
+
+    /** A clipboard with its clip. Deliberately unlike COPY at a glance, not a mirrored twin. */
+    public static final String[] PASTE = {
+        "............",
+        "....####....",
+        "..#.####.#..",
+        "..##########",
+        "..#........#",
+        "..#..####..#",
+        "..#........#",
+        "..#..####..#",
+        "..#........#",
+        "..##########",
+        "............",
+        "............",
+    };
+
     public static final String[] ITEMS = {
         "............",
         "..########..",

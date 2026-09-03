@@ -279,4 +279,84 @@ public class MenuTests {
         }
         return total;
     }
+
+    /**
+     * Copy and paste, SPEC.md §7's second QOL item. Eight bays running the same machine means
+     * setting the same faces eight times, which is the complaint this answers.
+     *
+     * <p>The interesting part is the packing: a whole {@link FaceConfig} rides one action as 36
+     * bits, so a paste that loses a resource or a face would be silent. Two of the three resources
+     * are set here, to different faces, so a collapsed field cannot pass.
+     */
+    @GameTest
+    @TestHolder(description = "A bay's face config copies onto another bay through one action.")
+    public static void pastingABayCarriesEveryFace(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos pos = helper.absolutePos(new BlockPos(1, 1, 1));
+            WorkbayBlockEntity workbay = placeWorkbay(helper, pos, player);
+            WorkbayMenu menu = menuFor(workbay, player);
+
+            // Bay 0: items out of the west face, energy into the top one.
+            menu.act(WorkbayAction.CYCLE_FACE,
+                BusConfig.Resource.ITEM.ordinal() | (Direction.WEST.ordinal() << 4), Optional.empty());
+            menu.act(WorkbayAction.CYCLE_FACE,
+                BusConfig.Resource.ITEM.ordinal() | (Direction.WEST.ordinal() << 4), Optional.empty());
+            menu.act(WorkbayAction.CYCLE_FACE,
+                BusConfig.Resource.ENERGY.ordinal() | (Direction.UP.ordinal() << 4), Optional.empty());
+
+            FaceConfig source = workbay.record().orElseThrow().bay(0).faces();
+            helper.assertValueEqual(source.role(BusConfig.Resource.ITEM, Direction.WEST),
+                FaceConfig.Role.OUTPUT, "the copied bay's west item face");
+
+            menu.act(WorkbayAction.SELECT_BAY, 1, Optional.empty());
+            menu.act(WorkbayAction.PASTE_BAY, source.bits(), Optional.empty());
+
+            FaceConfig pasted = workbay.record().orElseThrow().bay(1).faces();
+            helper.assertValueEqual(pasted, source, "the pasted bay's whole face config");
+            helper.assertValueEqual(pasted.role(BusConfig.Resource.ENERGY, Direction.UP),
+                FaceConfig.Role.INPUT, "the pasted bay's up energy face");
+            helper.assertValueEqual(pasted.role(BusConfig.Resource.FLUID, Direction.WEST),
+                FaceConfig.Role.NONE, "a resource the source never set");
+            helper.succeed();
+        });
+    }
+
+    /**
+     * The lock is the mod's only permission, and it was leaking. {@code rack} and {@code eject}
+     * each carried their own copy of the owner check and {@code cycleFace} carried none, so anyone
+     * could rewrite a locked Workbay's faces and quietly stop its links.
+     */
+    @GameTest
+    @TestHolder(description = "A locked Workbay refuses face edits from anyone but its owner.")
+    public static void aLockedWorkbayRefusesFaceEditsFromStrangers(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            GameTestPlayer owner = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos pos = helper.absolutePos(new BlockPos(1, 1, 1));
+            WorkbayBlockEntity workbay = placeWorkbay(helper, pos, owner);
+            menuFor(workbay, owner).act(WorkbayAction.TOGGLE_LOCK, 0, Optional.empty());
+            if (!workbay.record().orElseThrow().locked()) {
+                helper.fail("the owner could not lock their own Workbay");
+                return;
+            }
+
+            GameTestPlayer stranger = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            stranger.moveTo(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5);
+            WorkbayMenu theirs = new WorkbayMenu(2, stranger.getInventory(), workbay,
+                WorkbayMenu.build(workbay, stranger, 0));
+            theirs.act(WorkbayAction.CYCLE_FACE,
+                BusConfig.Resource.ITEM.ordinal() | (Direction.WEST.ordinal() << 4), Optional.empty());
+            theirs.act(WorkbayAction.PASTE_BAY, FaceConfig.NONE
+                .cycled(BusConfig.Resource.ITEM, Direction.EAST).bits(), Optional.empty());
+
+            FaceConfig after = workbay.record().orElseThrow().bay(0).faces();
+            helper.assertValueEqual(after, FaceConfig.NONE,
+                "a locked Workbay's faces after a stranger tried to change them");
+            helper.succeed();
+        });
+    }
 }

@@ -75,6 +75,19 @@ public record FaceConfig(int items, int fluids, int energy) {
         return allowed;
     }
 
+    /**
+     * The whole config in 36 bits — twelve per resource, two per face. Lets copy-and-paste ride the
+     * one action packet every other button uses instead of earning a payload type of its own.
+     */
+    public long bits() {
+        return (items & 0xFFFL) | ((fluids & 0xFFFL) << 12) | ((energy & 0xFFFL) << 24);
+    }
+
+    public static FaceConfig fromBits(long bits) {
+        return new FaceConfig((int) (bits & 0xFFF), (int) ((bits >> 12) & 0xFFF),
+            (int) ((bits >> 24) & 0xFFF));
+    }
+
     private int packed(BusConfig.Resource resource) {
         return switch (resource) {
             case ITEM -> items;

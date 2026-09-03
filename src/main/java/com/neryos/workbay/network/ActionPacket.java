@@ -18,8 +18,11 @@ import java.util.UUID;
  *
  * <p>One packet for every action rather than one per button: each is an id and at most one number,
  * and a payload class per button would be a dozen places to forget the container-id guard.
+ *
+ * <p>{@code arg} is a long because pasting a bay's face config is one action carrying 36 bits of
+ * it. A second packet type for that one button would be the same guard written twice.
  */
-public record ActionPacket(int containerId, WorkbayAction action, int arg, Optional<UUID> link)
+public record ActionPacket(int containerId, WorkbayAction action, long arg, Optional<UUID> link)
     implements CustomPacketPayload {
 
     public static final Type<ActionPacket> TYPE = new Type<>(Workbay.rl("action"));
@@ -32,7 +35,7 @@ public record ActionPacket(int containerId, WorkbayAction action, int arg, Optio
         StreamCodec.composite(
             ByteBufCodecs.VAR_INT, ActionPacket::containerId,
             ACTION, ActionPacket::action,
-            ByteBufCodecs.VAR_INT, ActionPacket::arg,
+            ByteBufCodecs.VAR_LONG, ActionPacket::arg,
             UUIDUtil.STREAM_CODEC.apply(ByteBufCodecs::optional), ActionPacket::link,
             ActionPacket::new);
 
