@@ -6,14 +6,14 @@
     },
     "facing=east": {
       "model": "workbay:block/connector",
-      "y": 270
+      "y": 90
     },
     "facing=north": {
-      "model": "workbay:block/connector",
-      "y": 180
+      "model": "workbay:block/connector"
     },
     "facing=south": {
-      "model": "workbay:block/connector"
+      "model": "workbay:block/connector",
+      "y": 180
     },
     "facing=up": {
       "model": "workbay:block/connector",
@@ -21,7 +21,7 @@
     },
     "facing=west": {
       "model": "workbay:block/connector",
-      "y": 90
+      "y": 270
     }
   }
 }

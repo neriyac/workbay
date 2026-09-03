@@ -1,7 +1,6 @@
 package com.neryos.workbay.client.screen;
 
 import com.neryos.workbay.world.FaceConfig;
-import net.minecraft.core.Direction;
 import net.minecraft.client.gui.GuiGraphics;
 
 /**
@@ -68,105 +67,12 @@ public final class Draw {
         g.fill(x + 1, y + 1, x + 1 + filled, y + h - 1, argb);
     }
 
-    /**
-     * The isometric bay cube from SPEC.md §4: three faces visible, each filled by its role and
-     * labelled with its direction letter, each one clickable.
-     *
-     * <p>Drawn as scanlines rather than as a texture because the fill colour is per face and per
-     * resource — a texture would need twenty-seven variants of the same cube.
-     */
-    public static void isoCube(GuiGraphics g, net.minecraft.client.gui.Font font, int cx, int cy,
-        int size, FaceConfig faces, com.neryos.workbay.bus.BusConfig.Resource resource,
-        Direction top, Direction left, Direction right) {
-
-        int halfW = size;
-        int halfH = size / 2;
-
-        // Top face: a rhombus centred on (cx, cy - halfH).
-        rhombus(g, cx, cy - halfH, halfW, halfH, roleColour(faces.role(resource, top)));
-        // Left and right faces: the same rhombus sheared down into a parallelogram.
-        parallelogram(g, cx - halfW, cy - halfH, halfW, halfH, size, true,
-            roleColour(faces.role(resource, left)));
-        parallelogram(g, cx, cy, halfW, halfH, size, false,
-            roleColour(faces.role(resource, right)));
-
-        letter(g, font, cx, cy - halfH - 3, top);
-        letter(g, font, cx - halfW / 2 - 2, cy + size / 2 - 4, left);
-        letter(g, font, cx + halfW / 2 - 2, cy + size / 2 - 4, right);
-    }
-
-    /** Where each of the cube's three visible faces was drawn, for hit testing a click. */
-    public static boolean inTopFace(int cx, int cy, int size, double mx, double my) {
-        double dx = Math.abs(mx - cx) / (double) size;
-        double dy = Math.abs(my - (cy - size / 2.0)) / (size / 2.0);
-        return dx + dy <= 1.0;
-    }
-
-    public static boolean inLeftFace(int cx, int cy, int size, double mx, double my) {
-        return mx >= cx - size && mx < cx && my >= cy - size / 2.0 && my < cy + size
-            && !inTopFace(cx, cy, size, mx, my) && withinShear(cx - size, cy - size / 2.0, size, mx, my, true);
-    }
-
-    public static boolean inRightFace(int cx, int cy, int size, double mx, double my) {
-        return mx >= cx && mx < cx + size && my >= cy - size / 2.0 && my < cy + size
-            && !inTopFace(cx, cy, size, mx, my) && withinShear(cx, cy, size, mx, my, false);
-    }
-
-    private static boolean withinShear(double x0, double y0, int size, double mx, double my, boolean leftward) {
-        double t = (mx - x0) / size;
-        double top = leftward ? y0 + (size / 2.0) * t : y0 - (size / 2.0) * t;
-        return my >= top && my <= top + size;
-    }
-
     public static int roleColour(FaceConfig.Role role) {
         return switch (role) {
             case INPUT -> GREEN;
             case OUTPUT -> BLUE;
             case NONE -> GREY;
         };
-    }
-
-    private static void rhombus(GuiGraphics g, int cx, int cy, int halfW, int halfH, int argb) {
-        for (int row = -halfH; row < halfH; row++) {
-            int width = (int) (halfW * (1.0 - Math.abs(row + 0.5) / halfH));
-            g.fill(cx - width, cy + row, cx + width, cy + row + 1, argb);
-        }
-        outlineRhombus(g, cx, cy, halfW, halfH);
-    }
-
-    private static void outlineRhombus(GuiGraphics g, int cx, int cy, int halfW, int halfH) {
-        for (int row = -halfH; row < halfH; row++) {
-            int width = (int) (halfW * (1.0 - Math.abs(row + 0.5) / halfH));
-            g.fill(cx - width, cy + row, cx - width + 1, cy + row + 1, EDGE_DARK);
-            g.fill(cx + width - 1, cy + row, cx + width, cy + row + 1, EDGE_DARK);
-        }
-    }
-
-    /** One side face: a column of rows whose top edge slopes, shaded darker than the top face. */
-    private static void parallelogram(GuiGraphics g, int x, int y, int halfW, int halfH, int height,
-        boolean leftward, int argb) {
-        int shaded = shade(argb, leftward ? 0.78F : 0.58F);
-        for (int col = 0; col < halfW; col++) {
-            double t = col / (double) halfW;
-            int top = (int) (y + (leftward ? halfH * t : halfH * -t));
-            g.fill(x + col, top, x + col + 1, top + height, shaded);
-        }
-        // The vertical seam where the two side faces meet, so the cube reads as a solid.
-        g.fill(leftward ? x + halfW - 1 : x, y + (leftward ? halfH : 0),
-            leftward ? x + halfW : x + 1, y + (leftward ? halfH : 0) + height, EDGE_DARK);
-    }
-
-    private static int shade(int argb, float factor) {
-        int r = (int) (((argb >> 16) & 0xFF) * factor);
-        int g = (int) (((argb >> 8) & 0xFF) * factor);
-        int b = (int) ((argb & 0xFF) * factor);
-        return (argb & 0xFF000000) | (r << 16) | (g << 8) | b;
-    }
-
-    private static void letter(GuiGraphics g, net.minecraft.client.gui.Font font, int x, int y,
-        Direction face) {
-        g.drawString(font, String.valueOf(Character.toUpperCase(face.getName().charAt(0))),
-            x, y, 0xFF000000, false);
     }
 
     /** Compact energy: 12.4k rather than 12400, which does not fit and nobody reads anyway. */

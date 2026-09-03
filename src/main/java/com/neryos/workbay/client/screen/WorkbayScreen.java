@@ -82,6 +82,11 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         return font;
     }
 
+    /** The scaled canvas height, which a page has to fit inside however the player has it scaled. */
+    public int availableHeight() {
+        return height;
+    }
+
     // ------------------------------------------------------------- clickable
 
     /** A shape inside a hit's bounding box. The isometric cube's faces are the only non-rectangles. */
@@ -140,6 +145,11 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // The block preview takes the press first: inside it a press starts a turn, and only a
+        // press that never turned into one counts as a click on a face.
+        if (current != null && current.mousePressed(mouseX, mouseY, button)) {
+            return true;
+        }
         if (button == 0) {
             // Reverse order, so a control drawn on top of another wins the click the way it looks.
             for (int i = hits.size() - 1; i >= 0; i--) {
@@ -151,6 +161,22 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
             }
         }
         return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (current != null && current.mouseDragged(dragX, dragY)) {
+            return true;
+        }
+        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (current != null && current.mouseReleased(mouseX, mouseY)) {
+            return true;
+        }
+        return super.mouseReleased(mouseX, mouseY, button);
     }
 
     @Override

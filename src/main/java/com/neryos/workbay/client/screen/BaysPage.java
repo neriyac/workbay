@@ -4,6 +4,7 @@ import com.neryos.workbay.bus.BusConfig;
 import com.neryos.workbay.bus.BusRunner;
 import com.neryos.workbay.menu.WorkbayAction;
 import com.neryos.workbay.menu.WorkbaySnapshot;
+import com.neryos.workbay.world.BayGeometry;
 import com.neryos.workbay.world.FaceConfig;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
@@ -12,6 +13,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.Comparator;
 import java.util.List;
@@ -25,36 +27,48 @@ import java.util.UUID;
  * problem count in the header and the status pip on each bay do that; everything else is what they
  * look at once the answer is yes.
  *
- * <p>Two numbers moved from SPEC.md §4's starting point, and both for the same reason it was
- * rewritten in the first place. The screen is <b>316 tall, not 268</b>: at 268 the LINKS list got
- * ninety pixels, which is three rows, in the same section that requires it to stay readable at
- * thirty. At 316 it gets six and a scrollbar. The rows themselves stayed at the specified 20px
- * pitch — shrinking those to buy rows back would have cost the icons their size.
+ * <p><b>The height is not fixed at SPEC.md §4's 268.</b> At 268 the LINKS list gets ninety pixels,
+ * which is three rows — the exact fault that got the old section replaced, in the same section that
+ * requires the list to stay readable at thirty. It wants 316. But Minecraft only ever guarantees a
+ * 240-tall scaled canvas, so a fixed 268 already runs off the bottom at a high GUI scale and 316 is
+ * worse. The page therefore takes whatever the window has between 240 and 316, and the bay rack's
+ * pitch and the number of visible rows are derived from that rather than written down.
  */
 class BaysPage extends WorkbayPage {
 
     private static final int WIDTH = 320;
-    private static final int HEIGHT = 316;
+
+    /**
+     * SPEC.md §4 starts at 268 tall. Minecraft only ever guarantees a 240-tall scaled canvas, so a
+     * fixed 268 is a screen that runs off the bottom for anyone at a high GUI scale — and 316, which
+     * is what the LINKS list actually wants, is worse. So the page takes what the window has between
+     * those two, and the rack pitch and the row count follow from it.
+     */
+    private static final int MIN_HEIGHT = 240;
+    private static final int MAX_HEIGHT = 316;
 
     private static final int RACK_X = 8;
     private static final int RACK_Y = 50;
-    private static final int RACK_PITCH = 26;
-    private static final int SLOT = 24;
 
-    private static final int LINKS_Y = 170;
-    private static final int ROW_Y = 190;
+    private static final int LINKS_Y_FROM_BOTTOM = 146;
     private static final int ROW_PITCH = 20;
-    private static final int ROWS = 6;
     private static final int LIST_X = 40;
     private static final int LIST_W = 268;
 
-    private static final int CUBE_CX = 266;
-    private static final int CUBE_CY = 112;
-    private static final int CUBE_SIZE = 26;
+    private final int height;
+    private final int rackPitch;
+    private final int slot;
+    private final int linksY;
+    private final int rowY;
+    private final int rows;
 
-    /** Which of the three faces the cube is showing. Rotating swaps to the other three. */
-    private static final Direction[] FRONT = { Direction.UP, Direction.WEST, Direction.SOUTH };
-    private static final Direction[] BACK = { Direction.DOWN, Direction.EAST, Direction.NORTH };
+    private static final int CUBE_CX = 266;
+    private static final int CUBE_CY = 106;
+    private static final int CUBE_SIZE = 30;
+    private static final int WELL_X = 232;
+    private static final int WELL_Y = 76;
+    private static final int WELL_W = 68;
+    private static final int WELL_H = 62;
 
     /** Client-side view state: the list's filter, sort, scroll and which row's gear is open. */
     private enum Filter { THIS_BAY, ALL_BAYS, PROBLEMS }
@@ -64,7 +78,9 @@ class BaysPage extends WorkbayPage {
     private static Filter filter = Filter.THIS_BAY;
     private static Sort sort = Sort.STATUS;
     private static BusConfig.Resource faceType = BusConfig.Resource.ITEM;
-    private static boolean cubeFlipped;
+
+    /** Kept between openings, so the angle a player turned a machine to is still there next time. */
+    private static final BlockPreview PREVIEW = new BlockPreview();
 
     private int scroll;
     @org.jetbrains.annotations.Nullable
@@ -72,6 +88,13 @@ class BaysPage extends WorkbayPage {
 
     BaysPage(WorkbayScreen screen) {
         super(screen);
+        height = Math.clamp(screen.availableHeight() - 8, MIN_HEIGHT, MAX_HEIGHT);
+        // Eight bay slots always fit, however short the window is; they lose pitch, not slots.
+        rackPitch = Math.clamp((height - RACK_Y - 12) / BayGeometry.MAX_BAYS, 20, 26);
+        slot = rackPitch - 2;
+        linksY = height - LINKS_Y_FROM_BOTTOM < 170 ? 170 : height - LINKS_Y_FROM_BOTTOM;
+        rowY = linksY + 20;
+        rows = Math.max(2, (height - rowY - 14) / ROW_PITCH);
     }
 
     @Override
@@ -81,7 +104,7 @@ class BaysPage extends WorkbayPage {
 
     @Override
     int height() {
-        return HEIGHT;
+        return height;
     }
 
     @Override
@@ -117,7 +140,7 @@ class BaysPage extends WorkbayPage {
             WorkbayScreen.gui("power", snap.energy(), snap.energyCapacity()),
             WorkbayScreen.gui("power.tip"));
 
-        g.drawString(font, snap.code(), x(8), y(HEIGHT - 12), Draw.TEXT_FAINT, false);
+        g.drawString(font, snap.code(), x(8), y(height - 12), Draw.TEXT_FAINT, false);
         // The separator between the header band and the working area.
         g.fill(x(6), y(44), x(WIDTH - 6), y(45), Draw.EDGE_DARK);
     }
@@ -128,18 +151,18 @@ class BaysPage extends WorkbayPage {
         WorkbaySnapshot snap = snapshot();
         for (int index = 0; index < 8; index++) {
             int px = x(RACK_X + 2);
-            int py = y(RACK_Y + index * RACK_PITCH);
+            int py = y(RACK_Y + index * rackPitch);
             WorkbaySnapshot.Bay bay = snap.bay(index);
             boolean locked = bay.state() == WorkbaySnapshot.State.LOCKED;
             boolean selected = index == snap.selectedBay();
-            boolean hover = screen.hovered(px, py, SLOT, SLOT, mouseX, mouseY);
+            boolean hover = screen.hovered(px, py, slot, slot, mouseX, mouseY);
 
             if (selected) {
-                g.fill(x(RACK_X - 2), py, x(RACK_X + 1), py + SLOT, Draw.SELECT);
+                g.fill(x(RACK_X - 2), py, x(RACK_X + 1), py + slot, Draw.SELECT);
             }
-            Draw.well(g, px, py, SLOT, SLOT);
+            Draw.well(g, px, py, slot, slot);
             if (hover && !locked) {
-                g.fill(px + 1, py + 1, px + SLOT - 1, py + SLOT - 1, 0x33FFFFFF);
+                g.fill(px + 1, py + 1, px + slot - 1, py + slot - 1, 0x33FFFFFF);
             }
 
             ItemStack icon = iconFor(bay.hosted());
@@ -148,13 +171,13 @@ class BaysPage extends WorkbayPage {
                 g.renderItem(icon, px + 4, py + 4);
             }
             if (locked) {
-                g.fill(px + 1, py + 1, px + SLOT - 1, py + SLOT - 1, 0x99000000);
+                g.fill(px + 1, py + 1, px + slot - 1, py + slot - 1, 0x99000000);
             }
             // The 5x5 status pip, top-left, inside the slot.
             g.fill(px + 2, py + 2, px + 7, py + 7, pipColour(bay.state()));
 
             int captured = index;
-            screen.hit(px, py, SLOT, SLOT, () -> screen.send(WorkbayAction.SELECT_BAY, captured),
+            screen.hit(px, py, slot, slot, () -> screen.send(WorkbayAction.SELECT_BAY, captured),
                 bayTooltip(bay));
         }
     }
@@ -263,8 +286,8 @@ class BaysPage extends WorkbayPage {
         WorkbaySnapshot snap = snapshot();
         WorkbaySnapshot.Bay bay = snap.bay(snap.selectedBay());
 
-        // Three 20x18 type buttons. The cube shows the selected type only, which is why a face can
-        // be an input for items and an output for energy without the picture contradicting itself.
+        // Three 20x18 type buttons. The block shows one resource type at a time, which is why a
+        // face can take items in and send energy out without the picture contradicting itself.
         String[][] icons = { WBIcons.ITEMS, WBIcons.FLUIDS, WBIcons.ENERGY };
         for (int i = 0; i < 3; i++) {
             BusConfig.Resource resource = BusConfig.Resource.values()[i];
@@ -279,40 +302,72 @@ class BaysPage extends WorkbayPage {
                 WorkbayScreen.gui("faces.tip"));
         }
 
-        Draw.well(g, x(232), y(76), 68, 56);
-        Direction[] shown = cubeFlipped ? BACK : FRONT;
-        Draw.isoCube(g, screen.font(), x(CUBE_CX), y(CUBE_CY), CUBE_SIZE, bay.faces(), faceType,
-            shown[0], shown[1], shown[2]);
+        Draw.well(g, x(WELL_X), y(WELL_Y), WELL_W, WELL_H);
 
-        // One hit region per visible face, tested in the same order they are drawn on top of.
-        faceHit(shown[0], (mx, my) -> Draw.inTopFace(x(CUBE_CX), y(CUBE_CY), CUBE_SIZE, mx, my), bay);
-        faceHit(shown[1], (mx, my) -> Draw.inLeftFace(x(CUBE_CX), y(CUBE_CY), CUBE_SIZE, mx, my), bay);
-        faceHit(shown[2], (mx, my) -> Draw.inRightFace(x(CUBE_CX), y(CUBE_CY), CUBE_SIZE, mx, my), bay);
+        // The machine's own block, at whatever angle the player has dragged it to. Not a drawn
+        // cube: somebody configuring an Enrichment Chamber's faces needs to see one.
+        BlockState state = blockFor(bay.hosted());
+        if (state == null) {
+            // Wrapped, because the well is 68 wide and this sentence is not.
+            var lines = screen.font().split(WorkbayScreen.gui("faces.empty"), WELL_W - 8);
+            for (int i = 0; i < lines.size(); i++) {
+                g.drawString(screen.font(), lines.get(i), x(WELL_X + 4), y(WELL_Y + 8 + i * 10),
+                    Draw.TEXT_FAINT, false);
+            }
+        } else {
+            PREVIEW.render(g, state, x(CUBE_CX), y(CUBE_CY), CUBE_SIZE);
+            PREVIEW.renderFaces(g, screen.font(), x(CUBE_CX), y(CUBE_CY), CUBE_SIZE,
+                bay.faces(), faceType);
+        }
 
-        iconButton(g, mouseX, mouseY, x(258), y(138), WBIcons.ROTATE, cubeFlipped,
-            () -> cubeFlipped = !cubeFlipped,
-            WorkbayScreen.gui("faces.rotate"), WorkbayScreen.gui("faces.rotate.tip"));
-
-        // A legend, because green and blue mean nothing on their own.
         var font = screen.font();
-        g.fill(x(232), y(140), x(238), y(146), Draw.GREEN);
-        g.drawString(font, "in", x(240), y(140), Draw.TEXT_DIM, false);
-        g.fill(x(232), y(150), x(238), y(156), Draw.BLUE);
-        g.drawString(font, "out", x(240), y(150), Draw.TEXT_DIM, false);
+        g.drawString(font, WorkbayScreen.gui("faces.drag").getString(), x(WELL_X), y(WELL_Y + WELL_H + 2),
+            Draw.TEXT_FAINT, false);
+        g.fill(x(232), y(150), x(238), y(156), Draw.GREEN);
+        g.drawString(font, "in", x(240), y(150), Draw.TEXT_DIM, false);
+        g.fill(x(266), y(150), x(272), y(156), Draw.BLUE);
+        g.drawString(font, "out", x(274), y(150), Draw.TEXT_DIM, false);
     }
 
-    /**
-     * A cube face is a rhombus, so its click region is not a rectangle: the hit carries the shape
-     * test and the bounding box is only the cheap first pass.
-     */
-    private void faceHit(Direction face, WorkbayScreen.Inside inside, WorkbaySnapshot.Bay bay) {
-        int px = x(CUBE_CX) - CUBE_SIZE;
-        int py = y(CUBE_CY) - CUBE_SIZE;
-        FaceConfig.Role role = bay.faces().role(faceType, face);
-        screen.hit(px, py, CUBE_SIZE * 2, CUBE_SIZE * 2 + CUBE_SIZE, inside,
-            () -> screen.send(WorkbayAction.CYCLE_FACE, faceType.ordinal() | (face.ordinal() << 4)),
-            WorkbayScreen.gui("faces.face", face.getName()),
-            WorkbayScreen.gui("faces.role." + role.name().toLowerCase(java.util.Locale.ROOT)));
+    private boolean inWell(double mx, double my) {
+        return mx >= x(WELL_X) && mx < x(WELL_X + WELL_W)
+            && my >= y(WELL_Y) && my < y(WELL_Y + WELL_H);
+    }
+
+    @Override
+    boolean mousePressed(double mouseX, double mouseY, int button) {
+        if (button != 0 || !inWell(mouseX, mouseY)) {
+            return false;
+        }
+        PREVIEW.press();
+        return true;
+    }
+
+    @Override
+    boolean mouseDragged(double dragX, double dragY) {
+        PREVIEW.drag(dragX, dragY);
+        return false;
+    }
+
+    /** A press that never turned into a turn is a click on whichever face it landed on. */
+    @Override
+    boolean mouseReleased(double mouseX, double mouseY) {
+        if (!PREVIEW.release() || !inWell(mouseX, mouseY)) {
+            return false;
+        }
+        Direction face = PREVIEW.faceAt(mouseX, mouseY, x(CUBE_CX), y(CUBE_CY), CUBE_SIZE);
+        if (face != null) {
+            screen.send(WorkbayAction.CYCLE_FACE, faceType.ordinal() | (face.ordinal() << 4));
+        }
+        return true;
+    }
+
+    @org.jetbrains.annotations.Nullable
+    private static BlockState blockFor(Optional<ResourceLocation> id) {
+        return id.map(BuiltInRegistries.BLOCK::get)
+            .filter(block -> block != net.minecraft.world.level.block.Blocks.AIR)
+            .map(net.minecraft.world.level.block.Block::defaultBlockState)
+            .orElse(null);
     }
 
     // ------------------------------------------------------------- the list
@@ -321,49 +376,49 @@ class BaysPage extends WorkbayPage {
         var font = screen.font();
         WorkbaySnapshot snap = snapshot();
 
-        g.drawString(font, "LINKS", x(LIST_X + 4), y(LINKS_Y + 4), Draw.TEXT, false);
+        g.drawString(font, "LINKS", x(LIST_X + 4), y(linksY + 4), Draw.TEXT, false);
 
-        iconButton(g, mouseX, mouseY, x(LIST_X + 44), y(LINKS_Y), WBIcons.FILTER, true,
+        iconButton(g, mouseX, mouseY, x(LIST_X + 44), y(linksY), WBIcons.FILTER, true,
             () -> filter = Filter.values()[(filter.ordinal() + 1) % Filter.values().length],
             WorkbayScreen.gui("links.filter." + filter.name().toLowerCase(java.util.Locale.ROOT)),
             WorkbayScreen.gui("links.filter.tip"));
-        iconButton(g, mouseX, mouseY, x(LIST_X + 66), y(LINKS_Y), WBIcons.SORT, true,
+        iconButton(g, mouseX, mouseY, x(LIST_X + 66), y(linksY), WBIcons.SORT, true,
             () -> sort = Sort.values()[(sort.ordinal() + 1) % Sort.values().length],
             WorkbayScreen.gui("links.sort." + sort.name().toLowerCase(java.util.Locale.ROOT)),
             WorkbayScreen.gui("links.sort.tip"));
 
         int pairX = x(LIST_X + LIST_W - 46);
-        boolean pairHover = screen.hovered(pairX, y(LINKS_Y), 46, 18, mouseX, mouseY);
-        Draw.button(g, pairX, y(LINKS_Y), 46, 18, pairHover, false);
-        WBIcons.draw(g, WBIcons.PLUS, pairX + 3, y(LINKS_Y + 3), Draw.TEXT);
-        g.drawString(font, "Pair", pairX + 17, y(LINKS_Y + 5), Draw.TEXT, false);
-        screen.hit(pairX, y(LINKS_Y), 46, 18, () -> screen.send(WorkbayAction.PAIR),
+        boolean pairHover = screen.hovered(pairX, y(linksY), 46, 18, mouseX, mouseY);
+        Draw.button(g, pairX, y(linksY), 46, 18, pairHover, false);
+        WBIcons.draw(g, WBIcons.PLUS, pairX + 3, y(linksY + 3), Draw.TEXT);
+        g.drawString(font, "Pair", pairX + 17, y(linksY + 5), Draw.TEXT, false);
+        screen.hit(pairX, y(linksY), 46, 18, () -> screen.send(WorkbayAction.PAIR),
             WorkbayScreen.gui("links.pair"), WorkbayScreen.gui("links.pair.tip"));
 
         List<WorkbaySnapshot.Link> visible = visibleLinks(snap);
-        Draw.well(g, x(LIST_X), y(ROW_Y - 4), LIST_W, ROWS * ROW_PITCH + 8);
+        Draw.well(g, x(LIST_X), y(rowY - 4), LIST_W, rows * ROW_PITCH + 8);
 
         if (visible.isEmpty()) {
             g.drawString(font, WorkbayScreen.gui("links.none").getString(),
-                x(LIST_X + 8), y(ROW_Y + 8), Draw.TEXT_FAINT, false);
+                x(LIST_X + 8), y(rowY + 8), Draw.TEXT_FAINT, false);
             return;
         }
-        scroll = Math.clamp(scroll, 0, Math.max(0, visible.size() - ROWS));
-        for (int slot = 0; slot < ROWS && slot + scroll < visible.size(); slot++) {
-            row(g, mouseX, mouseY, visible.get(slot + scroll), y(ROW_Y + slot * ROW_PITCH));
+        scroll = Math.clamp(scroll, 0, Math.max(0, visible.size() - rows));
+        for (int visibleRow = 0; visibleRow < rows && visibleRow + scroll < visible.size(); visibleRow++) {
+            row(g, mouseX, mouseY, visible.get(visibleRow + scroll), y(rowY + visibleRow * ROW_PITCH));
         }
-        if (visible.size() > ROWS) {
+        if (visible.size() > rows) {
             scrollbar(g, visible.size());
         }
     }
 
     private void scrollbar(GuiGraphics g, int total) {
         int trackX = x(LIST_X + LIST_W - 6);
-        int trackY = y(ROW_Y);
-        int trackH = ROWS * ROW_PITCH;
+        int trackY = y(rowY);
+        int trackH = rows * ROW_PITCH;
         g.fill(trackX, trackY, trackX + 4, trackY + trackH, Draw.EDGE_DARK);
-        int knob = Math.max(8, trackH * ROWS / total);
-        int offset = (trackH - knob) * scroll / Math.max(1, total - ROWS);
+        int knob = Math.max(8, trackH * rows / total);
+        int offset = (trackH - knob) * scroll / Math.max(1, total - rows);
         g.fill(trackX, trackY + offset, trackX + 4, trackY + offset + knob, Draw.EDGE_LIGHT);
     }
 
@@ -468,7 +523,7 @@ class BaysPage extends WorkbayPage {
 
     @Override
     boolean scrolled(double mouseX, double mouseY, double delta) {
-        if (mouseY < y(ROW_Y - 4) || mouseY > y(ROW_Y + ROWS * ROW_PITCH + 4)) {
+        if (mouseY < y(rowY - 4) || mouseY > y(rowY + rows * ROW_PITCH + 4)) {
             return false;
         }
         scroll = Math.max(0, scroll - (int) Math.signum(delta));

@@ -123,8 +123,8 @@ public class WBLanguageProvider extends LanguageProvider {
             + "face answers.");
         add(WorkbayLang.guiKey("faces.role.input"), "Input. Links may push into this face.");
         add(WorkbayLang.guiKey("faces.role.output"), "Output. Links may pull out of this face.");
-        add(WorkbayLang.guiKey("faces.rotate"), "Turn the cube");
-        add(WorkbayLang.guiKey("faces.rotate.tip"), "Show the other three faces.");
+        add(WorkbayLang.guiKey("faces.drag"), "Drag to turn");
+        add(WorkbayLang.guiKey("faces.empty"), "Rack a machine to set its faces.");
 
         add(WorkbayLang.guiKey("links.none"), "No links yet. Pair a Connector and place it on "
             + "something.");
@@ -189,14 +189,13 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("upgrades.add"), "Install one %s");
         add(WorkbayLang.guiKey("upgrades.maxed"), "You have as many of these as a Workbay takes.");
         add(WorkbayLang.guiKey("upgrade.expansion_plate"), "Expansion Plate");
-        add(WorkbayLang.guiKey("upgrade.expansion_plate.desc"), "One more bay, up to eight.");
+        add(WorkbayLang.guiKey("upgrade.expansion_plate.desc"), "+1 bay, up to eight");
         add(WorkbayLang.guiKey("upgrade.expansion_plate.cost"), "Costs 4 Levy to craft, rising.");
         add(WorkbayLang.guiKey("upgrade.resonator"), "Resonator");
-        add(WorkbayLang.guiKey("upgrade.resonator.desc"), "Links may target other dimensions.");
+        add(WorkbayLang.guiKey("upgrade.resonator.desc"), "Reaches other dimensions");
         add(WorkbayLang.guiKey("upgrade.resonator.cost"), "Costs 4 Levy and an Ender Eye to craft.");
-        add(WorkbayLang.guiKey("upgrade.multichannel"), "Multichannel Upgrade");
-        add(WorkbayLang.guiKey("upgrade.multichannel.desc"), "One Connector carries items, fluids "
-            + "and energy at once.");
+        add(WorkbayLang.guiKey("upgrade.multichannel"), "Multichannel");
+        add(WorkbayLang.guiKey("upgrade.multichannel.desc"), "One Connector, all three types");
         add(WorkbayLang.guiKey("upgrade.multichannel.cost"), "Costs 4 Levy and an Amethyst Shard to "
             + "craft.");
 

@@ -30,6 +30,19 @@ abstract class WorkbayPage {
         return false;
     }
 
+    /** True when the press started a block turn, so the hit list must not also fire. */
+    boolean mousePressed(double mouseX, double mouseY, int button) {
+        return false;
+    }
+
+    boolean mouseDragged(double dragX, double dragY) {
+        return false;
+    }
+
+    boolean mouseReleased(double mouseX, double mouseY) {
+        return false;
+    }
+
     protected WorkbaySnapshot snapshot() {
         return screen.snapshot();
     }

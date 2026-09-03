@@ -1,12 +1,9 @@
 package com.neryos.workbay.client.screen;
 
-import com.neryos.workbay.bus.BusConfig;
 import com.neryos.workbay.content.workbay.WorkbayUpgrade;
 import com.neryos.workbay.menu.WorkbayAction;
 import com.neryos.workbay.menu.WorkbaySnapshot;
-import com.neryos.workbay.world.FaceConfig;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.core.Direction;
 import net.minecraft.world.item.ItemStack;
 
 /**
@@ -32,8 +29,13 @@ class UpgradesPage extends WorkbayPage {
     private static final int ROW_H = 34;
     private static final int ROW_PITCH = 38;
 
-    /** The block preview turns as the player looks at it, since it is the only art on the screen. */
-    private static boolean flipped;
+    /** The block preview turns as the player drags it, since it is the only art on the screen. */
+    private static final BlockPreview PREVIEW = new BlockPreview();
+
+    private static final int WELL_X = 12;
+    private static final int WELL_Y = 52;
+    private static final int WELL_W = 96;
+    private static final int WELL_H = 74;
 
     UpgradesPage(WorkbayScreen screen) {
         super(screen);
@@ -62,23 +64,43 @@ class UpgradesPage extends WorkbayPage {
         var font = screen.font();
         WorkbaySnapshot snap = snapshot();
 
-        Draw.well(g, x(12), y(52), 96, 74);
-        Direction[] shown = flipped
-            ? new Direction[] { Direction.UP, Direction.EAST, Direction.NORTH }
-            : new Direction[] { Direction.UP, Direction.WEST, Direction.SOUTH };
-        // The same isometric cube the bay's face config uses, with every face neutral: this one is
-        // a picture of the block, not a control.
-        Draw.isoCube(g, font, x(60), y(84), 30, FaceConfig.NONE, BusConfig.Resource.ITEM,
-            shown[0], shown[1], shown[2]);
-        iconButton(g, mouseX, mouseY, x(90), y(106), WBIcons.ROTATE, flipped, () -> flipped = !flipped,
-            WorkbayScreen.gui("faces.rotate"), WorkbayScreen.gui("faces.rotate.tip"));
+        Draw.well(g, x(WELL_X), y(WELL_Y), WELL_W, WELL_H);
+        // The Workbay's own block, rendered by the game rather than drawn: this screen is where a
+        // player looks at what they are upgrading.
+        PREVIEW.render(g, com.neryos.workbay.init.WBBlocks.WORKBAY.get().defaultBlockState(),
+            x(WELL_X + WELL_W / 2), y(WELL_Y + WELL_H / 2), 34);
+        g.drawString(font, WorkbayScreen.gui("faces.drag").getString(), x(WELL_X), y(WELL_Y + WELL_H + 3),
+            Draw.TEXT_FAINT, false);
 
-        Draw.bar(g, x(12), y(132), 96, 12, snap.energy(), snap.energyCapacity(), Draw.AMBER);
-        g.drawString(font, snap.energy() + " / " + snap.energyCapacity() + " FE", x(12), y(148),
-            Draw.TEXT_DIM, false);
+        Draw.bar(g, x(WELL_X), y(WELL_Y + WELL_H + 16), WELL_W, 12,
+            snap.energy(), snap.energyCapacity(), Draw.AMBER);
+        g.drawString(font, snap.energy() + " / " + snap.energyCapacity() + " FE",
+            x(WELL_X), y(WELL_Y + WELL_H + 32), Draw.TEXT_DIM, false);
         g.drawString(font, WorkbayScreen.gui("upgrades.rate",
                 com.neryos.workbay.content.workbay.WorkbayBlockEntity.MAX_FE_PER_TICK).getString(),
-            x(12), y(160), Draw.TEXT_FAINT, false);
+            x(WELL_X), y(WELL_Y + WELL_H + 44), Draw.TEXT_FAINT, false);
+    }
+
+    @Override
+    boolean mousePressed(double mouseX, double mouseY, int button) {
+        if (button != 0 || mouseX < x(WELL_X) || mouseX >= x(WELL_X + WELL_W)
+            || mouseY < y(WELL_Y) || mouseY >= y(WELL_Y + WELL_H)) {
+            return false;
+        }
+        PREVIEW.press();
+        return true;
+    }
+
+    @Override
+    boolean mouseDragged(double dragX, double dragY) {
+        PREVIEW.drag(dragX, dragY);
+        return false;
+    }
+
+    @Override
+    boolean mouseReleased(double mouseX, double mouseY) {
+        PREVIEW.release();
+        return false;
     }
 
     private void rows(GuiGraphics g, int mouseX, int mouseY) {
@@ -98,14 +120,17 @@ class UpgradesPage extends WorkbayPage {
             g.renderItem(icon, px + 6, py + 9);
 
             String key = "upgrade." + upgrade.getSerializedName();
-            g.drawString(font, WorkbayScreen.gui(key).getString(), px + 28, py + 6,
-                maxed ? Draw.TEXT_FAINT : Draw.TEXT, false);
+            // The count is right-aligned on the name's line and the description gets the whole
+            // second line: side by side, the two collided and the description was cut mid-word.
+            String count = installed + " / " + upgrade.max();
+            int countX = px + ROW_W - 36 - font.width(count);
+            g.drawString(font, font.plainSubstrByWidth(WorkbayScreen.gui(key).getString(),
+                    countX - (px + 28) - 4),
+                px + 28, py + 6, maxed ? Draw.TEXT_FAINT : Draw.TEXT, false);
+            g.drawString(font, count, countX, py + 6, maxed ? Draw.GREEN : Draw.TEXT_DIM, false);
             g.drawString(font, font.plainSubstrByWidth(
-                    WorkbayScreen.gui(key + ".desc").getString(), ROW_W - 84),
+                    WorkbayScreen.gui(key + ".desc").getString(), ROW_W - 28 - 36),
                 px + 28, py + 19, Draw.TEXT_FAINT, false);
-
-            g.drawString(font, installed + " / " + upgrade.max(), px + ROW_W - 66, py + 13,
-                maxed ? Draw.GREEN : Draw.TEXT_DIM, false);
 
             int addX = px + ROW_W - 30;
             int addY = py + 8;
