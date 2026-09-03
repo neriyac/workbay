@@ -4,7 +4,7 @@ import net.neoforged.neoforge.common.ModConfigSpec;
 import org.apache.commons.lang3.tuple.Pair;
 
 /**
- * Four knobs. SPEC.md §13.
+ * Six knobs. SPEC.md §13.
  *
  * <p>Everything else is a tag or a recipe, because that is where pack authors already work and it
  * needs no config file at all: what can be hosted, what counts as Levy input, the maximum tax rate,
@@ -39,6 +39,8 @@ public class WorkbayConfig {
         public final ModConfigSpec.IntValue maxAnchoredWorkbaysPerPlayer;
         public final ModConfigSpec.IntValue anchorGraceMinutes;
         public final ModConfigSpec.IntValue maxBaysPerWorkbay;
+        public final ModConfigSpec.IntValue maxNetworksPerPlayer;
+        public final ModConfigSpec.IntValue maxDeployedWorkbaysPerNetwork;
 
         Server(ModConfigSpec.Builder builder) {
             allowAnchors = builder
@@ -58,6 +60,22 @@ public class WorkbayConfig {
             maxBaysPerWorkbay = builder
                 .comment("Hard ceiling on bays, regardless of Expansion Plates installed.")
                 .defineInRange("maxBaysPerWorkbay", 8, 1, 8);
+
+            maxNetworksPerPlayer = builder
+                .comment("How many separate Workbay networks one player may own. An unbound Workbay",
+                    "item placed once a player already owns this many mints no new one and refuses.")
+                .defineInRange("maxNetworksPerPlayer", 1, 1, 64);
+
+            maxDeployedWorkbaysPerNetwork = builder
+                .comment("How many Workbay blocks may be bound to one network at once. Placing an",
+                    "unbound item reuses the player's existing network's bays, upgrades and links -",
+                    "there is no code to lose - but only up to this many live at the same time.",
+                    "Raising this above 1 is not fully load-bearing yet: each deployed Workbay still",
+                    "keeps its own energy buffer and its own bus tick timing rather than sharing one,",
+                    "so two entrances to the same network do not yet split one energy pool or agree",
+                    "on redstone/pulse timing. Left adjustable for packs that accept that; default 1",
+                    "sidesteps it entirely.")
+                .defineInRange("maxDeployedWorkbaysPerNetwork", 1, 1, 64);
         }
     }
 

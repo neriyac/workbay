@@ -108,7 +108,8 @@ public class RoomRegistry extends SavedData {
         UUID id = UUID.randomUUID();
         ChunkPos column = allocateBayColumn();
         WorkbayRecord record = new WorkbayRecord(id, mintCode(random), owner, ownerName, false,
-            column, WorkbayRecord.Upgrades.NONE, Optional.empty(), List.of(), List.of());
+            column, WorkbayRecord.Upgrades.NONE, Optional.empty(), List.of(), List.of(), List.of(),
+            0);
         byId.put(id, record);
         byCode.put(normalise(record.code()), id);
         setDirty();

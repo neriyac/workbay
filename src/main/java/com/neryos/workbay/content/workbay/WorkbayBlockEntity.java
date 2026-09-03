@@ -37,13 +37,11 @@ import java.util.UUID;
  */
 public class WorkbayBlockEntity extends BlockEntity {
     private static final String ID_KEY = "WorkbayId";
-    private static final String BUSES_KEY = "Buses";
     private static final String ENERGY_KEY = "Energy";
 
     @Nullable
     private UUID workbayId;
 
-    private final List<BusConfig> buses = new ArrayList<>();
     private final BusRunner runner = new BusRunner(() -> !isRemoved());
 
     /** Whether this Workbay currently holds SPEC.md §12's mirroring ticket on its bay column. */
@@ -99,8 +97,15 @@ public class WorkbayBlockEntity extends BlockEntity {
             registry.put(record.withLastKnownPos(GlobalPos.of(server.dimension(), worldPosition))));
     }
 
+    /**
+     * Links used to live only in this block entity's own NBT, which is not one of the components a
+     * broken Workbay's loot table copies onto the dropped item — so breaking and re-placing one,
+     * even onto the very same {@link WorkbayBinding}, silently lost every link. They live on the
+     * {@link WorkbayRecord} now, the same as bays, upgrades and the lock, so they survive exactly as
+     * well as everything else does.
+     */
     public List<BusConfig> buses() {
-        return List.copyOf(buses);
+        return record().map(WorkbayRecord::buses).orElse(List.of());
     }
 
     /**
@@ -111,45 +116,78 @@ public class WorkbayBlockEntity extends BlockEntity {
      * link's checkbox visibly jumped it to the end of the list.
      */
     public void addBus(BusConfig bus) {
-        int existing = -1;
-        for (int i = 0; i < buses.size(); i++) {
-            if (buses.get(i).id().equals(bus.id())) {
-                existing = i;
-                break;
+        editBuses(record -> {
+            List<BusConfig> updated = new ArrayList<>(record.buses());
+            int existing = -1;
+            for (int i = 0; i < updated.size(); i++) {
+                if (updated.get(i).id().equals(bus.id())) {
+                    existing = i;
+                    break;
+                }
             }
-        }
-        if (existing >= 0) {
-            buses.set(existing, bus);
-        } else {
-            buses.add(bus);
-        }
-        setChanged();
+            if (existing >= 0) {
+                updated.set(existing, bus);
+            } else {
+                updated.add(bus);
+            }
+            return updated;
+        });
     }
 
     public void removeBus(UUID busId) {
-        if (buses.removeIf(bus -> bus.id().equals(busId))) {
+        editBuses(record -> {
+            List<BusConfig> updated = new ArrayList<>(record.buses());
+            if (!updated.removeIf(bus -> bus.id().equals(busId))) {
+                return null;
+            }
             runner.forget(busId);
-            setChanged();
-        }
+            return updated;
+        });
     }
 
     public Optional<BusConfig> bus(UUID busId) {
-        return buses.stream().filter(bus -> bus.id().equals(busId)).findFirst();
+        return buses().stream().filter(bus -> bus.id().equals(busId)).findFirst();
     }
 
     /** Every link anchored by the Connector at one position. Base is one; Multichannel allows three. */
     public List<BusConfig> linksAt(GlobalPos connector) {
-        return buses.stream().filter(bus -> bus.connector().equals(connector)).toList();
+        return buses().stream().filter(bus -> bus.connector().equals(connector)).toList();
     }
 
     /** Breaking a Connector takes its links with it. SPEC.md §0: the block <em>is</em> the link. */
     public void removeLinksAt(GlobalPos connector) {
-        List<BusConfig> going = linksAt(connector);
-        if (going.isEmpty()) {
+        editBuses(record -> {
+            List<BusConfig> going = record.buses().stream()
+                .filter(bus -> bus.connector().equals(connector)).toList();
+            if (going.isEmpty()) {
+                return null;
+            }
+            going.forEach(bus -> runner.forget(bus.id()));
+            List<BusConfig> updated = new ArrayList<>(record.buses());
+            updated.removeAll(going);
+            return updated;
+        });
+    }
+
+    /**
+     * Every mutation to the link list goes through here: read the current record, compute the new
+     * list, write it back. {@code edit} returns {@code null} for "nothing changed" so a no-op edit
+     * (removing a link that is already gone) does not touch the registry or fire {@code setChanged}.
+     */
+    private void editBuses(java.util.function.Function<WorkbayRecord, List<BusConfig>> edit) {
+        if (!(level instanceof ServerLevel server) || workbayId == null) {
             return;
         }
-        going.forEach(bus -> runner.forget(bus.id()));
-        buses.removeAll(going);
+        RoomRegistry registry = RoomRegistry.get(server.getServer());
+        WorkbayRecord record = registry.byId(workbayId).orElse(null);
+        if (record == null) {
+            return;
+        }
+        List<BusConfig> updated = edit.apply(record);
+        if (updated == null) {
+            return;
+        }
+        registry.put(record.withBuses(updated));
         setChanged();
     }
 
@@ -181,11 +219,13 @@ public class WorkbayBlockEntity extends BlockEntity {
         // Every tick, not only on a wheel step: a rising edge between two steps still has to be
         // seen, or a fast clock on PULSE would be silently ignored.
         workbay.runner.power(server.hasNeighborSignal(pos));
-        if (workbay.buses.isEmpty()) {
-            return;
-        }
-        workbay.record().ifPresent(record ->
-            workbay.runner.tick(server, record, workbay.buses, Math.floorMod(pos.hashCode(), BusRunner.WHEEL)));
+        workbay.record().ifPresent(record -> {
+            if (record.buses().isEmpty()) {
+                return;
+            }
+            workbay.runner.tick(server, record, record.buses(),
+                Math.floorMod(pos.hashCode(), BusRunner.WHEEL));
+        });
 
         // A Connector broken while this Workbay was unloaded could not tell it, so the runner spots
         // the gap instead and the link is swept here, outside the iteration that found it.
@@ -250,10 +290,6 @@ public class WorkbayBlockEntity extends BlockEntity {
             tag.put(ID_KEY, UUIDUtil.CODEC.encodeStart(NbtOps.INSTANCE, workbayId)
                 .getOrThrow(e -> new IllegalStateException("could not write a Workbay id: " + e)));
         }
-        if (!buses.isEmpty()) {
-            tag.put(BUSES_KEY, BusConfig.CODEC.listOf().encodeStart(NbtOps.INSTANCE, List.copyOf(buses))
-                .getOrThrow(e -> new IllegalStateException("could not write a Workbay's buses: " + e)));
-        }
         tag.putInt(ENERGY_KEY, energy.getEnergyStored());
     }
 
@@ -271,13 +307,6 @@ public class WorkbayBlockEntity extends BlockEntity {
         workbayId = tag.contains(ID_KEY)
             ? UUIDUtil.CODEC.parse(NbtOps.INSTANCE, tag.get(ID_KEY)).result().orElse(null)
             : null;
-
-        buses.clear();
-        Tag stored = tag.get(BUSES_KEY);
-        if (stored != null) {
-            buses.addAll(BusConfig.CODEC.listOf().parse(NbtOps.INSTANCE, stored)
-                .result().orElse(List.of()));
-        }
         energy.receiveEnergy(tag.getInt(ENERGY_KEY), false);
     }
 
@@ -291,7 +320,7 @@ public class WorkbayBlockEntity extends BlockEntity {
     protected void collectImplicitComponents(DataComponentMap.Builder components) {
         super.collectImplicitComponents(components);
         record().ifPresent(r -> components.set(WBDataComponents.BINDING.get(),
-            WorkbayBinding.of(r, occupiedBays(), buses.size())));
+            WorkbayBinding.of(r, occupiedBays(), r.buses().size())));
     }
 
     @Override

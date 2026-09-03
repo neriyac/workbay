@@ -127,7 +127,16 @@ public class RoomRegistryTests {
                         // is caught here rather than the first time a player names a bay.
                         "Ore line",
                         com.neryos.workbay.world.RedstoneMode.WITHOUT_SIGNAL),
-                    WorkbayRecord.Bay.empty(1)));
+                    WorkbayRecord.Bay.empty(1)))
+                // Links moved into the registry so they survive breaking the Workbay; this is the
+                // exact bug that move fixed, pinned down so nobody moves them back by accident.
+                .withBuses(List.of(com.neryos.workbay.bus.BusConfig.create(
+                    UUID.fromString("00000000-0000-0000-0000-00000000feed"), 0,
+                    com.neryos.workbay.bus.BusConfig.Resource.ITEM,
+                    com.neryos.workbay.bus.BusConfig.Mode.INSERT,
+                    GlobalPos.of(WorkbayDimensions.BACKSHOP, new BlockPos(1, 2, 3)),
+                    GlobalPos.of(WorkbayDimensions.BACKSHOP, new BlockPos(4, 5, 6)))))
+                .withDeployedCount(1);
             before.put(alice);
 
             RoomRegistry after = RoomRegistry.roundTrip(before, registries);

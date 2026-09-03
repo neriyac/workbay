@@ -152,10 +152,15 @@ public class BusRunner {
         // A link is its Connector. If that chunk is loaded and the block is not there any more, the
         // Connector was broken while this Workbay was unloaded and could not be told. Only ever
         // asked of a chunk already loaded: getBlockState on an unloaded one loads it synchronously.
-        ServerLevel connectorLevel = level.getServer().getLevel(bus.connector().dimension());
-        if (connectorLevel != null && connectorLevel.isLoaded(bus.connector().pos())
-            && !connectorLevel.getBlockState(bus.connector().pos()).is(WBBlocks.CONNECTOR.get())) {
-            return BusStatus.CONNECTOR_GONE;
+        // An internal (bay-to-bay) link has no Connector at all — its "connector" field is the
+        // Workbay's own position, which is never going to hold a Connector block, so this check
+        // would misfire as CONNECTOR_GONE forever if it ran for one.
+        if (!bus.internal()) {
+            ServerLevel connectorLevel = level.getServer().getLevel(bus.connector().dimension());
+            if (connectorLevel != null && connectorLevel.isLoaded(bus.connector().pos())
+                && !connectorLevel.getBlockState(bus.connector().pos()).is(WBBlocks.CONNECTOR.get())) {
+                return BusStatus.CONNECTOR_GONE;
+            }
         }
         BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), bus.bay());
 

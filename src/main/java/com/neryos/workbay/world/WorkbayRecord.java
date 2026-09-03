@@ -35,7 +35,9 @@ public record WorkbayRecord(
     Upgrades upgrades,
     Optional<GlobalPos> lastKnownPos,
     List<Bay> bays,
-    List<UUID> rooms) {
+    List<UUID> rooms,
+    List<com.neryos.workbay.bus.BusConfig> buses,
+    int deployedCount) {
 
     public static final Codec<WorkbayRecord> CODEC = RecordCodecBuilder.create(i -> i.group(
         UUIDUtil.CODEC.fieldOf("Id").forGetter(WorkbayRecord::id),
@@ -47,27 +49,51 @@ public record WorkbayRecord(
         Upgrades.CODEC.fieldOf("Upgrades").forGetter(WorkbayRecord::upgrades),
         GlobalPos.CODEC.optionalFieldOf("LastKnownPos").forGetter(WorkbayRecord::lastKnownPos),
         Bay.CODEC.listOf().fieldOf("Bays").forGetter(WorkbayRecord::bays),
-        UUIDUtil.CODEC.listOf().fieldOf("Rooms").forGetter(WorkbayRecord::rooms)
+        UUIDUtil.CODEC.listOf().fieldOf("Rooms").forGetter(WorkbayRecord::rooms),
+        // Optional and empty by default: a record written before links moved into the registry
+        // reads back with none, which is exactly what it had.
+        com.neryos.workbay.bus.BusConfig.CODEC.listOf().optionalFieldOf("Buses", List.of())
+            .forGetter(WorkbayRecord::buses),
+        // How many live Workbay blocks are currently bound to this record. Read by placement to
+        // decide whether an unbound item may reuse this network or must be refused (SPEC.md §14).
+        Codec.INT.optionalFieldOf("DeployedCount", 0).forGetter(WorkbayRecord::deployedCount)
     ).apply(i, WorkbayRecord::new));
 
     public WorkbayRecord withUpgrades(Upgrades newUpgrades) {
         return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, newUpgrades,
-            lastKnownPos, bays, rooms);
+            lastKnownPos, bays, rooms, buses, deployedCount);
     }
 
     public WorkbayRecord withLastKnownPos(GlobalPos pos) {
         return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
-            Optional.of(pos), bays, rooms);
+            Optional.of(pos), bays, rooms, buses, deployedCount);
     }
 
     public WorkbayRecord withLocked(boolean nowLocked) {
         return new WorkbayRecord(id, code, owner, ownerName, nowLocked, bayColumn, upgrades,
-            lastKnownPos, bays, rooms);
+            lastKnownPos, bays, rooms, buses, deployedCount);
     }
 
     public WorkbayRecord withBays(List<Bay> newBays) {
         return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
-            lastKnownPos, List.copyOf(newBays), rooms);
+            lastKnownPos, List.copyOf(newBays), rooms, buses, deployedCount);
+    }
+
+    public WorkbayRecord withBuses(List<com.neryos.workbay.bus.BusConfig> newBuses) {
+        return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
+            lastKnownPos, bays, rooms, List.copyOf(newBuses), deployedCount);
+    }
+
+    /**
+     * Incremented when a Workbay block genuinely binds to this record and decremented when that
+     * block is genuinely broken (not merely unloaded — {@code WorkbayBlock#onRemove}, not
+     * {@code BlockEntity#setRemoved}). What placement checks before letting an unbound item reuse
+     * this network instead of refusing: {@code maxDeployedWorkbaysPerNetwork} bounds how many
+     * physical front doors may stand open onto the same bays at once.
+     */
+    public WorkbayRecord withDeployedCount(int nowDeployedCount) {
+        return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
+            lastKnownPos, bays, rooms, buses, Math.max(0, nowDeployedCount));
     }
 
     /**

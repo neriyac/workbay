@@ -12,6 +12,8 @@ import com.neryos.workbay.world.FaceConfig;
 import com.neryos.workbay.world.RedstoneMode;
 import com.neryos.workbay.world.RoomRegistry;
 import com.neryos.workbay.world.WorkbayDimensions;
+import com.neryos.workbay.menu.WorkbayAction;
+import com.neryos.workbay.menu.WorkbayMenu;
 import com.neryos.workbay.world.WorkbayRecord;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -26,6 +28,7 @@ import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import java.util.Optional;
 import net.neoforged.testframework.DynamicTest;
 import net.neoforged.testframework.annotation.ForEachTest;
 import net.neoforged.testframework.annotation.TestHolder;
@@ -675,6 +678,78 @@ public class BusTests {
                 .thenExecute(() -> helper.assertValueEqual(
                     countIn(level, targetPos, Items.IRON_INGOT), 0,
                     "items moved by a link nobody switched on"))
+                .thenExecute(() -> tearDown(helper, workbayPos))
+                .thenSucceed();
+        });
+    }
+
+    /**
+     * Bay to bay, no Connector at all — SPEC.md §0's "no physical anchor" rejection was about links
+     * that leave the Workbay, and this one never does. Two bays in the same column, an internal
+     * link from one to the other, and it has to move items exactly like an external one — including
+     * never reporting CONNECTOR_GONE, which is the trap an internal link falls into if the "am I
+     * still anchored" check ever runs for it: its connector field is the Workbay's own position, and
+     * that position is never going to hold a Connector block.
+     */
+    @GameTest(timeoutTicks = 900)
+    @TestHolder(description = "A bay-to-bay link moves items with no Connector anywhere.")
+    public static void aBayToBayLinkMovesItemsWithNoConnector(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.CHEST));
+            RoomRegistry registry = RoomRegistry.get(level.getServer());
+            WorkbayRecord record = workbay.record().orElseThrow();
+            // A second bay to link to. Racking directly, the way setUp racks bay 0, rather than
+            // going through an Expansion Plate item this test does not need to own.
+            registry.put(record.withUpgrades(new WorkbayRecord.Upgrades(1, 0, 0, 0, 0, 0)));
+            record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BayHosting.rack(backshop, record.bayColumn(), 1, new ItemStack(Blocks.CHEST), player,
+                Direction.NORTH);
+
+            BlockPos bay0 = BayGeometry.machinePos(record.bayColumn(), 0);
+            BlockPos bay1 = BayGeometry.machinePos(record.bayColumn(), 1);
+            if (backshop.getBlockEntity(bay0) instanceof Container hosted) {
+                hosted.setItem(0, new ItemStack(Items.IRON_INGOT, 64));
+            }
+
+            // stillValid is a distance check; setUp never moves the mock player near the
+            // Workbay because nothing in this file went through the menu before this test.
+            player.moveTo(workbayPos.getX() + 0.5, workbayPos.getY(), workbayPos.getZ() + 0.5);
+            WorkbayMenu menu = new WorkbayMenu(1, player.getInventory(), workbay,
+                WorkbayMenu.build(workbay, player, 0));
+            menu.act(WorkbayAction.SELECT_BAY, 0, Optional.empty());
+            menu.act(WorkbayAction.CREATE_INTERNAL_LINK, 0, Optional.empty());
+
+            BusConfig created = workbay.buses().stream().filter(BusConfig::internal).findFirst()
+                .orElse(null);
+            if (created == null) {
+                helper.fail("CREATE_INTERNAL_LINK made no internal link");
+                return;
+            }
+            helper.assertValueEqual(created.target().pos(), bay1, "the internal link's target bay");
+            menu.act(WorkbayAction.LINK_TOGGLE_ENABLED, 0, Optional.of(created.id()));
+            workbay.addBus(workbay.bus(created.id()).orElseThrow().withRate(8).withSpeed(10));
+
+            helper.startSequence()
+                .thenWaitUntil(() -> {
+                    if (countIn(backshop, bay1, Items.IRON_INGOT) < 64) {
+                        throw new GameTestAssertException("the internal link has moved "
+                            + countIn(backshop, bay1, Items.IRON_INGOT) + " of 64 iron so far; "
+                            + "status is " + workbay.busStatus(created.id()));
+                    }
+                })
+                .thenExecute(() -> {
+                    if (workbay.busStatus(created.id()) == BusRunner.BusStatus.CONNECTOR_GONE) {
+                        helper.fail("an internal link reported CONNECTOR_GONE — it has no "
+                            + "Connector to be gone");
+                    }
+                })
                 .thenExecute(() -> tearDown(helper, workbayPos))
                 .thenSucceed();
         });

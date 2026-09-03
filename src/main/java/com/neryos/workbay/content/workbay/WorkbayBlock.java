@@ -33,6 +33,8 @@ import net.minecraft.world.level.block.state.properties.EnumProperty;
 import net.minecraft.world.phys.HitResult;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.UUID;
+
 /**
  * The mod. A cabinet holding bays in the Backshop, reachable by bus. SPEC.md §2, §7 and §14.
  *
@@ -93,8 +95,13 @@ public class WorkbayBlock extends BaseEntityBlock {
      * Binding happens here, not in the block entity's constructor, because it is the only point that
      * knows both who placed the block and what the item they placed remembered.
      *
-     * <p>A stack with no binding mints a fresh Workbay and tells the player its code once, in chat,
-     * because that code is the only way back to their machines if the block is ever destroyed.
+     * <p>A stack with no binding — freshly crafted, or one that lost its component — does not
+     * always mint a new network any more (SPEC.md §14). A player already owns at most
+     * {@code maxNetworksPerPlayer}; placing an unbound Workbay reuses the first of those instead,
+     * so losing the physical block is never the end of a base. {@link WorkbayItem} is what refuses
+     * the placement outright when the target network is already at
+     * {@code maxDeployedWorkbaysPerNetwork} — by the time this runs the block already exists, too
+     * late to say no.
      */
     @Override
     public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack) {
@@ -106,28 +113,55 @@ public class WorkbayBlock extends BaseEntityBlock {
 
         RoomRegistry registry = RoomRegistry.get(server.getServer());
         WorkbayBinding binding = stack.get(WBDataComponents.BINDING.get());
+        WorkbayRecord existing = binding != null ? registry.byId(binding.id()).orElse(null) : null;
 
-        if (binding != null && registry.byId(binding.id()).isPresent()) {
-            workbay.bindTo(binding.id());
+        if (existing != null) {
+            registry.put(existing.withDeployedCount(existing.deployedCount() + 1));
+            workbay.bindTo(existing.id());
             workbay.rememberPosition();
             return;
         }
 
-        WorkbayRecord record = registry.create(
-            placer instanceof Player player ? player.getUUID() : java.util.UUID.randomUUID(),
-            placer instanceof Player player ? player.getGameProfile().getName() : "unknown",
-            server.getRandom());
+        UUID ownerId = placer instanceof Player player ? player.getUUID() : UUID.randomUUID();
+        String ownerName = placer instanceof Player player ? player.getGameProfile().getName() : "unknown";
+        WorkbayRecord reused = registry.ownedBy(ownerId).stream().findFirst().orElse(null);
+
+        WorkbayRecord record = reused != null ? reused
+            : registry.create(ownerId, ownerName, server.getRandom());
+        registry.put(record.withDeployedCount(record.deployedCount() + 1));
         workbay.bindTo(record.id());
         workbay.rememberPosition();
 
         if (placer instanceof Player player) {
-            player.sendSystemMessage(WorkbayLang.message("room_created",
-                Component_aqua(record.code())));
+            player.sendSystemMessage(reused != null
+                ? WorkbayLang.message("network_reused", Component_aqua(record.code()))
+                : WorkbayLang.message("room_created", Component_aqua(record.code())));
         }
     }
 
     private static net.minecraft.network.chat.Component Component_aqua(String text) {
         return net.minecraft.network.chat.Component.literal(text).withStyle(ChatFormatting.AQUA);
+    }
+
+    /**
+     * The other half of the deployed count {@link #setPlacedBy} increments. On {@code BlockEntity}
+     * removal, not here: that fires on chunk unload too, and a Workbay whose chunk merely unloaded
+     * has not been given up — the player would come back to find their "lost" network silently
+     * handed to whoever placed next.
+     */
+    @Override
+    protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
+        if (!state.is(newState.getBlock()) && !level.isClientSide
+            && level.getBlockEntity(pos) instanceof WorkbayBlockEntity workbay) {
+            workbay.workbayId().ifPresent(id -> {
+                if (level instanceof ServerLevel server) {
+                    RoomRegistry registry = RoomRegistry.get(server.getServer());
+                    registry.byId(id).ifPresent(record ->
+                        registry.put(record.withDeployedCount(record.deployedCount() - 1)));
+                }
+            });
+        }
+        super.onRemove(state, level, pos, newState, movedByPiston);
     }
 
     /**

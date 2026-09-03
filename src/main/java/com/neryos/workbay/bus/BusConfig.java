@@ -49,7 +49,8 @@ public record BusConfig(
     int speed,
     DyeColor channel,
     boolean enabled,
-    Optional<net.minecraft.resources.ResourceLocation> filter) {
+    Optional<net.minecraft.resources.ResourceLocation> filter,
+    boolean internal) {
 
     /**
      * Legal speeds, in ticks. A fixed list rather than free entry so every one of them divides the
@@ -75,7 +76,12 @@ public record BusConfig(
         DyeColor.CODEC.optionalFieldOf("Channel", DyeColor.WHITE).forGetter(BusConfig::channel),
         Codec.BOOL.optionalFieldOf("Enabled", true).forGetter(BusConfig::enabled),
         net.minecraft.resources.ResourceLocation.CODEC.optionalFieldOf("Filter")
-            .forGetter(BusConfig::filter)
+            .forGetter(BusConfig::filter),
+        // True for a bay-to-bay link with no Connector at all. SPEC.md §0 closed "a link with no
+        // physical anchor cannot be found, broken or audited in the world" against links that leave
+        // the Workbay; that rationale does not reach a link whose both ends are bays in the same
+        // menu you are already looking at. See SPEC.md §4's bay-to-bay note.
+        Codec.BOOL.optionalFieldOf("Internal", false).forGetter(BusConfig::internal)
     ).apply(i, BusConfig::new));
 
     /**
@@ -96,7 +102,19 @@ public record BusConfig(
         GlobalPos connector, GlobalPos target) {
         return new BusConfig(id, resource.defaultName(mode), bay, resource, mode, connector, target,
             Optional.empty(), Optional.empty(), DEFAULT_RATE, DEFAULT_SPEED, DyeColor.WHITE, false,
-            Optional.empty());
+            Optional.empty(), false);
+    }
+
+    /**
+     * Bay to bay, inside one Workbay, no Connector. {@code anchor} is the Workbay's own position —
+     * there is nothing else to anchor an internal link to — and {@code target} is the other bay's
+     * machine position in the same mirrored Backshop column, so every existing capability-cache and
+     * mirroring guarantee the transfer core already has just applies.
+     */
+    public static BusConfig createInternal(UUID id, int bay, GlobalPos anchor, GlobalPos target) {
+        return new BusConfig(id, "Bay link", bay, Resource.ITEM, Mode.INSERT, anchor, target,
+            Optional.empty(), Optional.empty(), DEFAULT_RATE, DEFAULT_SPEED, DyeColor.WHITE, false,
+            Optional.empty(), true);
     }
 
     /**
@@ -106,39 +124,45 @@ public record BusConfig(
      */
     public BusConfig withFilter(Optional<net.minecraft.resources.ResourceLocation> nowFilter) {
         return new BusConfig(id, name, bay, resource, mode, connector, target, targetFace,
-            machineFace, rate, speed, channel, enabled, nowFilter);
+            machineFace, rate, speed, channel, enabled, nowFilter, internal);
     }
 
     public BusConfig withRate(int newRate) {
         return new BusConfig(id, name, bay, resource, mode, connector, target, targetFace,
-            machineFace, newRate, speed, channel, enabled, filter);
+            machineFace, newRate, speed, channel, enabled, filter, internal);
     }
 
     public BusConfig withSpeed(int newSpeed) {
         return new BusConfig(id, name, bay, resource, mode, connector, target, targetFace,
-            machineFace, rate, newSpeed, channel, enabled, filter);
+            machineFace, rate, newSpeed, channel, enabled, filter, internal);
     }
 
     public BusConfig withEnabled(boolean nowEnabled) {
         return new BusConfig(id, name, bay, resource, mode, connector, target, targetFace,
-            machineFace, rate, speed, channel, nowEnabled, filter);
+            machineFace, rate, speed, channel, nowEnabled, filter, internal);
     }
 
     public BusConfig withMode(Mode newMode) {
         return new BusConfig(id, defaultNamed() ? resource.defaultName(newMode) : name, bay,
             resource, newMode, connector, target, targetFace, machineFace, rate, speed, channel,
-            enabled, filter);
+            enabled, filter, internal);
     }
 
     public BusConfig withResource(Resource newResource) {
         return new BusConfig(id, defaultNamed() ? newResource.defaultName(mode) : name, bay,
             newResource, mode, connector, target, targetFace, machineFace, rate, speed, channel,
-            enabled, filter);
+            enabled, filter, internal);
     }
 
     public BusConfig withName(String newName) {
         return new BusConfig(id, newName, bay, resource, mode, connector, target, targetFace,
-            machineFace, rate, speed, channel, enabled, filter);
+            machineFace, rate, speed, channel, enabled, filter, internal);
+    }
+
+    /** Internal only: which bay this link points at. Refused elsewhere for every other kind. */
+    public BusConfig withTarget(GlobalPos newTarget) {
+        return new BusConfig(id, name, bay, resource, mode, connector, newTarget, targetFace,
+            machineFace, rate, speed, channel, enabled, filter, internal);
     }
 
     /** True while the player has not renamed this link, so flipping its type may re-default it. */

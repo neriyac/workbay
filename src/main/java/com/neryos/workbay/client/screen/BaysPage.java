@@ -112,7 +112,10 @@ class BaysPage extends WorkbayPage {
         rackPitch = Math.clamp((height - RACK_Y - 12) / BayGeometry.MAX_BAYS, 20, 26);
         slot = rackPitch - 2;
         linksY = height - LINKS_Y_FROM_BOTTOM < 170 ? 170 : height - LINKS_Y_FROM_BOTTOM;
-        rowY = linksY + 20;
+        // The header row's tallest control (Pair, 18px) reached to linksY+18; rowY-4 is the box's
+        // own top edge, so the old +20 left only 2px of clearance and visually touched. Reported
+        // from play as "no space between Pair/Sort/Filter and the list."
+        rowY = linksY + 28;
         rows = Math.max(2, (height - rowY - 14) / ROW_PITCH);
     }
 
@@ -169,7 +172,9 @@ class BaysPage extends WorkbayPage {
                 WorkbayScreen.gui("power.tip"));
         }
 
-        g.drawString(font, snap.code(), x(8), y(height - 12), Draw.TEXT_FAINT, false);
+        // No room code on screen. SPEC.md §14: a network belongs to a player, and the Workbay finds
+        // it again by owner when it is rebuilt, so there is nothing here for a player to read out,
+        // type in, or lose.
         // The separator between the header band and the working area.
         g.fill(x(6), y(44), x(WIDTH - 6), y(45), Draw.EDGE_DARK);
     }
@@ -324,11 +329,14 @@ class BaysPage extends WorkbayPage {
             WorkbayScreen.gui("redstone." + bay.redstone().getSerializedName() + ".tip"));
 
         // Copy and paste. Eight bays running the same machine is the first complaint this mod will
-        // get, and Mekanism answers it with a Configuration Card (SPEC.md §7).
-        actionButton(g, mouseX, mouseY, x(122), WBIcons.COPY, true,
+        // get, and Mekanism answers it with a Configuration Card (SPEC.md §7). Paper and a book and
+        // quill, because a clipboard is not a Minecraft thing but writing something down to copy it
+        // elsewhere is.
+        itemButton(g, mouseX, mouseY, x(122), net.minecraft.world.item.Items.PAPER, true, true,
             () -> copied = bay.faces(),
             WorkbayScreen.gui("button.copy"), WorkbayScreen.gui("button.copy.tip"));
-        actionButton(g, mouseX, mouseY, x(146), WBIcons.PASTE, copied != null,
+        itemButton(g, mouseX, mouseY, x(146), net.minecraft.world.item.Items.WRITABLE_BOOK,
+            copied != null, copied != null,
             () -> screen.send(WorkbayAction.PASTE_BAY, copied.bits()),
             WorkbayScreen.gui("button.paste"),
             WorkbayScreen.gui(copied == null ? "button.paste.empty" : "button.paste.tip"));
@@ -355,6 +363,30 @@ class BaysPage extends WorkbayPage {
             g.pose().popPose();
         }
         screen.hit(px, y(98), 20, 20, enabled ? onClick : () -> { }, name, tip);
+    }
+
+    private static net.minecraft.world.item.ItemStack resourceItem(BusConfig.Resource resource) {
+        return switch (resource) {
+            case ITEM -> new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.GRASS_BLOCK);
+            case ENERGY -> new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.COAL);
+            case FLUID -> {
+                var water = new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.POTION);
+                water.set(net.minecraft.core.component.DataComponents.POTION_CONTENTS,
+                    new net.minecraft.world.item.alchemy.PotionContents(
+                        Optional.of(net.minecraft.world.item.alchemy.Potions.WATER),
+                        Optional.empty(), java.util.List.of()));
+                yield water;
+            }
+        };
+    }
+
+    /** Every item render in the mod is 16x16; this scales one down to sit where a glyph used to. */
+    private void resourceIcon(GuiGraphics g, BusConfig.Resource resource, int x, int y, float scale) {
+        g.pose().pushPose();
+        g.pose().translate(x, y, 0);
+        g.pose().scale(scale, scale, 1.0F);
+        g.renderItem(resourceItem(resource), 0, 0);
+        g.pose().popPose();
     }
 
     /** A 20x20 button in the machine row: enabled draws lit and clicks, disabled draws sunken. */
@@ -391,7 +423,6 @@ class BaysPage extends WorkbayPage {
 
         // Three 20x18 type buttons. The block shows one resource type at a time, which is why a
         // face can take items in and send energy out without the picture contradicting itself.
-        String[][] icons = { WBIcons.ITEMS, WBIcons.FLUIDS, WBIcons.ENERGY };
         for (int i = 0; i < 3; i++) {
             BusConfig.Resource resource = BusConfig.Resource.values()[i];
             int px = x(232 + i * 23);
@@ -399,7 +430,7 @@ class BaysPage extends WorkbayPage {
             boolean active = faceType == resource;
             boolean hover = screen.hovered(px, py, 20, 18, mouseX, mouseY);
             Draw.button(g, px, py, 20, 18, hover, active);
-            WBIcons.draw(g, icons[i], px + 4, py + 3, active ? Draw.TEXT : Draw.TEXT_DIM);
+            resourceIcon(g, resource, px + 4, py + 3, 0.75F);
             screen.hit(px, py, 20, 18, () -> faceType = resource,
                 WorkbayScreen.gui("faces." + resource.getSerializedName()),
                 WorkbayScreen.gui("faces.tip"));
@@ -423,9 +454,16 @@ class BaysPage extends WorkbayPage {
                     Draw.TEXT_FAINT, false);
             }
         } else {
+            // A face marker projects to wherever its face's centre lands on screen, which at a
+            // steep enough drag angle is genuinely outside the well - the marker is correct, the
+            // well is just not wide enough to contain every angle. Scissored to the well's own
+            // rectangle so a marker (or letter) never spills onto the panel around it, reported
+            // from play as text sticking out of the cube.
+            g.enableScissor(x(WELL_X), y(WELL_Y), x(WELL_X + WELL_W), y(WELL_Y + WELL_H));
             PREVIEW.render(g, state, x(CUBE_CX), y(CUBE_CY), CUBE_SIZE);
             PREVIEW.renderFaces(g, screen.font(), x(CUBE_CX), y(CUBE_CY), CUBE_SIZE,
                 bay.faces(), faceType);
+            g.disableScissor();
         }
 
         var font = screen.font();
@@ -513,6 +551,15 @@ class BaysPage extends WorkbayPage {
         screen.hit(pairX, y(linksY), 46, 18, () -> screen.send(WorkbayAction.PAIR),
             WorkbayScreen.gui("links.pair"), WorkbayScreen.gui("links.pair.tip"));
 
+        // Bay to bay, no Connector: the dashed-arrow flow from the flow map, made from here.
+        int bayLinkX = pairX - 40;
+        boolean bayLinkHover = screen.hovered(bayLinkX, y(linksY), 36, 18, mouseX, mouseY);
+        Draw.button(g, bayLinkX, y(linksY), 36, 18, bayLinkHover, false);
+        WBIcons.draw(g, WBIcons.PLUS, bayLinkX + 3, y(linksY + 3), Draw.TEXT);
+        g.drawString(font, "Bay", bayLinkX + 15, y(linksY + 5), Draw.TEXT, false);
+        screen.hit(bayLinkX, y(linksY), 36, 18, () -> screen.send(WorkbayAction.CREATE_INTERNAL_LINK),
+            WorkbayScreen.gui("links.internal"), WorkbayScreen.gui("links.internal.tip"));
+
         List<WorkbaySnapshot.Link> visible = visibleLinks(snap);
         Draw.well(g, x(LIST_X), y(rowY - 4), LIST_W, rows * ROW_PITCH + 8);
         // Empty rows are drawn as empty rows. SPEC.md §7: the alternative is growing the panel to
@@ -579,12 +626,7 @@ class BaysPage extends WorkbayPage {
         screen.hit(px + 16, py + 4, 10, 10, () -> { },
             statusName(link.status()), statusHelp(link.status()));
 
-        String[] typeIcon = switch (config.resource()) {
-            case ITEM -> WBIcons.ITEMS;
-            case FLUID -> WBIcons.FLUIDS;
-            case ENERGY -> WBIcons.ENERGY;
-        };
-        WBIcons.draw(g, typeIcon, px + 30, py + 3, Draw.TEXT_DIM);
+        resourceIcon(g, config.resource(), px + 30, py + 3, 0.75F);
         screen.hit(px + 30, py + 3, 12, 12,
             () -> screen.send(WorkbayAction.LINK_CYCLE_RESOURCE, config.id()),
             WorkbayScreen.gui("links.type." + config.resource().getSerializedName()),
@@ -609,11 +651,25 @@ class BaysPage extends WorkbayPage {
         g.drawString(font, font.plainSubstrByWidth(config.name(), 50), px + 80, py + 5,
             on ? Draw.TEXT : Draw.TEXT_FAINT, false);
 
-        Component target = link.status().isProblem()
-            ? statusName(link.status())
-            : link.targetBlock().map(BaysPage::displayName).orElse(WorkbayScreen.gui("links.unknown"));
-        g.drawString(font, font.plainSubstrByWidth(target.getString(), 64), px + 136, py + 5,
-            link.status().isProblem() ? statusColour(link.status()) : Draw.TEXT_DIM, false);
+        if (config.internal()) {
+            // Bay to bay: the target is a bay number, not a block, and — unlike every other link —
+            // there is nothing in the world to re-anchor it to, so this is the one target a player
+            // may actually change from the row.
+            String bayTarget = link.targetBay().map(b -> "→ Bay " + (b + 1))
+                .orElse(WorkbayScreen.gui("links.unknown").getString());
+            g.drawString(font, font.plainSubstrByWidth(bayTarget, 64), px + 136, py + 5,
+                link.status().isProblem() ? statusColour(link.status()) : Draw.BLUE, false);
+            screen.hit(px + 136, py + 2, 64, ROW_PITCH - 4,
+                () -> screen.send(WorkbayAction.LINK_CYCLE_TARGET_BAY, config.id()),
+                WorkbayScreen.gui("links.internal.retarget"),
+                WorkbayScreen.gui("links.internal.retarget.tip"));
+        } else {
+            Component target = link.status().isProblem()
+                ? statusName(link.status())
+                : link.targetBlock().map(BaysPage::displayName).orElse(WorkbayScreen.gui("links.unknown"));
+            g.drawString(font, font.plainSubstrByWidth(target.getString(), 64), px + 136, py + 5,
+                link.status().isProblem() ? statusColour(link.status()) : Draw.TEXT_DIM, false);
+        }
 
         filterSlot(g, px + 206, py + 1, config);
 

@@ -232,15 +232,40 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
     protected void renderLabels(GuiGraphics graphics, int mouseX, int mouseY) {
     }
 
+    /**
+     * This mod's tooltips are written as full sentences (SPEC.md §4: "tooltips are where this
+     * mod's text budget is spent"), which routinely run past 300 pixels as one unbroken line —
+     * {@code renderComponentTooltip} does not wrap them. Wrapped here, in the one place every
+     * tooltip in the mod actually renders, rather than at each of the many call sites that build
+     * one.
+     */
+    private static final int TOOLTIP_WIDTH = 200;
+
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partial) {
         super.render(graphics, mouseX, mouseY, partial);
         for (Hit hit : hits) {
             if (hit.tooltip() != null && hit.contains(mouseX, mouseY)) {
-                graphics.renderComponentTooltip(font, hit.tooltip(), mouseX, mouseY);
+                graphics.renderTooltip(font, wrapTooltip(hit.tooltip()), mouseX, mouseY);
                 return;
             }
         }
+    }
+
+    /**
+     * Every tooltip in the mod is (title, explanation) — the same convention vanilla's own item
+     * tooltips use, name bold above grey lore — so the first line is bolded here rather than at
+     * each of the many call sites that build one.
+     */
+    private List<net.minecraft.util.FormattedCharSequence> wrapTooltip(List<Component> lines) {
+        List<net.minecraft.util.FormattedCharSequence> wrapped = new ArrayList<>();
+        for (int i = 0; i < lines.size(); i++) {
+            Component line = i == 0
+                ? lines.get(0).copy().withStyle(style -> style.withBold(true))
+                : lines.get(i);
+            wrapped.addAll(font.split(line, TOOLTIP_WIDTH));
+        }
+        return wrapped;
     }
 
     @Override

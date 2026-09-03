@@ -104,11 +104,32 @@ public class BlockPreview {
             int colour = Draw.roleColour(faces.role(resource, face));
             graphics.fill(at[0] - 6, at[1] - 6, at[0] + 6, at[1] + 6, Draw.EDGE_DARK);
             graphics.fill(at[0] - 5, at[1] - 5, at[0] + 5, at[1] + 5, colour);
-            String letter = String.valueOf(Character.toUpperCase(face.getName().charAt(0)));
+            String letter = label(face);
             graphics.drawString(font, letter, at[0] - font.width(letter) / 2, at[1] - 4,
                 0xFF101214, false);
         }
         pose.popPose();
+    }
+
+    /**
+     * A face's name from the machine's point of view, not the compass's.
+     *
+     * <p>Compass letters were the first thing tried and they are useless here: a bay always racks
+     * its machine facing north ({@code BayHosting.rack}), the preview always opens looking at that
+     * north face, and the player has no way to tell which side of their machine "W" is. Worse, a
+     * chest -- and every other block drawn by a BlockEntityRenderer rather than a baked model --
+     * renders as a featureless box in {@code renderSingleBlock}, so there is no latch or panel to
+     * orient by either. Front and back are the two the player is actually choosing between.
+     */
+    private static String label(Direction face) {
+        return switch (face) {
+            case NORTH -> "F";
+            case SOUTH -> "B";
+            case WEST -> "L";
+            case EAST -> "R";
+            case UP -> "T";
+            case DOWN -> "D";
+        };
     }
 
     /** Which face the player just clicked, or null when the click missed every visible one. */

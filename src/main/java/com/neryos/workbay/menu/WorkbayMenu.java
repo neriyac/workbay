@@ -185,7 +185,22 @@ public class WorkbayMenu extends AbstractContainerMenu {
                 bay -> bay.withName(text.orElse("").strip()));
             case CYCLE_REDSTONE -> editBay(serverPlayer, record,
                 bay -> bay.withRedstone(bay.redstone().next()));
+            case CREATE_INTERNAL_LINK -> createInternalLink(serverPlayer, record);
+            case LINK_CYCLE_TARGET_BAY -> editLink(linkId, link -> link.internal()
+                ? link.withTarget(GlobalPos.of(WorkbayDimensions.BACKSHOP,
+                    BayGeometry.machinePos(record.bayColumn(),
+                        nextOtherBay(record, link.bay(), currentTargetBay(record, link)))))
+                : link);
         }
+        // This menu has no slots (SPEC.md §4), so the vanilla per-tick sync that normally covers
+        // an open menu's slots never touches the player's own inventory while it is open. RACK
+        // shrinks the held stack, EJECT and PAIR change it, and none of that reached the client on
+        // its own — reported from play as a "shadow" item: the client kept showing what the item
+        // looked like before the action, and acting on that stale copy is exactly how an item
+        // sync bug turns into a duplication or loss bug. inventoryMenu.broadcastChanges() is a
+        // normal AbstractContainerMenu, wired to the player's real inventory, and calling it here
+        // forces the same slot diff-and-sync every other menu gets for free once a tick.
+        serverPlayer.inventoryMenu.broadcastChanges();
         refreshNow();
     }
 
@@ -337,6 +352,48 @@ public class WorkbayMenu extends AbstractContainerMenu {
     }
 
     /**
+     * Bay to bay, inside this Workbay, no Connector. SPEC.md §4's dashed-arrow flow made real: the
+     * closed decision that a link needs a physical anchor was about links that leave the block —
+     * both ends of this one are bays in the same menu the player already has open, so there is
+     * nothing in the world to find, break or audit that this screen does not already show.
+     */
+    private void createInternalLink(ServerPlayer serverPlayer, WorkbayRecord record) {
+        int capacity = record.bayCapacity();
+        if (capacity < 2) {
+            serverPlayer.displayClientMessage(
+                com.neryos.workbay.WorkbayLang.message("internal_link_needs_second_bay"), true);
+            return;
+        }
+        int targetBay = nextOtherBay(record, selectedBay, selectedBay);
+        GlobalPos anchor = GlobalPos.of(serverPlayer.level().dimension(), workbay.getBlockPos());
+        GlobalPos target = GlobalPos.of(WorkbayDimensions.BACKSHOP,
+            BayGeometry.machinePos(record.bayColumn(), targetBay));
+        workbay.addBus(BusConfig.createInternal(UUID.randomUUID(), selectedBay, anchor, target));
+    }
+
+    /** Which bay an internal link's {@code target} currently points at, by position. */
+    private static int currentTargetBay(WorkbayRecord record, BusConfig link) {
+        for (int i = 0; i < BayGeometry.MAX_BAYS; i++) {
+            if (BayGeometry.machinePos(record.bayColumn(), i).equals(link.target().pos())) {
+                return i;
+            }
+        }
+        return link.bay();
+    }
+
+    /** The next bay after {@code current} that is not {@code sourceBay} itself, wrapping. */
+    private static int nextOtherBay(WorkbayRecord record, int sourceBay, int current) {
+        int capacity = record.bayCapacity();
+        for (int step = 1; step <= capacity; step++) {
+            int candidate = (current + step) % capacity;
+            if (candidate != sourceBay) {
+                return candidate;
+            }
+        }
+        return current;
+    }
+
+    /**
      * Upgrades are consumed on install and there is no removal path (SPEC.md §1), so this takes the
      * item and never gives it back. Refusing at the cap rather than silently eating it matters.
      */
@@ -386,7 +443,8 @@ public class WorkbayMenu extends AbstractContainerMenu {
         List<WorkbaySnapshot.Link> links = new ArrayList<>();
         for (BusConfig link : workbay.buses()) {
             links.add(new WorkbaySnapshot.Link(link, workbay.busStatus(link.id()),
-                targetBlockOf(player, link)));
+                targetBlockOf(player, link),
+                link.internal() ? Optional.of(currentTargetBay(record, link)) : Optional.empty()));
         }
 
         return new WorkbaySnapshot(record.code(), record.locked(), record.bayCapacity(), selected,

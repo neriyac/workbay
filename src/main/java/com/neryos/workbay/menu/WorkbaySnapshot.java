@@ -92,12 +92,15 @@ public record WorkbaySnapshot(
      * gear opens the same fields and a second, thinner copy would drift from the first.
      */
     public record Link(BusConfig config, BusRunner.BusStatus status,
-        Optional<ResourceLocation> targetBlock) {
+        Optional<ResourceLocation> targetBlock, Optional<Integer> targetBay) {
 
         public static final Codec<Link> CODEC = RecordCodecBuilder.create(i -> i.group(
             BusConfig.CODEC.fieldOf("Config").forGetter(Link::config),
             WBCodecs.ofEnum(BusRunner.BusStatus.class).fieldOf("Status").forGetter(Link::status),
-            ResourceLocation.CODEC.optionalFieldOf("TargetBlock").forGetter(Link::targetBlock)
+            ResourceLocation.CODEC.optionalFieldOf("TargetBlock").forGetter(Link::targetBlock),
+            // Only ever present for an internal (bay-to-bay) link, computed server-side because the
+            // client has no way to invert a Backshop position back into a bay index.
+            Codec.INT.optionalFieldOf("TargetBay").forGetter(Link::targetBay)
         ).apply(i, Link::new));
     }
 

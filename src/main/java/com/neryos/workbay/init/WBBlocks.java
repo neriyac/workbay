@@ -5,6 +5,7 @@ import com.neryos.workbay.content.connector.ConnectorBlock;
 import com.neryos.workbay.content.connector.ConnectorItem;
 import com.neryos.workbay.content.port.PortBlock;
 import com.neryos.workbay.content.workbay.WorkbayBlock;
+import com.neryos.workbay.content.workbay.WorkbayItem;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.SoundType;
@@ -21,12 +22,7 @@ public class WBBlocks {
     /** Block items. Plain items live in {@link WBItems}. */
     public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(Workbay.MOD_ID);
 
-    public static final DeferredBlock<WorkbayBlock> WORKBAY = registerWithItem("workbay", WorkbayBlock::new,
-        BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK)
-            .mapColor(MapColor.COLOR_BLACK)
-            .sound(SoundType.METAL)
-            .strength(3.5F)
-            .noOcclusion());
+    public static final DeferredBlock<WorkbayBlock> WORKBAY = registerWorkbay();
 
     /**
      * Generated into a bay, never given to a player. No BlockItem at all, so it cannot be crafted,
@@ -47,6 +43,22 @@ public class WBBlocks {
             .noLootTable()
             .pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK)
             .isValidSpawn((state, level, pos, type) -> false)));
+
+    /**
+     * Its BlockItem is custom (not {@code registerWithItem}) so it can refuse a placement that
+     * would exceed {@code maxDeployedWorkbaysPerNetwork} before the block ever goes down, rather
+     * than placing it and then having to take it back.
+     */
+    private static DeferredBlock<WorkbayBlock> registerWorkbay() {
+        var holder = BLOCKS.registerBlock("workbay", WorkbayBlock::new,
+            BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK)
+                .mapColor(MapColor.COLOR_BLACK)
+                .sound(SoundType.METAL)
+                .strength(3.5F)
+                .noOcclusion());
+        ITEMS.register("workbay", () -> new WorkbayItem(holder.get(), new net.minecraft.world.item.Item.Properties()));
+        return holder;
+    }
 
     private static DeferredBlock<ConnectorBlock> registerConnector() {
         var holder = BLOCKS.registerBlock("connector", ConnectorBlock::new,

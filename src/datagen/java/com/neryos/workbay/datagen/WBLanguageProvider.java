@@ -31,11 +31,19 @@ public class WBLanguageProvider extends LanguageProvider {
         addItem(WBItems.RESONATOR, "Resonator");
         addItem(WBItems.MULTICHANNEL, "Multichannel Upgrade");
 
-        // Chat, one-shot. SPEC.md §6.
-        add(WorkbayLang.messageKey("room_created"), "Workbay %s created. Write this code down \u2014 "
-            + "if you lose the block, an operator can get you back in with it.");
+        // Chat, one-shot. SPEC.md §6 and §14's network model: a Workbay belongs to the player who
+        // placed it, not to the specific item, so there is no code to lose.
+        add(WorkbayLang.messageKey("room_created"), "Workbay %s created and bound to your account. "
+            + "Lose the block and a fresh, uncrafted Workbay picks the same one back up.");
+        add(WorkbayLang.messageKey("network_reused"), "Workbay %s reconnected \u2014 same bays, "
+            + "same links, same upgrades as before.");
+        add(WorkbayLang.messageKey("network_cap_reached"), "You already own the maximum of %s "
+            + "Workbay network(s). Break one before starting another.");
+        add(WorkbayLang.messageKey("network_deployed_full"), "This network already has %s Workbay(s) "
+            + "placed. Break one of them before placing another.");
         add(WorkbayLang.messageKey("break_warning"), "Breaking this Workbay leaves its bays behind. "
-            + "The machines keep running; you'll need code %s to get back in.");
+            + "The machines keep running \u2014 place any fresh Workbay to get back in, or find "
+            + "this one again with code %s.");
         add(WorkbayLang.messageKey("locked"), "This Workbay is locked.");
 
         // Insert rejections. Action bar, RED. SPEC.md §6: say what happened, then why, then what
@@ -167,6 +175,14 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("links.pair"), "Pair a Connector");
         add(WorkbayLang.guiKey("links.pair.tip"), "Pairs the Connector in your hand to this Workbay "
             + "and the selected bay. Place it on the block you want linked.");
+        add(WorkbayLang.guiKey("links.internal"), "Link a bay");
+        add(WorkbayLang.guiKey("links.internal.tip"), "Adds a link from the selected bay straight "
+            + "to another one, with no Connector and nothing to place in the world.");
+        add(WorkbayLang.guiKey("links.internal.retarget"), "Change which bay");
+        add(WorkbayLang.guiKey("links.internal.retarget.tip"), "Click to point this link at the "
+            + "next bay instead.");
+        add(WorkbayLang.messageKey("internal_link_needs_second_bay"), "This Workbay only has one "
+            + "bay. Install an Expansion Plate before linking bay to bay.");
         add(WorkbayLang.guiKey("links.filter.this_bay"), "Showing: this bay");
         add(WorkbayLang.guiKey("links.filter.all_bays"), "Showing: all bays");
         add(WorkbayLang.guiKey("links.filter.problems"), "Showing: problems only");
