@@ -91,6 +91,15 @@ class BaysPage extends WorkbayPage {
     /** Kept between openings, so the angle a player turned a machine to is still there next time. */
     private static final BlockPreview PREVIEW = new BlockPreview();
 
+    /**
+     * Which bay and machine {@link #PREVIEW}'s angle belongs to. Keeping the angle is right for the
+     * machine the player turned and wrong for the next one: racking a block, or switching bays, was
+     * showing whatever side the last one had been left on, which for a chest is its back. The angle
+     * now survives a re-open and resets the moment the thing in the well is a different thing.
+     */
+    @org.jetbrains.annotations.Nullable
+    private static String previewSubject;
+
     private int scroll;
     @org.jetbrains.annotations.Nullable
     private UUID openGear;
@@ -358,6 +367,11 @@ class BaysPage extends WorkbayPage {
         // The machine's own block, at whatever angle the player has dragged it to. Not a drawn
         // cube: somebody configuring an Enrichment Chamber's faces needs to see one.
         BlockState state = blockFor(bay.hosted());
+        String subject = bay.index() + ":" + bay.hosted().map(ResourceLocation::toString).orElse("");
+        if (!subject.equals(previewSubject)) {
+            previewSubject = subject;
+            PREVIEW.reset();
+        }
         if (state == null) {
             // Wrapped, because the well is 68 wide and this sentence is not.
             var lines = screen.font().split(WorkbayScreen.gui("faces.empty"), WELL_W - 8);

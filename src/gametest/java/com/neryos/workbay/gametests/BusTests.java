@@ -12,7 +12,6 @@ import com.neryos.workbay.world.FaceConfig;
 import com.neryos.workbay.world.RoomRegistry;
 import com.neryos.workbay.world.WorkbayDimensions;
 import com.neryos.workbay.world.WorkbayRecord;
-import com.neryos.workbay.world.WorkbayTickets;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
@@ -56,7 +55,9 @@ public class BusTests {
         WorkbayRecord record = workbay.record().orElseThrow();
 
         ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
-        WorkbayTickets.force(backshop, record.id(), record.bayColumn());
+        // Deliberately NOT force-loaded here. SPEC.md §12's mirroring is the mod's job, and while
+        // this line was in the harness it did that job on the mod's behalf - so every test passed
+        // against a bay column no real world ever loads.
         BayHosting.rack(backshop, record.bayColumn(), 0, inTheBay, player, Direction.NORTH);
         return workbay;
     }
@@ -92,7 +93,6 @@ public class BusTests {
             workbay.record().ifPresent(record -> {
                 ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
                 BayHosting.eject(backshop, record.bayColumn(), 0, null);
-                WorkbayTickets.release(backshop, record.id(), record.bayColumn());
             });
         }
         level.setBlock(workbayPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
@@ -462,6 +462,51 @@ public class BusTests {
                         "gold that reached the target past an iron-only filter");
                     helper.assertValueEqual(countIn(backshop, machinePos, Items.GOLD_INGOT), 16,
                         "gold left in the hosted chest");
+                })
+                .thenExecute(() -> tearDown(helper, workbayPos))
+                .thenSucceed();
+        });
+    }
+
+    /**
+     * The mod's whole promise, with nothing staged: place a Workbay, rack a machine, point a link
+     * at a chest, and it works — <b>without the test loading the Backshop chunk for itself.</b>
+     *
+     * <p>Reported from play. Every link on a freshly placed Workbay said the machine was
+     * unreachable, because SPEC.md §12's mirroring was specified, marked built, and never written:
+     * nothing in the mod ever registered a ticket, so the bay column was simply never loaded. The
+     * gametests could not see it, because their own setup force-loaded the column first.
+     */
+    @GameTest(timeoutTicks = 900)
+    @TestHolder(description = "A hosted machine is reachable without anyone force-loading its chunk.")
+    public static void aFreshlyPlacedWorkbayLoadsItsOwnBayColumn(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos targetPos = helper.absolutePos(new BlockPos(4, 1, 4));
+
+            level.setBlock(targetPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.CHEST));
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+            if (backshop.getBlockEntity(machinePos) instanceof Container hosted) {
+                hosted.setItem(0, new ItemStack(Items.IRON_INGOT, 8));
+            }
+
+            BusConfig link = connect(helper, workbay, targetPos.above(), Direction.DOWN, player);
+            workbay.addBus(link.withRate(8).withSpeed(10));
+
+            helper.startSequence()
+                .thenWaitUntil(() -> {
+                    if (countIn(level, targetPos, Items.IRON_INGOT) < 8) {
+                        throw new GameTestAssertException("nothing reached the chest; the link says "
+                            + workbay.busStatus(link.id()) + " and the bay column is "
+                            + (backshop.isLoaded(machinePos) ? "loaded" : "NOT loaded"));
+                    }
                 })
                 .thenExecute(() -> tearDown(helper, workbayPos))
                 .thenSucceed();

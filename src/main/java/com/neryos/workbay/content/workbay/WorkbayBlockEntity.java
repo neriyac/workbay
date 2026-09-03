@@ -5,7 +5,9 @@ import com.neryos.workbay.bus.BusRunner;
 import com.neryos.workbay.init.WBBlockEntities;
 import com.neryos.workbay.init.WBDataComponents;
 import com.neryos.workbay.world.RoomRegistry;
+import com.neryos.workbay.world.WorkbayDimensions;
 import com.neryos.workbay.world.WorkbayRecord;
+import com.neryos.workbay.world.WorkbayTickets;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.HolderLookup;
@@ -43,6 +45,9 @@ public class WorkbayBlockEntity extends BlockEntity {
 
     private final List<BusConfig> buses = new ArrayList<>();
     private final BusRunner runner = new BusRunner(() -> !isRemoved());
+
+    /** Whether this Workbay currently holds SPEC.md §12's mirroring ticket on its bay column. */
+    private boolean mirroring;
 
     /**
      * SPEC.md §9's buffer, accepted on any face and never handing energy back out of the block.
@@ -150,7 +155,13 @@ public class WorkbayBlockEntity extends BlockEntity {
      */
     public static void serverTick(net.minecraft.world.level.Level level, BlockPos pos,
         BlockState state, WorkbayBlockEntity workbay) {
-        if (!(level instanceof ServerLevel server) || workbay.buses.isEmpty()) {
+        if (!(level instanceof ServerLevel server)) {
+            return;
+        }
+        // Before the links, and whether or not there are any: a hosted machine has to tick even
+        // with nothing pointed at it.
+        workbay.mirror(server);
+        if (workbay.buses.isEmpty()) {
             return;
         }
         workbay.record().ifPresent(record ->
@@ -164,9 +175,46 @@ public class WorkbayBlockEntity extends BlockEntity {
         }
     }
 
+    /**
+     * SPEC.md §12's mirroring: <b>the bay column is loaded exactly while the Workbay's own chunk
+     * is.</b> Costs nothing a player is not already paying for, and it is what makes a hosted
+     * machine reachable at all — without it the Backshop chunk is never loaded, every link reports
+     * that the machine is unreachable, and the mod does not work outside a test that force-loads
+     * the chunk for itself.
+     *
+     * <p>On the tick rather than in {@code onLoad}: forcing sync-loads a chunk in another
+     * dimension, which is not something to do from inside a chunk load.
+     */
+    private void mirror(ServerLevel server) {
+        if (mirroring) {
+            return;
+        }
+        ServerLevel backshop = server.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+        WorkbayRecord record = record().orElse(null);
+        if (backshop == null || record == null) {
+            return;
+        }
+        WorkbayTickets.force(backshop, record.id(), record.bayColumn());
+        mirroring = true;
+    }
+
+    /**
+     * {@code setRemoved} is called both when the block is broken and when its chunk unloads, which
+     * is exactly the pair of events mirroring is defined by. Keeping the column loaded past either
+     * is the Anchor's job, and the Anchor is not built.
+     */
     @Override
     public void setRemoved() {
         super.setRemoved();
+        if (mirroring && level instanceof ServerLevel server) {
+            mirroring = false;
+            ServerLevel backshop = server.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            record().ifPresent(record -> {
+                if (backshop != null) {
+                    WorkbayTickets.release(backshop, record.id(), record.bayColumn());
+                }
+            });
+        }
         // Every endpoint cache holds a ServerLevel reference. Dropping them here is what stops a
         // removed Workbay keeping another dimension's level object alive.
         runner.invalidate();
