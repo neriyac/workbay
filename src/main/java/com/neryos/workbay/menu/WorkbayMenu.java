@@ -502,7 +502,9 @@ public class WorkbayMenu extends AbstractContainerMenu {
 
         return new WorkbaySnapshot(record.code(), record.locked(), record.bayCapacity(), selected,
             workbay.energy().getEnergyStored(), workbay.energy().getMaxEnergyStored(),
-            bays, links, record.upgrades(), record.assay().levy(), record.assay().rate());
+            bays, links, record.upgrades(), record.assay().levy(), record.assay().rate(),
+            record.deployedCount(),
+            com.neryos.workbay.config.WorkbayConfig.SERVER.maxDeployedWorkbaysPerNetwork.get());
     }
 
     private static WorkbaySnapshot.Bay readBay(WorkbayRecord record, int index,

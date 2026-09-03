@@ -38,10 +38,17 @@ public record WorkbaySnapshot(
     /** Levy banked by this network's Assay, not items in anyone's pockets. SPEC.md §3. */
     int levy,
     /** The skim, as a whole percent. Drawn at rest on the bays screen and on every item row. */
-    int skimRate) {
+    int skimRate,
+    /**
+     * How many Workbay blocks of this network stand in the world, and how many the server allows.
+     * On the screen because the cap is invisible otherwise: a player finds out by crafting a second
+     * Workbay, carrying it somewhere and having the placement refused. SPEC.md §14.
+     */
+    int deployed,
+    int maxDeployed) {
 
     public static final WorkbaySnapshot EMPTY = new WorkbaySnapshot("", false, 1, 0, 0, 1,
-        List.of(), List.of(), WorkbayRecord.Upgrades.NONE, 0, 0);
+        List.of(), List.of(), WorkbayRecord.Upgrades.NONE, 0, 0, 1, 1);
 
     public static final Codec<WorkbaySnapshot> CODEC = RecordCodecBuilder.create(i -> i.group(
         Codec.STRING.fieldOf("Code").forGetter(WorkbaySnapshot::code),
@@ -54,7 +61,9 @@ public record WorkbaySnapshot(
         Link.CODEC.listOf().fieldOf("Links").forGetter(WorkbaySnapshot::links),
         WorkbayRecord.Upgrades.CODEC.fieldOf("Upgrades").forGetter(WorkbaySnapshot::upgrades),
         Codec.INT.fieldOf("Levy").forGetter(WorkbaySnapshot::levy),
-        Codec.INT.fieldOf("SkimRate").forGetter(WorkbaySnapshot::skimRate)
+        Codec.INT.fieldOf("SkimRate").forGetter(WorkbaySnapshot::skimRate),
+        Codec.INT.fieldOf("Deployed").forGetter(WorkbaySnapshot::deployed),
+        Codec.INT.fieldOf("MaxDeployed").forGetter(WorkbaySnapshot::maxDeployed)
     ).apply(i, WorkbaySnapshot::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, WorkbaySnapshot> STREAM_CODEC =

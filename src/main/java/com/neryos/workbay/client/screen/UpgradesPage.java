@@ -80,6 +80,17 @@ class UpgradesPage extends WorkbayPage {
         g.drawString(font, WorkbayScreen.gui("upgrades.rate",
                 com.neryos.workbay.content.workbay.WorkbayBlockEntity.MAX_FE_PER_TICK).getString(),
             x(WELL_X), y(WELL_Y + WELL_H + 44), Draw.TEXT_FAINT, false);
+
+        // How many of this network's Workbays are standing, out of how many the server allows.
+        // Drawn on the first one a player builds, because the cap is otherwise invisible until they
+        // have crafted a second, carried it somewhere and had the placement refused.
+        boolean full = snap.deployed() >= snap.maxDeployed();
+        g.drawString(font,
+            WorkbayScreen.gui("upgrades.deployed", snap.deployed(), snap.maxDeployed()).getString(),
+            x(WELL_X), y(WELL_Y + WELL_H + 56), full ? Draw.AMBER : Draw.TEXT_FAINT, false);
+        screen.hit(x(WELL_X), y(WELL_Y + WELL_H + 54), WELL_W, 12, () -> { },
+            WorkbayScreen.gui("upgrades.deployed", snap.deployed(), snap.maxDeployed()),
+            WorkbayScreen.gui(full ? "upgrades.deployed.full" : "upgrades.deployed.tip"));
     }
 
     @Override

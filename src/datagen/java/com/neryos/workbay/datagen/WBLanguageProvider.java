@@ -305,6 +305,12 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("flow.legend.stalled"), "stalled");
 
         add(WorkbayLang.guiKey("upgrades.rate"), "Accepts up to %s FE/t");
+        add(WorkbayLang.guiKey("upgrades.deployed"), "Workbays placed: %s / %s");
+        add(WorkbayLang.guiKey("upgrades.deployed.tip"), "How many Workbay blocks of this network "
+            + "stand in the world. Every one of them opens onto the same bays, links and upgrades.");
+        add(WorkbayLang.guiKey("upgrades.deployed.full"), "This network is at its limit. Placing "
+            + "another Workbay is refused and the item stays in your hand — break this one "
+            + "first, or raise maxDeployedWorkbaysPerNetwork in the server config.");
         add(WorkbayLang.guiKey("upgrades.levy"), "Levy: %s");
         add(WorkbayLang.guiKey("upgrades.cost"), "Costs %s Levy, taken from this Workbay's balance "
             + "when you install it. The next one costs more.");

@@ -117,6 +117,13 @@ public class NetworkTests {
                 helper.fail("the block went down at " + second + " despite the item's own "
                     + "useOn refusing the placement");
             }
+            // And the player keeps it. A refusal that eats the item is worse than no refusal at
+            // all: the Workbay is expensive, the cap is invisible until you hit it, and losing the
+            // block to a rule you could not see is how a player stops playing a mod. This is the
+            // reason the gate lives on the item's useOn and returns before super.useOn -- one
+            // helper.assertValueEqual is what keeps it there.
+            helper.assertValueEqual(fresh.getCount(), 1,
+                "Workbays left in hand after a refused placement");
             helper.succeed();
         });
     }
