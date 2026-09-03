@@ -116,6 +116,11 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("redstone.pulse"), "Redstone: pulse");
         add(WorkbayLang.guiKey("redstone.pulse.tip"), "One operation each time the signal turns on, "
             + "so a clock moves exactly one load per tick of the clock.");
+        // The forms that share a 130-pixel line with the bay's status.
+        add(WorkbayLang.guiKey("redstone.short.always"), "");
+        add(WorkbayLang.guiKey("redstone.short.with_signal"), "with signal");
+        add(WorkbayLang.guiKey("redstone.short.without_signal"), "no signal");
+        add(WorkbayLang.guiKey("redstone.short.pulse"), "pulse");
         add(WorkbayLang.guiKey("status.held_by_redstone"), "Held");
         add(WorkbayLang.guiKey("status.held_by_redstone.tip"), "Waiting on this bay's redstone "
             + "mode. Nothing is wrong; this is what you asked it to do.");

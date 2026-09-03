@@ -289,13 +289,17 @@ class BaysPage extends WorkbayPage {
                 Draw.TEXT_FAINT, false);
         }
 
-        g.drawString(font, font.plainSubstrByWidth(statusLine(bay).getString(), room),
-            x(98), y(82), statusColour(bay.state()), false);
-        if (bay.redstone() != com.neryos.workbay.world.RedstoneMode.ALWAYS) {
-            String mode = WorkbayScreen.gui(
-                "redstone." + bay.redstone().getSerializedName()).getString();
+        // The redstone mode shares this line with the status, right-aligned, and it is the short
+        // form: "Redstone: without a signal" is 156 pixels on a line 130 wide and ran straight
+        // through the status text. The long form is the button's tooltip title.
+        String mode = bay.redstone() == com.neryos.workbay.world.RedstoneMode.ALWAYS ? ""
+            : WorkbayScreen.gui("redstone.short." + bay.redstone().getSerializedName()).getString();
+        if (!mode.isEmpty()) {
             g.drawString(font, mode, x(FACES_X - 4 - font.width(mode)), y(82), Draw.TEXT_DIM, false);
         }
+        int statusRoom = room - (mode.isEmpty() ? 0 : font.width(mode) + 6);
+        g.drawString(font, font.plainSubstrByWidth(statusLine(bay).getString(), statusRoom),
+            x(98), y(82), statusColour(bay.state()), false);
 
         // The button row at y=98, 20x20 on a 24px pitch. Bay View is not here: SPEC.md §4 says a
         // control whose screen is not built is hidden, not drawn faint, because faint is honest for
@@ -305,11 +309,15 @@ class BaysPage extends WorkbayPage {
             () -> screen.send(WorkbayAction.EJECT),
             WorkbayScreen.gui("button.eject"), WorkbayScreen.gui("button.eject.tip"));
         boolean unlocked = bay.state() != WorkbaySnapshot.State.LOCKED;
-        actionButton(g, mouseX, mouseY, x(74), WBIcons.RENAME, unlocked,
+        itemButton(g, mouseX, mouseY, x(74), net.minecraft.world.item.Items.NAME_TAG, unlocked, true,
             () -> screen.beginRename(x(98), y(53), room, 14, bay.name(),
                 typed -> screen.sendText(WorkbayAction.SET_BAY_NAME, typed)),
             WorkbayScreen.gui("button.rename"), WorkbayScreen.gui("button.rename.tip"));
-        actionButton(g, mouseX, mouseY, x(98), WBIcons.REDSTONE, unlocked,
+        // The dust is lit only while the gate is actually in use, so the button says which state
+        // it is in before the player hovers it.
+        boolean gated = bay.redstone() != com.neryos.workbay.world.RedstoneMode.ALWAYS;
+        itemButton(g, mouseX, mouseY, x(98), net.minecraft.world.item.Items.REDSTONE, unlocked,
+            gated,
             () -> screen.send(WorkbayAction.CYCLE_REDSTONE),
             WorkbayScreen.gui("redstone." + bay.redstone().getSerializedName()),
             WorkbayScreen.gui("redstone." + bay.redstone().getSerializedName() + ".tip"));
@@ -323,6 +331,29 @@ class BaysPage extends WorkbayPage {
             () -> screen.send(WorkbayAction.PASTE_BAY, copied.bits()),
             WorkbayScreen.gui("button.paste"),
             WorkbayScreen.gui(copied == null ? "button.paste.empty" : "button.paste.tip"));
+    }
+
+    /**
+     * The same button with the game's own item sprite on it. A name tag and a redstone dust say
+     * "rename" and "redstone" to anyone who has played Minecraft, which no 12x12 grid we draw by
+     * hand is going to beat. Kept to controls that have an obvious vanilla item — the three
+     * resource-type buttons stay drawn glyphs so they read as one set.
+     */
+    private void itemButton(GuiGraphics g, int mouseX, int mouseY, int px,
+        net.minecraft.world.item.Item icon, boolean enabled, boolean lit, Runnable onClick,
+        Component name, Component tip) {
+        boolean hover = screen.hovered(px, y(98), 20, 20, mouseX, mouseY);
+        Draw.button(g, px, y(98), 20, 20, hover && enabled, lit && enabled, enabled);
+        g.renderItem(new ItemStack(icon), px + 2, y(100));
+        // An item sprite cannot be tinted, so "off" and "disabled" are washes over the top rather
+        // than dimmer colours -- above the item's own layer, or they draw underneath it.
+        if (!enabled || !lit) {
+            g.pose().pushPose();
+            g.pose().translate(0, 0, 300);
+            g.fill(px + 1, y(99), px + 19, y(117), enabled ? 0x99202329 : 0xC0202329);
+            g.pose().popPose();
+        }
+        screen.hit(px, y(98), 20, 20, enabled ? onClick : () -> { }, name, tip);
     }
 
     /** A 20x20 button in the machine row: enabled draws lit and clicks, disabled draws sunken. */
@@ -473,8 +504,11 @@ class BaysPage extends WorkbayPage {
         int pairX = x(LIST_X + LIST_W - 46);
         boolean pairHover = screen.hovered(pairX, y(linksY), 46, 18, mouseX, mouseY);
         Draw.button(g, pairX, y(linksY), 46, 18, pairHover, false);
-        WBIcons.draw(g, WBIcons.PLUS, pairX + 3, y(linksY + 3), Draw.TEXT);
-        g.drawString(font, "Pair", pairX + 17, y(linksY + 5), Draw.TEXT, false);
+        // The Connector's own item, because the button only does anything while you are holding
+        // one and a plus sign does not say that.
+        g.renderItem(new ItemStack(com.neryos.workbay.init.WBBlocks.CONNECTOR.get()),
+            pairX + 1, y(linksY + 1));
+        g.drawString(font, "Pair", pairX + 20, y(linksY + 5), Draw.TEXT, false);
         screen.hit(pairX, y(linksY), 46, 18, () -> screen.send(WorkbayAction.PAIR),
             WorkbayScreen.gui("links.pair"), WorkbayScreen.gui("links.pair.tip"));
 
