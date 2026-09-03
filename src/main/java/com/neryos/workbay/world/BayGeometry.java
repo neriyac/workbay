@@ -53,6 +53,32 @@ public final class BayGeometry {
         return false;
     }
 
+    /**
+     * Which bay a position falls inside, or -1 for the gap between bays and anything outside them.
+     * The inverse of {@link #shellOrigin}, and the only one there will ever be.
+     */
+    public static int bayAt(BlockPos pos) {
+        int offset = pos.getY() - FIRST_FLOOR_Y;
+        int bay = Math.floorDiv(offset, BAY_PITCH);
+        return bay >= 0 && bay < MAX_BAYS && offset - bay * BAY_PITCH < SHELL ? bay : -1;
+    }
+
+    /**
+     * The machine a Port stands against, or null when this is not a Port.
+     *
+     * <p>Exists because a Port is the machine's <b>door</b> as well as its socket: the six of them
+     * seal the machine on every face, so a player standing in the bay cannot right-click it
+     * directly and the Port has to pass the click through.
+     */
+    public static BlockPos machineBehind(BlockPos portPos) {
+        int bay = bayAt(portPos);
+        if (bay < 0) {
+            return null;
+        }
+        ChunkPos column = new ChunkPos(portPos);
+        return isPort(column, bay, portPos) ? machinePos(column, bay) : null;
+    }
+
     /** Highest block a bay occupies, so callers can check the dimension is tall enough. */
     public static int topY(int bay) {
         return FIRST_FLOOR_Y + bay * BAY_PITCH + SHELL - 1;

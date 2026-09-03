@@ -3,6 +3,7 @@ package com.neryos.workbay;
 import com.neryos.workbay.config.WorkbayConfig;
 import com.neryos.workbay.host.HostChecks;
 import com.neryos.workbay.host.HostResult;
+import com.neryos.workbay.init.WBAttachments;
 import com.neryos.workbay.init.WBBlockEntities;
 import com.neryos.workbay.init.WBBlocks;
 import com.neryos.workbay.init.WBCapabilities;
@@ -35,6 +36,7 @@ public class Workbay {
         WBDataComponents.register(modEventBus);
         WBCreativeTabs.register(modEventBus);
         WBMenus.register(modEventBus);
+        WBAttachments.register(modEventBus);
         WorkbayTickets.register(modEventBus);
         modEventBus.addListener(WBCapabilities::register);
 

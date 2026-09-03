@@ -6,6 +6,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.LevelReader;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.HitResult;
@@ -49,5 +50,62 @@ public class PortBlock extends Block {
     @Override
     protected boolean isPathfindable(BlockState state, net.minecraft.world.level.pathfinder.PathComputationType type) {
         return false;
+    }
+
+    /**
+     * A Port is the machine's door as well as its socket.
+     *
+     * <p>Six Ports seal the hosted block on every face, so a player who has stepped into the bay
+     * (SPEC.md §5) is standing next to a machine they physically cannot click. Rather than move a
+     * Port, take one away, or change geometry SPEC.md §8 has baked into saved worlds, the Port
+     * forwards the click to the block behind it — so a right-click in a bay is an ordinary
+     * right-click on the machine, and every mod's own screen opens with no per-mod code.
+     *
+     * <p><b>This is the only place the machine's own GUI can be reached from.</b> Opening it
+     * remotely from the overworld does not work and is not a matter of tuning: the client resolves
+     * the menu's block entity out of the one level it has, finds nothing, and disconnects. Standing
+     * here, the client <em>is</em> in the Backshop with the chunk loaded, so the same lookup
+     * succeeds. See OPEN_ISSUES "Facts worth not rediscovering".
+     */
+    @Override
+    protected net.minecraft.world.InteractionResult useWithoutItem(BlockState state, Level level,
+        BlockPos pos, Player player, net.minecraft.world.phys.BlockHitResult hit) {
+        BlockState hosted = behind(level, pos);
+        return hosted == null ? net.minecraft.world.InteractionResult.PASS
+            : hosted.useWithoutItem(level, player, onMachine(level, pos, hit));
+    }
+
+    /** The same door, for a player holding something — a wrench, a configurator, an upgrade. */
+    @Override
+    protected net.minecraft.world.ItemInteractionResult useItemOn(ItemStack stack, BlockState state,
+        Level level, BlockPos pos, Player player, net.minecraft.world.InteractionHand hand,
+        net.minecraft.world.phys.BlockHitResult hit) {
+        BlockState hosted = behind(level, pos);
+        return hosted == null ? net.minecraft.world.ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION
+            : hosted.useItemOn(stack, level, player, hand, onMachine(level, pos, hit));
+    }
+
+    private static BlockState behind(Level level, BlockPos pos) {
+        BlockPos machine = com.neryos.workbay.world.BayGeometry.machineBehind(pos);
+        if (machine == null) {
+            return null;
+        }
+        BlockState hosted = level.getBlockState(machine);
+        return hosted.isAir() ? null : hosted;
+    }
+
+    /**
+     * The click, moved onto the machine. The face is the one this Port covers, worked out from
+     * where the machine actually is rather than from the Port's own hit face — the player is
+     * clicking the Port from inside the bay, so its hit face points back at them.
+     */
+    private static net.minecraft.world.phys.BlockHitResult onMachine(Level level, BlockPos pos,
+        net.minecraft.world.phys.BlockHitResult hit) {
+        BlockPos machine = com.neryos.workbay.world.BayGeometry.machineBehind(pos);
+        net.minecraft.core.Direction face = net.minecraft.core.Direction.fromDelta(
+            pos.getX() - machine.getX(), pos.getY() - machine.getY(), pos.getZ() - machine.getZ());
+        return new net.minecraft.world.phys.BlockHitResult(
+            net.minecraft.world.phys.Vec3.atCenterOf(machine),
+            face == null ? hit.getDirection() : face, machine, false);
     }
 }

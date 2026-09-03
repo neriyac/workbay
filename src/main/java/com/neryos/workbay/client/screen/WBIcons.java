@@ -91,6 +91,22 @@ public final class WBIcons {
         "............",
     };
 
+    /** Stepping through a doorway: the arrow is the player, the frame is the bay. */
+    public static final String[] ENTER = {
+        "............",
+        "......#####.",
+        "......#...#.",
+        "......#...#.",
+        "...#..#...#.",
+        "...##.....#.",
+        "#####.....#.",
+        "...##.....#.",
+        "...#..#...#.",
+        "......#...#.",
+        "......#####.",
+        "............",
+    };
+
     public static final String[] EJECT = {
         "............",
         ".....##.....",

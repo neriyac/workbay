@@ -201,6 +201,15 @@ public class WorkbayMenu extends AbstractContainerMenu {
                         com.neryos.workbay.WorkbayLang.message("bayview_unreachable"), true);
                 }
             }
+            case ENTER_BAY -> {
+                // Closing first: the player is about to be somewhere this menu's stillValid would
+                // refuse anyway, and a screen left open over a teleport is how you get a ghost.
+                serverPlayer.closeContainer();
+                if (!com.neryos.workbay.world.BayVisit.enter(serverPlayer, record, selectedBay)) {
+                    serverPlayer.displayClientMessage(
+                        com.neryos.workbay.WorkbayLang.message("bay_enter_failed"), true);
+                }
+            }
             case CREATE_INTERNAL_LINK -> createInternalLink(serverPlayer, record, (int) arg);
             case LINK_ASSIGN_BAY -> {
                 int bay = (int) arg;

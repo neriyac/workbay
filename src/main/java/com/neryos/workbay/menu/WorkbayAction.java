@@ -50,5 +50,11 @@ public enum WorkbayAction {
      * Opens Bay View on the selected bay (SPEC.md §5). A second menu rather than a page of this
      * one: it is the only screen in the mod with real slots, and this menu deliberately has none.
      */
-    OPEN_BAY_VIEW
+    OPEN_BAY_VIEW,
+    /**
+     * Puts the player inside the selected bay, next to the real block (SPEC.md §5). The only way to
+     * reach a hosted machine's own screen: opening it remotely disconnects the client, and Bay View
+     * can only ever show what a capability exposes.
+     */
+    ENTER_BAY
 }

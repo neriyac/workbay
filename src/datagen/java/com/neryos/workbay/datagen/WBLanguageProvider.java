@@ -351,6 +351,16 @@ public class WBLanguageProvider extends LanguageProvider {
             + "put things in and take them out by hand, without a link.");
         add(WorkbayLang.messageKey("bayview_unreachable"), "Nothing in this bay answers by hand. "
             + "A machine with no item slots is reached by a link or not at all.");
+        // Entering the bay. SPEC.md §5: the machine's own screen is reachable only by standing in
+        // front of it, so this is the one control that answers "how do I upgrade the thing".
+        add(WorkbayLang.guiKey("button.enter"), "Enter bay");
+        add(WorkbayLang.guiKey("button.enter.tip"), "Steps you into the bay. Right-click a Port "
+            + "there and the machine's own screen opens - recipe modes, side configuration and "
+            + "upgrade slots, drawn by the mod that made it. Hold sneak to come back.");
+        add(WorkbayLang.messageKey("bay_entered"),
+            "Right-click a Port for the machine's own screen. Hold sneak to come back.");
+        add(WorkbayLang.messageKey("bay_leaving"), "Leaving the bay...");
+        add(WorkbayLang.messageKey("bay_enter_failed"), "That bay cannot be entered.");
         add(WorkbayLang.guiKey("levy"), "Levy %s");
         add(WorkbayLang.guiKey("levy.name"), "Levy banked: %s");
         add(WorkbayLang.guiKey("levy.batch"), "%s / %s to the next");
