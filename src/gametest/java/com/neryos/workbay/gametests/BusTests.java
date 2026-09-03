@@ -353,4 +353,65 @@ public class BusTests {
                 .thenSucceed();
         });
     }
+
+    /**
+     * The case actually reported: <b>both</b> directions marked on the cube — one face in, the
+     * opposite face out — two links on the same bay, and nothing moved. Both links are live at
+     * once here, which is the part a single-link test cannot see: the machine end is one
+     * {@link com.neryos.workbay.bus.BusEndpoint} shared per bay, with one bound face, and the two
+     * links want different ones.
+     */
+    @GameTest(timeoutTicks = 900)
+    @TestHolder(description = "Two links on one bay, one in face and one out face, both move.")
+    public static void anInAndAnOutFaceOnOneBayBothWork(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(7, 5, 7));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos sendTo = helper.absolutePos(new BlockPos(6, 1, 6));
+            BlockPos pullFrom = helper.absolutePos(new BlockPos(6, 1, 0));
+
+            level.setBlock(sendTo, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            level.setBlock(pullFrom, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            if (level.getBlockEntity(pullFrom) instanceof Container source) {
+                source.setItem(0, new ItemStack(Items.GOLD_INGOT, 32));
+            }
+
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.CHEST));
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+            if (backshop.getBlockEntity(machinePos) instanceof Container hosted) {
+                hosted.setItem(0, new ItemStack(Items.IRON_INGOT, 64));
+            }
+
+            // West in, east out. Exactly what was set in play.
+            RoomRegistry.get(level.getServer()).put(record.withBay(record.bay(0).withFaces(
+                FaceConfig.NONE
+                    .cycled(BusConfig.Resource.ITEM, Direction.WEST)
+                    .cycled(BusConfig.Resource.ITEM, Direction.EAST)
+                    .cycled(BusConfig.Resource.ITEM, Direction.EAST))));
+            workbay.forgetBay(0);
+
+            BusConfig send = connect(helper, workbay, sendTo.above(), Direction.DOWN, player);
+            workbay.addBus(send.withRate(8).withSpeed(10));
+            BusConfig pull = connect(helper, workbay, pullFrom.above(), Direction.DOWN, player);
+            workbay.addBus(pull.withMode(BusConfig.Mode.EXTRACT).withRate(8).withSpeed(10));
+
+            helper.startSequence()
+                .thenWaitUntil(() -> {
+                    int sent = countIn(level, sendTo, Items.IRON_INGOT);
+                    int pulled = countIn(backshop, machinePos, Items.GOLD_INGOT);
+                    if (sent < 64 || pulled < 32) {
+                        throw new GameTestAssertException("sent " + sent + "/64 iron ("
+                            + workbay.busStatus(send.id()) + "), pulled " + pulled + "/32 gold ("
+                            + workbay.busStatus(pull.id()) + ")");
+                    }
+                })
+                .thenExecute(() -> tearDown(helper, workbayPos))
+                .thenSucceed();
+        });
+    }
 }
