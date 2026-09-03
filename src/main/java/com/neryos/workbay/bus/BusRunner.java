@@ -40,6 +40,9 @@ public class BusRunner {
     private final Map<Integer, BusEndpoint<IEnergyStorage>> machineEnergy = new HashMap<>();
     private final Map<UUID, BusStatus> statuses = new HashMap<>();
 
+    private static final java.util.Set<Direction> EVERY_FACE =
+        java.util.EnumSet.allOf(Direction.class);
+
     private int delay = WHEEL;
 
     public BusRunner(BooleanSupplier alive) {
@@ -133,6 +136,14 @@ public class BusRunner {
         // as it did before the config existed.
         java.util.Set<Direction> faces = record.bay(bus.bay()).faces()
             .usable(bus.resource(), bus.mode() == BusConfig.Mode.INSERT);
+        // Configured, but not for this direction of travel. Reported here rather than left to fall
+        // through as IDLE: a link that can never move anything is not resting, and telling the
+        // player nothing is wrong while their face config silently kills the link is the worst
+        // outcome the cube can have. Found in play, then reproduced by
+        // aFaceConfigThatBlocksALinkIsReported.
+        if (faces.isEmpty()) {
+            return BusStatus.MACHINE_NO_FACE;
+        }
 
         return switch (bus.resource()) {
             case ITEM -> runItems(bus, targetLevel, target.pos(), backshop, machinePos, faces);
@@ -155,20 +166,23 @@ public class BusRunner {
         if (!targetEnd.targetLoaded()) {
             return BusStatus.TARGET_NOT_LOADED;
         }
-        IItemHandler from;
-        IItemHandler to;
-        if (bus.mode() == BusConfig.Mode.INSERT) {
-            from = machineEnd.resolve(BusRunner::hasAnything, faces);
-            to = targetEnd.resolve(h -> h.getSlots() > 0);
-        } else {
-            from = targetEnd.resolve(BusRunner::hasAnything);
-            to = machineEnd.resolve(h -> h.getSlots() > 0, faces);
-        }
+        boolean insert = bus.mode() == BusConfig.Mode.INSERT;
+        BusEndpoint<IItemHandler> source = insert ? machineEnd : targetEnd;
+        BusEndpoint<IItemHandler> sink = insert ? targetEnd : machineEnd;
+        java.util.Set<Direction> sourceFaces = insert ? faces : EVERY_FACE;
+        java.util.Set<Direction> sinkFaces = insert ? EVERY_FACE : faces;
+
+        IItemHandler to = sink.resolve(h -> h.getSlots() > 0, sinkFaces);
         if (to == null) {
-            return BusStatus.TARGET_NO_PORT;
+            return insert ? BusStatus.TARGET_NO_PORT : BusStatus.MACHINE_NO_PORT;
         }
+        IItemHandler from = source.resolve(BusRunner::hasAnything, sourceFaces);
         if (from == null) {
-            return BusStatus.IDLE;
+            // Nothing came out. Two very different reasons, and one message for both is how a
+            // dead link spends a session looking like a resting one.
+            boolean anyHandler = source.resolve(h -> h.getSlots() > 0, sourceFaces) != null;
+            return anyHandler ? BusStatus.IDLE
+                : insert ? BusStatus.MACHINE_NO_PORT : BusStatus.TARGET_NO_PORT;
         }
         return BusTransfer.moveItems(from, to, bus.rate()) > 0 ? BusStatus.RUNNING : BusStatus.IDLE;
     }
@@ -185,20 +199,21 @@ public class BusRunner {
         if (!targetEnd.targetLoaded()) {
             return BusStatus.TARGET_NOT_LOADED;
         }
-        IEnergyStorage from;
-        IEnergyStorage to;
-        if (bus.mode() == BusConfig.Mode.INSERT) {
-            from = machineEnd.resolve(IEnergyStorage::canExtract, faces);
-            to = targetEnd.resolve(IEnergyStorage::canReceive);
-        } else {
-            from = targetEnd.resolve(IEnergyStorage::canExtract);
-            to = machineEnd.resolve(IEnergyStorage::canReceive, faces);
-        }
+        boolean insert = bus.mode() == BusConfig.Mode.INSERT;
+        BusEndpoint<IEnergyStorage> source = insert ? machineEnd : targetEnd;
+        BusEndpoint<IEnergyStorage> sink = insert ? targetEnd : machineEnd;
+        java.util.Set<Direction> sourceFaces = insert ? faces : EVERY_FACE;
+        java.util.Set<Direction> sinkFaces = insert ? EVERY_FACE : faces;
+
+        IEnergyStorage to = sink.resolve(IEnergyStorage::canReceive, sinkFaces);
         if (to == null) {
-            return BusStatus.TARGET_NO_PORT;
+            return insert ? BusStatus.TARGET_NO_PORT : BusStatus.MACHINE_NO_PORT;
         }
+        IEnergyStorage from = source.resolve(IEnergyStorage::canExtract, sourceFaces);
         if (from == null) {
-            return BusStatus.IDLE;
+            boolean anyHandler = source.resolve(store -> true, sourceFaces) != null;
+            return anyHandler ? BusStatus.IDLE
+                : insert ? BusStatus.MACHINE_NO_PORT : BusStatus.TARGET_NO_PORT;
         }
         return BusTransfer.moveEnergy(from, to, bus.rate()) > 0 ? BusStatus.RUNNING : BusStatus.IDLE;
     }
@@ -221,12 +236,15 @@ public class BusRunner {
      * SPEC.md §4 requires the three failing ones to be visually distinct on the LINKS row.
      */
     public enum BusStatus {
-        RUNNING, IDLE, DISABLED, CONNECTOR_GONE, TARGET_MISSING, TARGET_NOT_LOADED, TARGET_NO_PORT;
+        RUNNING, IDLE, DISABLED, CONNECTOR_GONE, TARGET_MISSING, TARGET_NOT_LOADED, TARGET_NO_PORT,
+        /** The hosted machine answers on none of the faces this link may use. */
+        MACHINE_NO_PORT,
+        /** The bay's cube has faces set, but none for this link's direction of travel. */
+        MACHINE_NO_FACE;
 
         /** True for a status the player has to do something about. Drives the problem count. */
         public boolean isProblem() {
-            return this == CONNECTOR_GONE || this == TARGET_MISSING || this == TARGET_NOT_LOADED
-                || this == TARGET_NO_PORT;
+            return this != RUNNING && this != IDLE && this != DISABLED;
         }
     }
 }

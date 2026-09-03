@@ -72,6 +72,8 @@
   "gui.workbay.links.type.tip": "Click to change what this link carries.",
   "gui.workbay.links.unknown": "not loaded",
   "gui.workbay.power": "%s / %s FE",
+  "gui.workbay.power.machine.tip": "Energy stored in this machine.",
+  "gui.workbay.power.none": "No power",
   "gui.workbay.power.tip": "Energy stored in the Workbay itself. Hosted machines keep their own.",
   "gui.workbay.status.connector_gone": "Connector gone",
   "gui.workbay.status.connector_gone.tip": "The Connector this link hangs off has been broken. The row clears itself shortly.",

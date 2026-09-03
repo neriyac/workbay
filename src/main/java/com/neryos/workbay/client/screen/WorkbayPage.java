@@ -103,12 +103,12 @@ abstract class WorkbayPage {
 
     /**
      * A control that is drawn where SPEC.md §4 puts it but does nothing yet, because what it opens
-     * is a later section. Drawn at 40% with a tooltip saying so — a screen that hides its unbuilt
-     * controls tells the player less than one that admits to them.
+     * is a later section. Drawn <em>disabled</em>, with the sunken unlit chrome every other
+     * disabled control uses, and a tooltip saying so.
      */
     protected void unbuiltButton(GuiGraphics g, int px, int py, int size, String[] icon,
         Component name, Component why) {
-        Draw.button(g, px, py, size, size, false, false);
+        Draw.button(g, px, py, size, size, false, false, false);
         WBIcons.draw(g, icon, px + (size - 12) / 2, py + (size - 12) / 2, Draw.TEXT_FAINT);
         screen.hit(px, py, size, size, () -> { }, name, why);
     }

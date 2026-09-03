@@ -82,6 +82,8 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("power"), "%s / %s FE");
         add(WorkbayLang.guiKey("power.tip"), "Energy stored in the Workbay itself. Hosted machines "
             + "keep their own.");
+        add(WorkbayLang.guiKey("power.machine.tip"), "Energy stored in this machine.");
+        add(WorkbayLang.guiKey("power.none"), "No power");
 
         add(WorkbayLang.guiKey("button.upgrades"), "Upgrades");
         add(WorkbayLang.guiKey("button.upgrades.tip"), "Install Expansion Plates, a Resonator or a "
@@ -182,6 +184,13 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("status.target_no_port"), "No port");
         add(WorkbayLang.guiKey("status.target_no_port.tip"), "The target is there but has nothing "
             + "this link can connect to on any face.");
+        add(WorkbayLang.guiKey("status.machine_no_port"), "Machine unreachable");
+        add(WorkbayLang.guiKey("status.machine_no_port.tip"), "The hosted machine answers on none "
+            + "of the faces this link may use. Check the cube, or eject and re-rack it.");
+        add(WorkbayLang.guiKey("status.machine_no_face"), "No face for this");
+        add(WorkbayLang.guiKey("status.machine_no_face.tip"), "This bay has faces set, but none "
+            + "marked for this link's direction. Mark one in on the cube for a link that pulls, "
+            + "or out for one that sends. Setting every face back to unset uses whichever answers.");
 
         add(WorkbayLang.guiKey("flow.empty"), "No machines racked yet.");
         add(WorkbayLang.guiKey("flow.unknown"), "not loaded");

@@ -1,12 +1,14 @@
 package com.neryos.workbay.gametests;
 
 import com.neryos.workbay.bus.BusConfig;
+import com.neryos.workbay.bus.BusRunner;
 import com.neryos.workbay.content.connector.ConnectorBlock;
 import com.neryos.workbay.content.workbay.WorkbayBlock;
 import com.neryos.workbay.content.workbay.WorkbayBlockEntity;
 import com.neryos.workbay.init.WBBlocks;
 import com.neryos.workbay.world.BayGeometry;
 import com.neryos.workbay.world.BayHosting;
+import com.neryos.workbay.world.FaceConfig;
 import com.neryos.workbay.world.RoomRegistry;
 import com.neryos.workbay.world.WorkbayDimensions;
 import com.neryos.workbay.world.WorkbayRecord;
@@ -241,6 +243,110 @@ public class BusTests {
                     int moved = countIn(level, targetPos, Items.IRON_INGOT);
                     if (moved > 4) {
                         helper.fail("the first operation moved " + moved + " items with a rate of 4");
+                    }
+                })
+                .thenExecute(() -> tearDown(helper, workbayPos))
+                .thenSucceed();
+        });
+    }
+
+    /**
+     * Reported from play, not from reading: a chest hosted in a bay with one face set to <b>in</b>
+     * refused to send anything and the row said nothing was wrong, while another row said
+     * <code>No port</code> without saying which end had none.
+     *
+     * <p>Both halves are asserted here. A link whose direction of travel the face config forbids
+     * must not report {@code IDLE} — idle means "working, nothing to do right now", and a link that
+     * can never work is not idle. And a link blocked at the machine end must not report a status
+     * whose name blames the target.
+     */
+    @GameTest(timeoutTicks = 400)
+    @TestHolder(description = "A face config that forbids a link's direction is reported, not silently idle.")
+    public static void aFaceConfigThatBlocksALinkIsReported(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos targetPos = helper.absolutePos(new BlockPos(4, 1, 4));
+
+            level.setBlock(targetPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.CHEST));
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+            if (backshop.getBlockEntity(machinePos) instanceof Container hosted) {
+                hosted.setItem(0, new ItemStack(Items.IRON_INGOT, 64));
+            }
+
+            // Exactly what was set in play: one face, in, for items. Nothing marked out.
+            RoomRegistry.get(level.getServer()).put(record.withBay(
+                record.bay(0).withFaces(FaceConfig.NONE.cycled(BusConfig.Resource.ITEM, Direction.WEST))));
+            workbay.forgetBay(0);
+
+            BusConfig link = connect(helper, workbay, targetPos.above(), Direction.DOWN, player);
+            workbay.addBus(link.withRate(8).withSpeed(10));
+            java.util.UUID id = link.id();
+
+            helper.startSequence()
+                .thenIdle(60)
+                .thenExecute(() -> {
+                    BusRunner.BusStatus status = workbay.busStatus(id);
+                    if (status == BusRunner.BusStatus.IDLE) {
+                        helper.fail("a link the face config forbids reported IDLE, so the player is "
+                            + "told nothing is wrong while it can never move anything");
+                    }
+                    if (!status.isProblem()) {
+                        helper.fail("a link that can never work reported " + status
+                            + ", which the screen does not count as a problem");
+                    }
+                    helper.assertValueEqual(countIn(level, targetPos, Items.IRON_INGOT), 0,
+                        "items that reached the target");
+                })
+                .thenExecute(() -> tearDown(helper, workbayPos))
+                .thenSucceed();
+        });
+    }
+
+    /**
+     * The other half of the same report: with one face set to <b>in</b>, pulling into the hosted
+     * chest is exactly what the player configured, so it has to work.
+     */
+    @GameTest(timeoutTicks = 900)
+    @TestHolder(description = "An in face lets an extract link fill the hosted machine through it.")
+    public static void anInputFaceLetsAnExtractLinkThrough(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos targetPos = helper.absolutePos(new BlockPos(4, 1, 4));
+
+            level.setBlock(targetPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            if (level.getBlockEntity(targetPos) instanceof Container source) {
+                source.setItem(0, new ItemStack(Items.GOLD_INGOT, 32));
+            }
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.CHEST));
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+
+            RoomRegistry.get(level.getServer()).put(record.withBay(
+                record.bay(0).withFaces(FaceConfig.NONE.cycled(BusConfig.Resource.ITEM, Direction.WEST))));
+            workbay.forgetBay(0);
+
+            BusConfig link = connect(helper, workbay, targetPos.above(), Direction.DOWN, player);
+            workbay.addBus(link.withMode(BusConfig.Mode.EXTRACT).withRate(16).withSpeed(10));
+
+            helper.startSequence()
+                .thenWaitUntil(() -> {
+                    if (countIn(backshop, machinePos, Items.GOLD_INGOT) < 32) {
+                        throw new GameTestAssertException("the bus has pulled "
+                            + countIn(backshop, machinePos, Items.GOLD_INGOT) + " of 32 gold in "
+                            + "through the one face marked in; status is "
+                            + workbay.busStatus(link.id()));
                     }
                 })
                 .thenExecute(() -> tearDown(helper, workbayPos))

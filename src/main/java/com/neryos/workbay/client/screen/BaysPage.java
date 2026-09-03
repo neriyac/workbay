@@ -135,11 +135,21 @@ class BaysPage extends WorkbayPage {
         g.drawString(font, problems == 0 ? "no problems" : problems + " problem" + (problems == 1 ? "" : "s"),
             textX + 112, y(31), problems == 0 ? Draw.TEXT_FAINT : Draw.RED, false);
 
-        g.drawString(font, "Power", x(216), y(31), Draw.TEXT_DIM, false);
-        Draw.bar(g, x(250), y(29), 44, 9, snap.energy(), snap.energyCapacity(), Draw.AMBER);
-        screen.hit(x(250), y(29), 44, 9, () -> { },
-            WorkbayScreen.gui("power", snap.energy(), snap.energyCapacity()),
-            WorkbayScreen.gui("power.tip"));
+        // A bar with no figure beside it reads as broken, and an empty one reads as broken twice
+        // over, so with no capacity at all the words replace the bar entirely (SPEC.md §7).
+        boolean powered = snap.energyCapacity() > 0;
+        String power = powered
+            ? Draw.compact(snap.energy()) + " / " + Draw.compact(snap.energyCapacity())
+            : WorkbayScreen.gui("power.none").getString();
+        g.drawString(font, power, x(246 - font.width(power)), y(31),
+            powered ? Draw.TEXT_DIM : Draw.TEXT_FAINT, false);
+        if (powered) {
+            Draw.bar(g, x(250), y(29), 44, 9, snap.energy(), snap.energyCapacity(), Draw.AMBER);
+            screen.hit(x(250), y(29), 44, 9, () -> { },
+                WorkbayScreen.gui("power", Draw.exact(snap.energy()),
+                    Draw.exact(snap.energyCapacity())),
+                WorkbayScreen.gui("power.tip"));
+        }
 
         g.drawString(font, snap.code(), x(8), y(height - 12), Draw.TEXT_FAINT, false);
         // The separator between the header band and the working area.
@@ -161,7 +171,7 @@ class BaysPage extends WorkbayPage {
             if (selected) {
                 g.fill(x(RACK_X - 2), py, x(RACK_X + 1), py + slot, Draw.SELECT);
             }
-            Draw.well(g, px, py, slot, slot);
+            Draw.slot(g, px, py, slot, slot);
             if (hover && !locked) {
                 g.fill(px + 1, py + 1, px + slot - 1, py + slot - 1, 0x33FFFFFF);
             }
@@ -218,7 +228,7 @@ class BaysPage extends WorkbayPage {
 
         int slotX = x(50);
         int slotY = y(52);
-        Draw.well(g, slotX, slotY, 40, 40);
+        Draw.slot(g, slotX, slotY, 40, 40);
         ItemStack icon = iconFor(bay.hosted());
         if (!icon.isEmpty()) {
             g.pose().pushPose();
@@ -246,10 +256,20 @@ class BaysPage extends WorkbayPage {
                 : displayName(bay.hosted().orElseThrow()).getString(), room),
             x(98), y(56), Draw.TEXT, false);
 
-        Draw.bar(g, x(98), y(68), 84, 9, bay.energy(), bay.energyCapacity(), Draw.AMBER);
-        String power = bay.energyCapacity() == 0 ? "—"
-            : Draw.compact(bay.energy()) + " / " + Draw.compact(bay.energyCapacity());
-        g.drawString(font, power, x(FACES_X - 4 - font.width(power)), y(69), Draw.TEXT_DIM, false);
+        if (bay.energyCapacity() > 0) {
+            Draw.bar(g, x(98), y(68), 84, 9, bay.energy(), bay.energyCapacity(), Draw.AMBER);
+            String power = Draw.compact(bay.energy()) + " / " + Draw.compact(bay.energyCapacity());
+            g.drawString(font, power, x(FACES_X - 4 - font.width(power)), y(69), Draw.TEXT_DIM, false);
+            screen.hit(x(98), y(68), 84, 9, () -> { },
+                WorkbayScreen.gui("power", Draw.exact(bay.energy()),
+                    Draw.exact(bay.energyCapacity())),
+                WorkbayScreen.gui("power.machine.tip"));
+        } else if (!empty) {
+            // A machine with no energy handler. The old placeholder was a bare dash floating
+            // beside an empty bar, which read as a rendering fault rather than as a fact.
+            g.drawString(font, WorkbayScreen.gui("power.none").getString(), x(98), y(69),
+                Draw.TEXT_FAINT, false);
+        }
 
         g.drawString(font, font.plainSubstrByWidth(statusLine(bay).getString(), room),
             x(98), y(82), statusColour(bay.state()), false);
@@ -261,7 +281,7 @@ class BaysPage extends WorkbayPage {
             WorkbayScreen.gui("button.bay_view"), WorkbayScreen.gui("unbuilt"));
         boolean canEject = !empty;
         boolean hoverEject = screen.hovered(x(74), y(98), 20, 20, mouseX, mouseY);
-        Draw.button(g, x(74), y(98), 20, 20, hoverEject && canEject, false);
+        Draw.button(g, x(74), y(98), 20, 20, hoverEject && canEject, false, canEject);
         WBIcons.draw(g, WBIcons.EJECT, x(78), y(102), canEject ? Draw.TEXT : Draw.TEXT_FAINT);
         if (canEject) {
             screen.hit(x(74), y(98), 20, 20, () -> screen.send(WorkbayAction.EJECT),
@@ -414,6 +434,12 @@ class BaysPage extends WorkbayPage {
 
         List<WorkbaySnapshot.Link> visible = visibleLinks(snap);
         Draw.well(g, x(LIST_X), y(rowY - 4), LIST_W, rows * ROW_PITCH + 8);
+        // Empty rows are drawn as empty rows. SPEC.md §7: the alternative is growing the panel to
+        // fit the list, which moves every control under the player's cursor as links are added.
+        for (int emptyRow = 0; emptyRow < rows; emptyRow++) {
+            int ruleY = y(rowY + emptyRow * ROW_PITCH) + ROW_PITCH - 2;
+            g.fill(x(LIST_X + 4), ruleY, x(LIST_X + LIST_W - 10), ruleY + 1, 0x12FFFFFF);
+        }
 
         if (visible.isEmpty()) {
             g.drawString(font, WorkbayScreen.gui("links.none").getString(),
@@ -453,7 +479,8 @@ class BaysPage extends WorkbayPage {
             g.fill(px, py, px + LIST_W - 14, py + ROW_PITCH - 2, 0x18FFFFFF);
         }
 
-        g.fill(px, py + 4, px + 10, py + 14, statusColour(link.status()));
+        g.fill(px, py + 4, px + 10, py + 14, Draw.EDGE_DARK);
+        g.fill(px + 1, py + 5, px + 9, py + 13, statusColour(link.status()));
         screen.hit(px, py + 4, 10, 10, () -> { },
             statusName(link.status()), statusHelp(link.status()));
 
@@ -558,7 +585,9 @@ class BaysPage extends WorkbayPage {
             case IDLE -> Draw.BLUE;
             case DISABLED -> Draw.GREY;
             case TARGET_MISSING, CONNECTOR_GONE -> Draw.RED;
-            case TARGET_NOT_LOADED, TARGET_NO_PORT -> Draw.AMBER;
+            // Amber is "you can fix this from here". The face config and an unreachable machine
+            // both are; a target that has gone is not.
+            case TARGET_NOT_LOADED, TARGET_NO_PORT, MACHINE_NO_PORT, MACHINE_NO_FACE -> Draw.AMBER;
         };
     }
 

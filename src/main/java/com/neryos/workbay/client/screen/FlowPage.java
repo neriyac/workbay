@@ -175,7 +175,7 @@ class FlowPage extends WorkbayPage {
             case IDLE -> Draw.EDGE_LIGHT;
             case DISABLED -> Draw.GREY;
             case TARGET_MISSING, CONNECTOR_GONE -> Draw.RED;
-            case TARGET_NOT_LOADED, TARGET_NO_PORT -> Draw.AMBER;
+            case TARGET_NOT_LOADED, TARGET_NO_PORT, MACHINE_NO_PORT, MACHINE_NO_FACE -> Draw.AMBER;
         };
     }
 

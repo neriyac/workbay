@@ -4,25 +4,37 @@ import com.neryos.workbay.world.FaceConfig;
 import net.minecraft.client.gui.GuiGraphics;
 
 /**
- * Every shape the three screens are made of. SPEC.md §4.
+ * Every shape the three screens are made of. SPEC.md §4 and §7.
  *
  * <p>Drawn from rectangles rather than a background PNG. That is not a shortcut: the layout in
  * SPEC.md §4 is explicitly a starting point rather than a freeze, and a hand-cut texture makes
  * every later nudge a round trip through an image editor. It also means the status colours are one
  * palette in one file instead of pixels somebody has to match by eye.
+ *
+ * <p><b>Nothing outside this class draws a bare rectangle.</b> SPEC.md §7's screen-chrome rules
+ * come down to one thing — everything has a light top-left edge and a dark bottom-right one — and
+ * they hold only if there is exactly one place that knows how.
  */
 public final class Draw {
     private Draw() {}
 
     // The palette. One place, so a status colour cannot mean two things in two screens.
     public static final int PANEL = 0xFF2B2E33;
-    public static final int PANEL_LIGHT = 0xFF3A3E45;
+    public static final int PANEL_LIGHT = 0xFF3D424A;
+    /** A big content area: the links list, the face preview. Content sits inside it. */
     public static final int WELL = 0xFF191B1F;
-    public static final int EDGE_LIGHT = 0xFF4E535C;
-    public static final int EDGE_DARK = 0xFF14161A;
-    public static final int TEXT = 0xFFE6E8EC;
-    public static final int TEXT_DIM = 0xFF9298A3;
-    public static final int TEXT_FAINT = 0xFF5F6672;
+    /** One slot. Lighter than a well on purpose — a black square reads as a hole, not a slot. */
+    public static final int SLOT = 0xFF212429;
+
+    // Far enough apart to survive a dark panel. At one pixel, a one-shade edge is no edge.
+    public static final int EDGE_LIGHT = 0xFF6A7280;
+    public static final int EDGE_DARK = 0xFF0D0F12;
+
+    /** Two weights, per SPEC.md §7: bright for what the player acts on, dim for labels. */
+    public static final int TEXT = 0xFFF0F2F5;
+    public static final int TEXT_DIM = 0xFFA6AEBA;
+    /** The third exists only for disabled, and disabled must look disabled. */
+    public static final int TEXT_FAINT = 0xFF636A76;
 
     public static final int GREEN = 0xFF4CC46A;
     public static final int BLUE = 0xFF4C8FD6;
@@ -31,35 +43,69 @@ public final class Draw {
     public static final int GREY = 0xFF565C66;
     public static final int SELECT = 0xFF5AA9E6;
 
+    /**
+     * The one helper SPEC.md §7 asks for. Raised puts the light edge top-left, sunken flips it;
+     * that single difference is what separates a button from a slot at a glance.
+     */
+    public static void bevel(GuiGraphics g, int x, int y, int w, int h, boolean raised) {
+        bevel(g, x, y, w, h, raised, EDGE_LIGHT, EDGE_DARK);
+    }
+
+    public static void bevel(GuiGraphics g, int x, int y, int w, int h, boolean raised,
+        int light, int dark) {
+        int topLeft = raised ? light : dark;
+        int bottomRight = raised ? dark : light;
+        g.fill(x, y, x + w, y + 1, topLeft);
+        g.fill(x, y, x + 1, y + h, topLeft);
+        g.fill(x, y + h - 1, x + w, y + h, bottomRight);
+        g.fill(x + w - 1, y, x + w, y + h, bottomRight);
+    }
+
     /** A raised panel: mid fill, light top-left edge, dark bottom-right. */
     public static void panel(GuiGraphics g, int x, int y, int w, int h) {
         g.fill(x, y, x + w, y + h, PANEL);
-        g.fill(x, y, x + w, y + 1, EDGE_LIGHT);
-        g.fill(x, y, x + 1, y + h, EDGE_LIGHT);
-        g.fill(x, y + h - 1, x + w, y + h, EDGE_DARK);
-        g.fill(x + w - 1, y, x + w, y + h, EDGE_DARK);
+        bevel(g, x, y, w, h, true);
     }
 
     /** A sunken well: the opposite bevel, for anything content sits inside. */
     public static void well(GuiGraphics g, int x, int y, int w, int h) {
         g.fill(x, y, x + w, y + h, WELL);
-        g.fill(x, y, x + w, y + 1, EDGE_DARK);
-        g.fill(x, y, x + 1, y + h, EDGE_DARK);
-        g.fill(x, y + h - 1, x + w, y + h, EDGE_LIGHT);
-        g.fill(x + w - 1, y, x + w, y + h, EDGE_LIGHT);
+        bevel(g, x, y, w, h, false);
+    }
+
+    /**
+     * One slot. Sunken, mid-grey, with an inner shadow along the top and left — vanilla's
+     * treatment of every inventory cell, and the reason an empty one still reads as a slot.
+     */
+    public static void slot(GuiGraphics g, int x, int y, int w, int h) {
+        g.fill(x, y, x + w, y + h, SLOT);
+        bevel(g, x, y, w, h, false);
+        g.fill(x + 1, y + 1, x + w - 1, y + 2, 0x33000000);
+        g.fill(x + 1, y + 1, x + 2, y + h - 1, 0x33000000);
     }
 
     public static void button(GuiGraphics g, int x, int y, int w, int h, boolean hovered, boolean active) {
+        button(g, x, y, w, h, hovered, active, true);
+    }
+
+    /**
+     * A button. <b>Disabled draws sunken and unlit</b> rather than identical to enabled: the first
+     * playable screens had four buttons side by side where one worked, and all four looked alike.
+     */
+    public static void button(GuiGraphics g, int x, int y, int w, int h, boolean hovered,
+        boolean active, boolean enabled) {
+        if (!enabled) {
+            g.fill(x, y, x + w, y + h, 0xFF24272C);
+            bevel(g, x, y, w, h, false, 0xFF34383F, EDGE_DARK);
+            return;
+        }
         g.fill(x, y, x + w, y + h, active ? EDGE_LIGHT : hovered ? PANEL_LIGHT : PANEL);
-        g.fill(x, y, x + w, y + 1, hovered ? SELECT : EDGE_LIGHT);
-        g.fill(x, y, x + 1, y + h, hovered ? SELECT : EDGE_LIGHT);
-        g.fill(x, y + h - 1, x + w, y + h, EDGE_DARK);
-        g.fill(x + w - 1, y, x + w, y + h, EDGE_DARK);
+        bevel(g, x, y, w, h, true, hovered ? SELECT : EDGE_LIGHT, EDGE_DARK);
     }
 
     /** A horizontal fill bar. Empty draws the well alone, so zero never reads as one pixel of full. */
     public static void bar(GuiGraphics g, int x, int y, int w, int h, int value, int max, int argb) {
-        well(g, x, y, w, h);
+        slot(g, x, y, w, h);
         if (max <= 0 || value <= 0) {
             return;
         }
@@ -84,5 +130,10 @@ public final class Draw {
             return (value / 100 / 10.0) + "k";
         }
         return (value / 100_000 / 10.0) + "M";
+    }
+
+    /** The full figure, grouped. For tooltips, where there is room and the player asked. */
+    public static String exact(int value) {
+        return String.format("%,d", value);
     }
 }
