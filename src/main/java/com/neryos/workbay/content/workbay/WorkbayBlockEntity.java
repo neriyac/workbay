@@ -1,5 +1,7 @@
 package com.neryos.workbay.content.workbay;
 
+import com.neryos.workbay.bus.BusConfig;
+import com.neryos.workbay.bus.BusRunner;
 import com.neryos.workbay.init.WBBlockEntities;
 import com.neryos.workbay.init.WBDataComponents;
 import com.neryos.workbay.world.RoomRegistry;
@@ -11,11 +13,14 @@ import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -29,9 +34,13 @@ import java.util.UUID;
  */
 public class WorkbayBlockEntity extends BlockEntity {
     private static final String ID_KEY = "WorkbayId";
+    private static final String BUSES_KEY = "Buses";
 
     @Nullable
     private UUID workbayId;
+
+    private final List<BusConfig> buses = new ArrayList<>();
+    private final BusRunner runner = new BusRunner(() -> !isRemoved());
 
     public WorkbayBlockEntity(BlockPos pos, BlockState state) {
         super(WBBlockEntities.WORKBAY.get(), pos, state);
@@ -73,6 +82,47 @@ public class WorkbayBlockEntity extends BlockEntity {
             registry.put(record.withLastKnownPos(GlobalPos.of(server.dimension(), worldPosition))));
     }
 
+    public List<BusConfig> buses() {
+        return List.copyOf(buses);
+    }
+
+    public void addBus(BusConfig bus) {
+        buses.removeIf(existing -> existing.id().equals(bus.id()));
+        buses.add(bus);
+        setChanged();
+    }
+
+    public void removeBus(UUID busId) {
+        if (buses.removeIf(bus -> bus.id().equals(busId))) {
+            setChanged();
+        }
+    }
+
+    public BusRunner.BusStatus busStatus(UUID busId) {
+        return runner.status(busId);
+    }
+
+    /**
+     * SPEC.md §9's tick wheel, offset by the Workbay's own position so that a base full of them
+     * staggers instead of every one firing on the same tick.
+     */
+    public static void serverTick(net.minecraft.world.level.Level level, BlockPos pos,
+        BlockState state, WorkbayBlockEntity workbay) {
+        if (!(level instanceof ServerLevel server) || workbay.buses.isEmpty()) {
+            return;
+        }
+        workbay.record().ifPresent(record ->
+            workbay.runner.tick(server, record, workbay.buses, Math.floorMod(pos.hashCode(), BusRunner.WHEEL)));
+    }
+
+    @Override
+    public void setRemoved() {
+        super.setRemoved();
+        // Every endpoint cache holds a ServerLevel reference. Dropping them here is what stops a
+        // removed Workbay keeping another dimension's level object alive.
+        runner.invalidate();
+    }
+
     // ------------------------------------------------------------ persistence
 
     @Override
@@ -82,6 +132,10 @@ public class WorkbayBlockEntity extends BlockEntity {
         if (workbayId != null) {
             tag.put(ID_KEY, UUIDUtil.CODEC.encodeStart(NbtOps.INSTANCE, workbayId)
                 .getOrThrow(e -> new IllegalStateException("could not write a Workbay id: " + e)));
+        }
+        if (!buses.isEmpty()) {
+            tag.put(BUSES_KEY, BusConfig.CODEC.listOf().encodeStart(NbtOps.INSTANCE, List.copyOf(buses))
+                .getOrThrow(e -> new IllegalStateException("could not write a Workbay's buses: " + e)));
         }
     }
 
@@ -99,6 +153,13 @@ public class WorkbayBlockEntity extends BlockEntity {
         workbayId = tag.contains(ID_KEY)
             ? UUIDUtil.CODEC.parse(NbtOps.INSTANCE, tag.get(ID_KEY)).result().orElse(null)
             : null;
+
+        buses.clear();
+        Tag stored = tag.get(BUSES_KEY);
+        if (stored != null) {
+            buses.addAll(BusConfig.CODEC.listOf().parse(NbtOps.INSTANCE, stored)
+                .result().orElse(List.of()));
+        }
     }
 
     // ------------------------------------------------------- item round trip
@@ -111,7 +172,7 @@ public class WorkbayBlockEntity extends BlockEntity {
     protected void collectImplicitComponents(DataComponentMap.Builder components) {
         super.collectImplicitComponents(components);
         record().ifPresent(r -> components.set(WBDataComponents.BINDING.get(),
-            WorkbayBinding.of(r, occupiedBays(), 0)));
+            WorkbayBinding.of(r, occupiedBays(), buses.size())));
     }
 
     @Override

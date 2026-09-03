@@ -66,6 +66,14 @@ public class WorkbayBlock extends BaseEntityBlock {
         return WBBlockEntities.WORKBAY.get().create(pos, state);
     }
 
+    @Nullable
+    @Override
+    public <T extends BlockEntity> net.minecraft.world.level.block.entity.BlockEntityTicker<T> getTicker(
+        Level level, BlockState state, net.minecraft.world.level.block.entity.BlockEntityType<T> type) {
+        return level.isClientSide ? null
+            : createTickerHelper(type, WBBlockEntities.WORKBAY.get(), WorkbayBlockEntity::serverTick);
+    }
+
     @Override
     protected RenderShape getRenderShape(BlockState state) {
         return RenderShape.MODEL;

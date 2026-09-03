@@ -1,0 +1,227 @@
+package com.neryos.workbay.gametests;
+
+import com.neryos.workbay.bus.BusConfig;
+import com.neryos.workbay.content.workbay.WorkbayBlockEntity;
+import com.neryos.workbay.init.WBBlocks;
+import com.neryos.workbay.world.BayGeometry;
+import com.neryos.workbay.world.BayHosting;
+import com.neryos.workbay.world.RoomRegistry;
+import com.neryos.workbay.world.WorkbayDimensions;
+import com.neryos.workbay.world.WorkbayRecord;
+import com.neryos.workbay.world.WorkbayTickets;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.GlobalPos;
+import net.minecraft.gametest.framework.GameTest;
+import net.minecraft.gametest.framework.GameTestAssertException;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.Container;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.neoforged.testframework.DynamicTest;
+import net.neoforged.testframework.annotation.ForEachTest;
+import net.neoforged.testframework.annotation.TestHolder;
+import net.neoforged.testframework.gametest.ExtendedGameTestHelper;
+import net.neoforged.testframework.gametest.GameTestPlayer;
+import net.neoforged.testframework.gametest.StructureTemplateBuilder;
+
+import java.util.UUID;
+
+/**
+ * The mod's central promise, end to end: a machine standing in another dimension, reached from a
+ * block in this one, with no cable in between. SPEC.md §9.
+ */
+@ForEachTest(groups = "bus")
+public class BusTests {
+
+    private static final UUID INSERT_BUS = UUID.fromString("00000000-0000-0000-0000-00000000c001");
+    private static final UUID EXTRACT_BUS = UUID.fromString("00000000-0000-0000-0000-00000000c002");
+    private static final UUID RATE_BUS = UUID.fromString("00000000-0000-0000-0000-00000000c003");
+
+    /** Places a Workbay, gives it a bay with a chest in it, and returns the block entity. */
+    private static WorkbayBlockEntity setUp(ExtendedGameTestHelper helper, BlockPos workbayPos,
+        GameTestPlayer player, ItemStack inTheBay) {
+        ServerLevel level = helper.getLevel();
+        level.setBlock(workbayPos, WBBlocks.WORKBAY.get().defaultBlockState(), Block.UPDATE_ALL);
+        WBBlocks.WORKBAY.get().setPlacedBy(level, workbayPos,
+            level.getBlockState(workbayPos), player, new ItemStack(WBBlocks.WORKBAY.get()));
+
+        WorkbayBlockEntity workbay = (WorkbayBlockEntity) level.getBlockEntity(workbayPos);
+        WorkbayRecord record = workbay.record().orElseThrow();
+
+        ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+        WorkbayTickets.force(backshop, record.id(), record.bayColumn());
+        BayHosting.rack(backshop, record.bayColumn(), 0, inTheBay, player, Direction.NORTH);
+        return workbay;
+    }
+
+    private static void tearDown(ExtendedGameTestHelper helper, BlockPos workbayPos) {
+        ServerLevel level = helper.getLevel();
+        if (level.getBlockEntity(workbayPos) instanceof WorkbayBlockEntity workbay) {
+            workbay.record().ifPresent(record -> {
+                ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+                BayHosting.eject(backshop, record.bayColumn(), 0, null);
+                WorkbayTickets.release(backshop, record.id(), record.bayColumn());
+            });
+        }
+        level.setBlock(workbayPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+    }
+
+    private static int countIn(ServerLevel level, BlockPos pos, net.minecraft.world.item.Item item) {
+        if (!(level.getBlockEntity(pos) instanceof Container container)) {
+            return -1;
+        }
+        int total = 0;
+        for (int slot = 0; slot < container.getContainerSize(); slot++) {
+            if (container.getItem(slot).is(item)) {
+                total += container.getItem(slot).getCount();
+            }
+        }
+        return total;
+    }
+
+    /**
+     * The whole thing in one test. A chest in a bay in the Backshop, a chest on the floor in the
+     * overworld, and a bus that moves iron from one to the other across a dimension boundary with
+     * nothing physical connecting them.
+     */
+    @GameTest(timeoutTicks = 900)
+    @TestHolder(description = "An insert bus moves items out of a hosted machine into a chest in another dimension.")
+    public static void insertBusMovesItemsAcrossDimensions(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos targetPos = helper.absolutePos(new BlockPos(4, 1, 4));
+
+            level.setBlock(targetPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.CHEST));
+
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+            if (!(backshop.getBlockEntity(machinePos) instanceof Container hosted)) {
+                helper.fail("the bay does not hold a container after racking a chest");
+                return;
+            }
+            hosted.setItem(0, new ItemStack(Items.IRON_INGOT, 64));
+
+            workbay.addBus(BusConfig.create(INSERT_BUS, 0, BusConfig.Resource.ITEM,
+                BusConfig.Mode.INSERT, GlobalPos.of(level.dimension(), targetPos))
+                .withRate(8).withSpeed(10));
+
+            helper.startSequence()
+                .thenWaitUntil(() -> {
+                    if (countIn(level, targetPos, Items.IRON_INGOT) < 64) {
+                        throw new GameTestAssertException("the bus has moved "
+                            + countIn(level, targetPos, Items.IRON_INGOT) + " of 64 iron so far");
+                    }
+                })
+                .thenExecute(() -> {
+                    // Everything has to arrive, and nothing may be created on the way.
+                    helper.assertValueEqual(countIn(level, targetPos, Items.IRON_INGOT), 64,
+                        "iron in the target chest");
+                    int left = 0;
+                    for (int slot = 0; slot < hosted.getContainerSize(); slot++) {
+                        left += hosted.getItem(slot).getCount();
+                    }
+                    helper.assertValueEqual(left, 0, "items left in the hosted chest");
+                })
+                .thenExecute(() -> tearDown(helper, workbayPos))
+                .thenSucceed();
+        });
+    }
+
+    @GameTest(timeoutTicks = 900)
+    @TestHolder(description = "An extract bus pulls items out of a chest into a hosted machine.")
+    public static void extractBusPullsItemsIntoAHostedMachine(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos targetPos = helper.absolutePos(new BlockPos(4, 1, 4));
+
+            level.setBlock(targetPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            if (level.getBlockEntity(targetPos) instanceof Container source) {
+                source.setItem(0, new ItemStack(Items.GOLD_INGOT, 32));
+            }
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.BARREL));
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+
+            workbay.addBus(BusConfig.create(EXTRACT_BUS, 0, BusConfig.Resource.ITEM,
+                BusConfig.Mode.EXTRACT, GlobalPos.of(level.dimension(), targetPos))
+                .withRate(16).withSpeed(10));
+
+            helper.startSequence()
+                .thenWaitUntil(() -> {
+                    if (countIn(backshop, machinePos, Items.GOLD_INGOT) < 32) {
+                        throw new GameTestAssertException("the bus has pulled "
+                            + countIn(backshop, machinePos, Items.GOLD_INGOT) + " of 32 gold so far");
+                    }
+                })
+                .thenExecute(() -> {
+                    helper.assertValueEqual(countIn(backshop, machinePos, Items.GOLD_INGOT), 32,
+                        "gold in the hosted barrel");
+                    helper.assertValueEqual(countIn(level, targetPos, Items.GOLD_INGOT), 0,
+                        "gold left in the source chest");
+                })
+                .thenExecute(() -> tearDown(helper, workbayPos))
+                .thenSucceed();
+        });
+    }
+
+    /**
+     * Rate and speed are the two numbers a player sets, so they have to mean exactly what the screen
+     * says. A bus that quietly moves more than its rate is a bus nobody can plan around.
+     */
+    @GameTest(timeoutTicks = 900)
+    @TestHolder(description = "A bus never moves more than its rate in one operation.")
+    public static void busObeysItsRate(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos targetPos = helper.absolutePos(new BlockPos(4, 1, 4));
+
+            level.setBlock(targetPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.CHEST));
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+            if (backshop.getBlockEntity(machinePos) instanceof Container hosted) {
+                hosted.setItem(0, new ItemStack(Items.IRON_INGOT, 64));
+            }
+
+            // The slowest legal speed, so the test can look between operations.
+            workbay.addBus(BusConfig.create(RATE_BUS, 0, BusConfig.Resource.ITEM,
+                BusConfig.Mode.INSERT, GlobalPos.of(level.dimension(), targetPos))
+                .withRate(4).withSpeed(200));
+
+            helper.startSequence()
+                .thenWaitUntil(() -> {
+                    if (countIn(level, targetPos, Items.IRON_INGOT) <= 0) {
+                        throw new GameTestAssertException("the bus has not moved anything yet");
+                    }
+                })
+                .thenExecute(() -> {
+                    int moved = countIn(level, targetPos, Items.IRON_INGOT);
+                    if (moved > 4) {
+                        helper.fail("the first operation moved " + moved + " items with a rate of 4");
+                    }
+                })
+                .thenExecute(() -> tearDown(helper, workbayPos))
+                .thenSucceed();
+        });
+    }
+}
