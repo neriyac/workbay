@@ -111,6 +111,23 @@ public class DuplicationTests {
         return total;
     }
 
+    /**
+     * Through the capability rather than {@code Container}, because a Mekanism machine is not one.
+     * The null side is what Bay View itself reads, so this counts what Bay View can see.
+     */
+    private static int inHandler(ServerLevel level, BlockPos pos, Item item) {
+        var handler = level.getCapability(
+            net.neoforged.neoforge.capabilities.Capabilities.ItemHandler.BLOCK, pos, null);
+        if (handler == null) {
+            return 0;
+        }
+        int total = 0;
+        for (int slot = 0; slot < handler.getSlots(); slot++) {
+            total += count(handler.getStackInSlot(slot), item);
+        }
+        return total;
+    }
+
     private static int inContainer(ServerLevel level, BlockPos pos, Item item) {
         if (!(level.getBlockEntity(pos) instanceof Container container)) {
             return 0;
@@ -520,6 +537,74 @@ public class DuplicationTests {
             helper.assertValueEqual(total, 37, "iron ingots after a round trip through Bay View");
             helper.assertValueEqual(onPlayer(player, Items.IRON_INGOT), 37,
                 "iron ingots back in the player's inventory");
+            helper.succeed();
+        });
+    }
+
+    /**
+     * The one that was found by hand, in {@code runClient}, against a real Mekanism machine — and
+     * the reason {@link BayViewMenu.Live} no longer trusts a foreign handler's own answers.
+     *
+     * <p>Mekanism hands out a <b>read-only</b> handler on the null side for every machine it has
+     * ({@code ProxyHandler}: {@code readOnly = side == null}), and that handler does two things
+     * that combine into an item shredder. {@code ProxyItemHandler#isItemValid} reports the real
+     * slot validity <em>regardless</em> of read-only, so {@code Slot#mayPlace} says yes; and
+     * {@code setStackInSlot} is {@code if (!readOnly) &#123; ... &#125;}, a silent no-op. Vanilla's
+     * {@code doClick} takes the stack off the cursor between those two, so sixteen redstone dust
+     * stopped existing — no error, no message, nothing in the log.
+     *
+     * <p>Deliberately driven with a {@code PICKUP} click rather than a shift-click: shift-click
+     * goes through {@link BayViewMenu#quickMoveStack}, which was already written against
+     * {@code insertItem} and was never the broken path. Every machine slot is tried, because which
+     * index is the recipe input is Mekanism's business and the census has to hold for all of them.
+     */
+    @GameTest
+    @TestHolder(description = "Clicking items onto a Mekanism machine's read-only slots never deletes them.")
+    public static void bayViewOverAReadOnlyHandlerNeverEatsTheCursor(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = backshop(helper);
+            WorkbayTickets.force(backshop, record.id(), record.bayColumn());
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+
+            Block machine = net.minecraft.core.registries.BuiltInRegistries.BLOCK
+                .get(net.minecraft.resources.ResourceLocation.parse("mekanism:enrichment_chamber"));
+            if (machine == Blocks.AIR) {
+                helper.fail("mekanism:enrichment_chamber is not registered. This test is about a "
+                    + "real mod's read-only handler, so a missing partner mod is a failure, never "
+                    + "a skip. Check the gametestRuntimeOnly Mekanism dependency in build.gradle.");
+            }
+
+            player.getInventory().clearContent();
+            rack(menuFor(workbay, player), player, 0, new ItemStack(machine, 1));
+
+            BayViewMenu view = bayView(2, player, workbay, 0);
+            helper.assertTrue(view.machineSlots() > 0,
+                "Bay View opened on a Mekanism machine with no slots, so this test proves nothing");
+
+            for (int slot = 0; slot < view.machineSlots(); slot++) {
+                // Counted per slot rather than once: a slot that legitimately accepts the redstone
+                // leaves it in the machine, and the next slot's census must expect it to be there.
+                int held = inHandler(backshop, machinePos, Items.REDSTONE);
+                view.setCarried(new ItemStack(Items.REDSTONE, 16));
+                view.clicked(slot, 0, ClickType.PICKUP, player);
+                int total = onPlayer(player, Items.REDSTONE)
+                    + carried(view, Items.REDSTONE)
+                    + inHandler(backshop, machinePos, Items.REDSTONE)
+                    + loose(helper, Items.REDSTONE);
+                helper.assertValueEqual(total, held + 16,
+                    "redstone after clicking sixteen onto machine slot " + slot
+                        + ", which already held " + held);
+                // Only the player's copy is cleared; whatever the machine took stays where it is.
+                player.getInventory().clearContent();
+                view.setCarried(ItemStack.EMPTY);
+            }
             helper.succeed();
         });
     }

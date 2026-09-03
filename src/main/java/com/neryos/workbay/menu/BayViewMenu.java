@@ -241,6 +241,23 @@ public class BayViewMenu extends AbstractContainerMenu {
      * goes through {@code insertItem}, and everything leaving it through {@code extractItem}, with
      * whatever will not fit put back before this method returns.
      */
+    /**
+     * Every click, then whatever the machine would not actually take.
+     *
+     * <p>{@code Slot#set} returns void, so a write that a foreign handler refuses has no way to
+     * hand the remainder back - and by then vanilla has taken the stack off the cursor.
+     * {@link Live} parks those in a list instead of dropping them, and this is where they come
+     * back. Without it, a read-only handler is an item shredder.
+     */
+    @Override
+    public void clicked(int slotId, int button, net.minecraft.world.inventory.ClickType type,
+        Player who) {
+        super.clicked(slotId, button, type, who);
+        if (machine instanceof Live live) {
+            live.drainRefunds(who);
+        }
+    }
+
     @Override
     public ItemStack quickMoveStack(Player who, int index) {
         if (index < 0 || index >= slots.size()) {
@@ -313,6 +330,13 @@ public class BayViewMenu extends AbstractContainerMenu {
         private final ServerLevel level;
         private final BlockPos pos;
 
+        /**
+         * Items a write could not actually store. Drained back to the player by
+         * {@link BayViewMenu#clicked}, because {@code Slot#set} has no way to hand a remainder
+         * back and vanilla has already taken the stack off the cursor by the time it is called.
+         */
+        private final java.util.List<ItemStack> refunds = new java.util.ArrayList<>();
+
         Live(ServerLevel level, BlockPos pos) {
             this.level = level;
             this.pos = pos.immutable();
@@ -379,37 +403,80 @@ public class BayViewMenu extends AbstractContainerMenu {
          * False for a machine that is gone, which is the whole guard: {@code Slot#mayPlace} reads
          * this, and every insert path in {@code doClick} is behind it.
          */
+        /**
+         * <b>Simulated, not asked.</b> {@code isItemValid} is what a handler <em>says</em>, and at
+         * least one major mod says the wrong thing: Mekanism's {@code ProxyItemHandler} answers
+         * with the real slot validity even when the handler is read-only
+         * ({@code return !readOnly || inventory.isItemValid(...)}), and every Mekanism machine's
+         * null side is read-only by construction ({@code ProxyHandler: readOnly = side == null}).
+         * Believing it cost sixteen redstone dust in {@code runClient}: {@code mayPlace} said yes,
+         * {@code doClick} took the stack off the cursor, and the write went nowhere.
+         *
+         * <p>A simulated insert cannot lie - it is the same call the real write will make. This is
+         * also the guard for a machine that is gone, which is what it was written for.
+         */
         @Override
         public boolean isItemValid(int slot, ItemStack stack) {
             IItemHandler handler = at(slot);
-            return handler != null && handler.isItemValid(slot, stack);
+            if (handler == null || stack.isEmpty() || !handler.isItemValid(slot, stack)) {
+                return false;
+            }
+            return handler.insertItem(slot, stack.copy(), true).getCount() < stack.getCount();
         }
 
         /**
-         * {@code SlotItemHandler#set} casts to this interface, so it has to exist — but a blind
-         * overwrite of a foreign machine's slot is exactly how a proxy screen becomes a duplication
-         * bug, so it is emulated with extract-then-insert against a handler that may refuse either.
-         * A handler that is genuinely modifiable is written to directly, which is what a vanilla
-         * container screen does to the chest it is bound to.
+         * {@code SlotItemHandler#set} casts to this interface, so it has to exist - but there is no
+         * safe way to overwrite a foreign machine's slot, so this never does.
+         *
+         * <p><b>The {@code IItemHandlerModifiable} fast path is gone on purpose.</b> It was the
+         * whole bug: Mekanism's read-only null-side handler <em>is</em> an
+         * {@code IItemHandlerModifiable}, and its {@code setStackInSlot} is
+         * {@code if (!readOnly) { ... }} - a silent no-op. Delegating to it deleted the stack
+         * vanilla had already taken off the cursor.
+         *
+         * <p>So: take out what is there, put in what was asked for, and count. Anything the handler
+         * would not take is pushed to {@link #refunds} rather than dropped, because
+         * {@code Slot#set} returns void and the caller has no remainder to give back. The menu
+         * drains them into the player at the end of the click.
          */
         @Override
         public void setStackInSlot(int slot, ItemStack stack) {
             IItemHandler handler = at(slot);
-            if (handler == null) {
+            ItemStack current = handler == null ? ItemStack.EMPTY
+                : handler.getStackInSlot(slot).copy();
+            if (ItemStack.matches(current, stack)) {
                 return;
             }
-            if (handler instanceof IItemHandlerModifiable modifiable) {
-                modifiable.setStackInSlot(slot, stack);
+            // Addition only, and only of what is not already there. Taking items out is
+            // extractItem's job and vanilla uses it (Slot#remove) for every removal path, so a
+            // write that shrinks or swaps a slot is one this class declines to perform - it never
+            // removes, which is what makes it impossible for it to delete. Refusing the whole
+            // stack back is also why the old content is never refunded here: on a swap vanilla has
+            // already put it on the cursor, and refunding it too would be the dupe.
+            int already = ItemStack.isSameItemSameComponents(current, stack) ? current.getCount() : 0;
+            int adding = stack.getCount() - already;
+            if (adding <= 0) {
                 return;
             }
-            ItemStack current = handler.getStackInSlot(slot);
-            if (!current.isEmpty()
-                && handler.extractItem(slot, current.getCount(), false).getCount()
-                    < current.getCount()) {
-                return;
-            }
+            ItemStack delta = stack.copyWithCount(adding);
+            refund(handler == null ? delta : handler.insertItem(slot, delta, false));
+        }
+
+        private void refund(ItemStack stack) {
             if (!stack.isEmpty()) {
-                handler.insertItem(slot, stack.copy(), false);
+                refunds.add(stack.copy());
+            }
+        }
+
+        /** Into the player's own inventory, or at their feet if it is full. Never nowhere. */
+        void drainRefunds(Player who) {
+            if (refunds.isEmpty()) {
+                return;
+            }
+            java.util.List<ItemStack> owed = java.util.List.copyOf(refunds);
+            refunds.clear();
+            for (ItemStack stack : owed) {
+                who.getInventory().placeItemBackInInventory(stack);
             }
         }
     }
