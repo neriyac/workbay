@@ -161,6 +161,32 @@ public class WorkbayBlock extends BaseEntityBlock {
         return net.minecraft.world.ItemInteractionResult.CONSUME;
     }
 
+    /**
+     * An empty hand opens the screens. The whole snapshot rides the menu-open buffer, so the screen
+     * draws the real state on its first frame rather than flashing defaults (SPEC.md §4).
+     */
+    @Override
+    protected net.minecraft.world.InteractionResult useWithoutItem(BlockState state, Level level,
+        BlockPos pos, Player player, net.minecraft.world.phys.BlockHitResult hit) {
+        if (level.isClientSide) {
+            return net.minecraft.world.InteractionResult.SUCCESS;
+        }
+        if (!(level.getBlockEntity(pos) instanceof WorkbayBlockEntity workbay)
+            || !(player instanceof net.minecraft.server.level.ServerPlayer serverPlayer)) {
+            return net.minecraft.world.InteractionResult.PASS;
+        }
+        if (workbay.record().isEmpty()) {
+            return net.minecraft.world.InteractionResult.PASS;
+        }
+        serverPlayer.openMenu(new net.minecraft.world.SimpleMenuProvider(
+            (id, inventory, viewer) -> new com.neryos.workbay.menu.WorkbayMenu(id, inventory, workbay,
+                com.neryos.workbay.menu.WorkbayMenu.build(workbay, serverPlayer, 0)),
+            WorkbayLang.gui("title")),
+            buffer -> com.neryos.workbay.menu.WorkbaySnapshot.STREAM_CODEC.encode(buffer,
+                com.neryos.workbay.menu.WorkbayMenu.build(workbay, serverPlayer, 0)));
+        return net.minecraft.world.InteractionResult.CONSUME;
+    }
+
     /** Stamps a Connector item with the Workbay and bay its link will land on. */
     public static void pair(ItemStack stack, WorkbayRecord record, GlobalPos workbayPos, int bay) {
         stack.set(WBDataComponents.PAIRING.get(),

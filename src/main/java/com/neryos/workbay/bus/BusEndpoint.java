@@ -56,7 +56,21 @@ public final class BusEndpoint<T> {
      */
     @Nullable
     public T resolve(java.util.function.Predicate<T> accepts) {
-        if (bound != null && !dirty) {
+        return resolve(accepts, java.util.EnumSet.allOf(Direction.class));
+    }
+
+    /**
+     * @param allowed the faces this end may use — the bay's face config at the machine end, every
+     *                direction at the target end. An empty set means the player has configured this
+     *                machine for the other direction of travel, so there is nothing to bind to.
+     */
+    @Nullable
+    public T resolve(java.util.function.Predicate<T> accepts, java.util.Set<Direction> allowed) {
+        if (allowed.isEmpty()) {
+            bound = null;
+            return null;
+        }
+        if (bound != null && !dirty && allowed.contains(bound)) {
             T handler = cacheFor(bound).getCapability();
             if (handler != null && accepts.test(handler)) {
                 return handler;
@@ -64,6 +78,9 @@ public final class BusEndpoint<T> {
         }
         dirty = false;
         for (Direction side : Direction.values()) {
+            if (!allowed.contains(side)) {
+                continue;
+            }
             T handler = cacheFor(side).getCapability();
             if (handler != null && accepts.test(handler)) {
                 bound = side;

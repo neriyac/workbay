@@ -131,6 +131,11 @@ public class WorkbayBlockEntity extends BlockEntity {
         setChanged();
     }
 
+    /** A bay's face config changed, so its cached machine-end handler has to be re-resolved. */
+    public void forgetBay(int bay) {
+        runner.forgetBay(bay);
+    }
+
     public EnergyStorage energy() {
         return energy;
     }

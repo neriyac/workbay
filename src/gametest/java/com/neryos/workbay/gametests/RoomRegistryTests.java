@@ -119,7 +119,10 @@ public class RoomRegistryTests {
                 .withLastKnownPos(GlobalPos.of(WorkbayDimensions.BACKSHOP, new BlockPos(12, 34, -56)))
                 .withBays(List.of(
                     new WorkbayRecord.Bay(0, Optional.of(
-                        net.minecraft.resources.ResourceLocation.parse("mekanism:enrichment_chamber"))),
+                        net.minecraft.resources.ResourceLocation.parse("mekanism:enrichment_chamber")),
+                        com.neryos.workbay.world.FaceConfig.NONE
+                            .cycled(com.neryos.workbay.bus.BusConfig.Resource.ITEM,
+                                net.minecraft.core.Direction.NORTH)),
                     WorkbayRecord.Bay.empty(1)));
             before.put(alice);
 

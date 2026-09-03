@@ -1,0 +1,386 @@
+package com.neryos.workbay.menu;
+
+import com.neryos.workbay.bus.BusConfig;
+import com.neryos.workbay.bus.BusRunner;
+import com.neryos.workbay.content.workbay.WorkbayBlock;
+import com.neryos.workbay.content.workbay.WorkbayBlockEntity;
+import com.neryos.workbay.content.workbay.WorkbayUpgrade;
+import com.neryos.workbay.host.HostChecks;
+import com.neryos.workbay.host.HostResult;
+import com.neryos.workbay.init.WBBlocks;
+import com.neryos.workbay.init.WBItems;
+import com.neryos.workbay.init.WBMenus;
+import com.neryos.workbay.network.SnapshotPacket;
+import com.neryos.workbay.world.BayGeometry;
+import com.neryos.workbay.world.BayHosting;
+import com.neryos.workbay.world.RoomRegistry;
+import com.neryos.workbay.world.WorkbayDimensions;
+import com.neryos.workbay.world.WorkbayRecord;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.GlobalPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.state.BlockState;
+import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.energy.IEnergyStorage;
+import net.neoforged.neoforge.network.PacketDistributor;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
+
+/**
+ * The Workbay's menu, behind all three screens. SPEC.md §4.
+ *
+ * <p><b>It has no slots at all.</b> The screen shows no player inventory: a machine enters a bay by
+ * clicking the bay slot while holding it, not by dragging from a grid. That also means the vanilla
+ * slot-sync path carries nothing, and everything the screens draw arrives as one
+ * {@link WorkbaySnapshot}.
+ *
+ * <p>SPEC.md §4 has switching bays re-open a fresh menu. That was written for a menu with real
+ * slots bound to a bay; with none, there is nothing to re-bind, so the selection is an action on
+ * this menu instead — which also sidesteps the cursor recentring that
+ * {@code shouldTriggerClientSideContainerClosingOnOpen} exists to prevent.
+ */
+public class WorkbayMenu extends AbstractContainerMenu {
+
+    /** Rebuilt at most this often. It is a status screen, not an animation. */
+    private static final int REFRESH_TICKS = 5;
+
+    private final Player player;
+
+    @Nullable
+    private final WorkbayBlockEntity workbay;
+
+    private WorkbaySnapshot snapshot;
+    private WorkbaySnapshot sent = WorkbaySnapshot.EMPTY;
+    private int selectedBay;
+    private int cooldown;
+
+    /** Client side: the snapshot arrives in the menu-open buffer, so frame 1 is already correct. */
+    public WorkbayMenu(int containerId, Inventory inventory, RegistryFriendlyByteBuf buffer) {
+        this(containerId, inventory, null, WorkbaySnapshot.STREAM_CODEC.decode(buffer));
+    }
+
+    public WorkbayMenu(int containerId, Inventory inventory, @Nullable WorkbayBlockEntity workbay,
+        WorkbaySnapshot initial) {
+        super(WBMenus.WORKBAY.get(), containerId);
+        this.player = inventory.player;
+        this.workbay = workbay;
+        this.snapshot = initial;
+        this.selectedBay = initial.selectedBay();
+    }
+
+    public WorkbaySnapshot snapshot() {
+        return snapshot;
+    }
+
+    /** Applied optimistically on the client before the packet goes out, so clicks feel immediate. */
+    public void applySnapshot(WorkbaySnapshot updated) {
+        this.snapshot = updated;
+        this.selectedBay = updated.selectedBay();
+    }
+
+    public int selectedBay() {
+        return selectedBay;
+    }
+
+    public void setSelectedBayClientSide(int bay) {
+        this.selectedBay = bay;
+    }
+
+    /**
+     * A menu with no slots still has to refuse a stack the player somehow drags into it, and
+     * returning anything but EMPTY here is how vanilla ends up looping forever.
+     */
+    @Override
+    public ItemStack quickMoveStack(Player player, int index) {
+        return ItemStack.EMPTY;
+    }
+
+    @Override
+    public boolean stillValid(Player player) {
+        return workbay == null
+            || (!workbay.isRemoved() && player.distanceToSqr(
+                workbay.getBlockPos().getX() + 0.5,
+                workbay.getBlockPos().getY() + 0.5,
+                workbay.getBlockPos().getZ() + 0.5) <= 64.0);
+    }
+
+    @Override
+    public void broadcastChanges() {
+        super.broadcastChanges();
+        if (workbay == null || !(player instanceof ServerPlayer serverPlayer)) {
+            return;
+        }
+        if (--cooldown > 0) {
+            return;
+        }
+        cooldown = REFRESH_TICKS;
+        snapshot = build(workbay, serverPlayer, selectedBay);
+        if (!Objects.equals(snapshot, sent)) {
+            sent = snapshot;
+            PacketDistributor.sendToPlayer(serverPlayer, new SnapshotPacket(containerId, snapshot));
+        }
+    }
+
+    /** Forces the next tick to send, after an action the player is waiting to see the result of. */
+    private void refreshNow() {
+        cooldown = 0;
+    }
+
+    // --------------------------------------------------------------- actions
+
+    /**
+     * Every action from every screen. Guarded once, here, rather than in each handler: a spectator
+     * or a player whose menu has moved on must not be able to eject somebody's machine.
+     */
+    public void act(WorkbayAction action, int arg, Optional<UUID> linkId) {
+        if (workbay == null || !(player instanceof ServerPlayer serverPlayer)
+            || player.isSpectator() || !stillValid(player)) {
+            return;
+        }
+        WorkbayRecord record = workbay.record().orElse(null);
+        if (record == null) {
+            return;
+        }
+        switch (action) {
+            case SELECT_BAY -> selectedBay = Math.clamp(arg, 0, BayGeometry.MAX_BAYS - 1);
+            case RACK -> rack(serverPlayer, record);
+            case EJECT -> eject(serverPlayer, record);
+            case TOGGLE_LOCK -> toggleLock(serverPlayer, record);
+            case CYCLE_FACE -> cycleFace(record, arg);
+            case PAIR -> pair(serverPlayer, record);
+            case INSTALL_UPGRADE -> install(serverPlayer, record, arg);
+            case LINK_FLIP_MODE -> editLink(linkId, link -> link.withMode(link.mode().flip()));
+            case LINK_CYCLE_RESOURCE -> editLink(linkId, link -> link.withResource(link.resource().next()));
+            case LINK_TOGGLE_ENABLED -> editLink(linkId, link -> link.withEnabled(!link.enabled()));
+            case LINK_REMOVE -> linkId.ifPresent(workbay::removeBus);
+        }
+        refreshNow();
+    }
+
+    private void editLink(Optional<UUID> linkId, java.util.function.UnaryOperator<BusConfig> edit) {
+        linkId.flatMap(workbay::bus).ifPresent(link -> workbay.addBus(edit.apply(link)));
+    }
+
+    /**
+     * Racks the machine in the player's hand. The gate runs first and a rejection is an action-bar
+     * message naming the category — the item stays in hand, which is the whole point of rejecting
+     * at the registry level rather than after placement (SPEC.md §11).
+     */
+    private void rack(ServerPlayer serverPlayer, WorkbayRecord record) {
+        if (record.locked() && !record.owner().equals(serverPlayer.getUUID())) {
+            serverPlayer.displayClientMessage(com.neryos.workbay.WorkbayLang.message("locked"), true);
+            return;
+        }
+        if (selectedBay >= record.bayCapacity()) {
+            serverPlayer.displayClientMessage(com.neryos.workbay.WorkbayLang.message("reject.no_bay"), true);
+            return;
+        }
+        ServerLevel backshop = serverPlayer.server.getLevel(WorkbayDimensions.BACKSHOP);
+        if (backshop == null || !backshop.getBlockState(
+            BayGeometry.machinePos(record.bayColumn(), selectedBay)).isAir()) {
+            return;
+        }
+        ItemStack held = serverPlayer.getMainHandItem();
+        if (held.isEmpty()) {
+            return;
+        }
+        HostResult verdict = HostChecks.evaluate(held);
+        if (!verdict.allowed()) {
+            serverPlayer.displayClientMessage(verdict.message(), true);
+            return;
+        }
+        ItemStack one = held.copyWithCount(1);
+        if (!BayHosting.rack(backshop, record.bayColumn(), selectedBay, one, serverPlayer,
+            Direction.NORTH)) {
+            return;
+        }
+        held.shrink(1);
+        RoomRegistry.get(serverPlayer.server).put(record.withBay(record.bay(selectedBay)
+            .withHosted(Optional.ofNullable(BuiltInRegistries.ITEM.getKey(one.getItem())))));
+        workbay.setChanged();
+    }
+
+    private void eject(ServerPlayer serverPlayer, WorkbayRecord record) {
+        if (record.locked() && !record.owner().equals(serverPlayer.getUUID())) {
+            serverPlayer.displayClientMessage(com.neryos.workbay.WorkbayLang.message("locked"), true);
+            return;
+        }
+        ServerLevel backshop = serverPlayer.server.getLevel(WorkbayDimensions.BACKSHOP);
+        if (backshop == null) {
+            return;
+        }
+        ItemStack machine = BayHosting.eject(backshop, record.bayColumn(), selectedBay, serverPlayer);
+        if (machine.isEmpty()) {
+            return;
+        }
+        serverPlayer.getInventory().placeItemBackInInventory(machine);
+        RoomRegistry.get(serverPlayer.server).put(record.withBay(
+            record.bay(selectedBay).withHosted(Optional.empty())));
+        workbay.setChanged();
+    }
+
+    /** Only the owner may lock or unlock. Everything else on the screen stays readable. */
+    private void toggleLock(ServerPlayer serverPlayer, WorkbayRecord record) {
+        if (!record.owner().equals(serverPlayer.getUUID())) {
+            serverPlayer.displayClientMessage(com.neryos.workbay.WorkbayLang.message("locked"), true);
+            return;
+        }
+        RoomRegistry.get(serverPlayer.server).put(record.withLocked(!record.locked()));
+    }
+
+    private void cycleFace(WorkbayRecord record, int packed) {
+        BusConfig.Resource resource = BusConfig.Resource.values()[
+            Math.clamp(packed & 0xF, 0, BusConfig.Resource.values().length - 1)];
+        Direction face = Direction.values()[
+            Math.clamp((packed >> 4) & 0xF, 0, Direction.values().length - 1)];
+        WorkbayRecord.Bay bay = record.bay(selectedBay);
+        RoomRegistry.get(((ServerPlayer) player).server)
+            .put(record.withBay(bay.withFaces(bay.faces().cycled(resource, face))));
+        // The link's cached endpoint was bound to a face that may no longer be allowed.
+        workbay.forgetBay(selectedBay);
+    }
+
+    /** Screen 1's `+ Pair`: stamps the held Connector with this Workbay and the selected bay. */
+    private void pair(ServerPlayer serverPlayer, WorkbayRecord record) {
+        ItemStack held = serverPlayer.getMainHandItem();
+        if (!held.is(WBBlocks.CONNECTOR.get().asItem())) {
+            serverPlayer.displayClientMessage(
+                com.neryos.workbay.WorkbayLang.message("pair_needs_connector"), true);
+            return;
+        }
+        WorkbayBlock.pair(held, record,
+            GlobalPos.of(serverPlayer.level().dimension(), workbay.getBlockPos()), selectedBay);
+        serverPlayer.displayClientMessage(com.neryos.workbay.WorkbayLang.message("connector_paired",
+            net.minecraft.network.chat.Component.literal(record.code())
+                .withStyle(net.minecraft.ChatFormatting.AQUA)), true);
+    }
+
+    /**
+     * Upgrades are consumed on install and there is no removal path (SPEC.md §1), so this takes the
+     * item and never gives it back. Refusing at the cap rather than silently eating it matters.
+     */
+    private void install(ServerPlayer serverPlayer, WorkbayRecord record, int ordinal) {
+        if (ordinal < 0 || ordinal >= WorkbayUpgrade.values().length) {
+            return;
+        }
+        WorkbayUpgrade upgrade = WorkbayUpgrade.values()[ordinal];
+        if (!record.owner().equals(serverPlayer.getUUID())) {
+            serverPlayer.displayClientMessage(com.neryos.workbay.WorkbayLang.message("locked"), true);
+            return;
+        }
+        if (record.upgrades().installed(upgrade) >= upgrade.max()) {
+            serverPlayer.displayClientMessage(
+                com.neryos.workbay.WorkbayLang.message("upgrade_maxed"), true);
+            return;
+        }
+        int slot = serverPlayer.getInventory().findSlotMatchingItem(new ItemStack(upgrade.item()));
+        if (slot < 0) {
+            serverPlayer.displayClientMessage(
+                com.neryos.workbay.WorkbayLang.message("upgrade_missing"), true);
+            return;
+        }
+        serverPlayer.getInventory().removeItem(slot, 1);
+        RoomRegistry.get(serverPlayer.server).put(record.withUpgrades(record.upgrades().plus(upgrade)));
+    }
+
+    // -------------------------------------------------------------- snapshot
+
+    /**
+     * Reads the whole world state the screens need, once. The hosted machines live in the Backshop,
+     * so every read there is guarded by {@code isLoaded} — a status screen must never be the thing
+     * that drags a chunk in synchronously on the server thread (SPEC.md §9).
+     */
+    public static WorkbaySnapshot build(WorkbayBlockEntity workbay, ServerPlayer player, int selected) {
+        WorkbayRecord record = workbay.record().orElse(null);
+        if (record == null) {
+            return WorkbaySnapshot.EMPTY;
+        }
+        ServerLevel backshop = player.server.getLevel(WorkbayDimensions.BACKSHOP);
+
+        List<WorkbaySnapshot.Bay> bays = new ArrayList<>();
+        for (int index = 0; index < BayGeometry.MAX_BAYS; index++) {
+            bays.add(readBay(record, index, backshop, workbay));
+        }
+
+        List<WorkbaySnapshot.Link> links = new ArrayList<>();
+        for (BusConfig link : workbay.buses()) {
+            links.add(new WorkbaySnapshot.Link(link, workbay.busStatus(link.id()),
+                targetBlockOf(player, link)));
+        }
+
+        return new WorkbaySnapshot(record.code(), record.locked(), record.bayCapacity(), selected,
+            workbay.energy().getEnergyStored(), workbay.energy().getMaxEnergyStored(),
+            bays, links, record.upgrades(),
+            player.getInventory().countItem(WBItems.LEVY.get()));
+    }
+
+    private static WorkbaySnapshot.Bay readBay(WorkbayRecord record, int index,
+        @Nullable ServerLevel backshop, WorkbayBlockEntity workbay) {
+        WorkbayRecord.Bay bay = record.bay(index);
+        if (index >= record.bayCapacity()) {
+            return new WorkbaySnapshot.Bay(index, Optional.empty(), 0, 0,
+                WorkbaySnapshot.State.LOCKED, bay.faces());
+        }
+        if (bay.hosted().isEmpty()) {
+            return new WorkbaySnapshot.Bay(index, Optional.empty(), 0, 0,
+                WorkbaySnapshot.State.EMPTY, bay.faces());
+        }
+        int energy = 0;
+        int capacity = 0;
+        WorkbaySnapshot.State state = WorkbaySnapshot.State.IDLE;
+        BlockPos machine = BayGeometry.machinePos(record.bayColumn(), index);
+        if (backshop != null && backshop.isLoaded(machine)) {
+            IEnergyStorage store = null;
+            boolean anyPort = false;
+            for (Direction side : Direction.values()) {
+                IEnergyStorage found = backshop.getCapability(Capabilities.EnergyStorage.BLOCK, machine, side);
+                if (found != null && store == null) {
+                    store = found;
+                }
+                anyPort |= found != null
+                    || backshop.getCapability(Capabilities.ItemHandler.BLOCK, machine, side) != null;
+            }
+            if (store != null) {
+                energy = store.getEnergyStored();
+                capacity = store.getMaxEnergyStored();
+            }
+            BlockState here = backshop.getBlockState(machine);
+            // Inert is the two-phase gate's non-blocking half: the machine is racked and staying
+            // racked, but nothing can reach it, so the row says so instead of ejecting it.
+            state = here.isAir() ? WorkbaySnapshot.State.EMPTY
+                : !anyPort ? WorkbaySnapshot.State.INERT
+                : runningAnyLink(workbay, index) ? WorkbaySnapshot.State.RUNNING
+                : WorkbaySnapshot.State.IDLE;
+        }
+        return new WorkbaySnapshot.Bay(index, bay.hosted(), energy, capacity, state, bay.faces());
+    }
+
+    private static boolean runningAnyLink(WorkbayBlockEntity workbay, int bay) {
+        return workbay.buses().stream().filter(link -> link.bay() == bay)
+            .anyMatch(link -> workbay.busStatus(link.id()) == BusRunner.BusStatus.RUNNING);
+    }
+
+    /** What the Connector is stuck to, for the row's target text. Never loads a chunk to find out. */
+    private static Optional<ResourceLocation> targetBlockOf(ServerPlayer player, BusConfig link) {
+        ServerLevel level = player.server.getLevel(link.target().dimension());
+        if (level == null || !level.isLoaded(link.target().pos())) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(
+            BuiltInRegistries.BLOCK.getKey(level.getBlockState(link.target().pos()).getBlock()));
+    }
+}

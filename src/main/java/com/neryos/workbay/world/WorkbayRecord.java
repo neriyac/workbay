@@ -84,15 +84,38 @@ public record WorkbayRecord(
      * <em>not</em> cleared when that block's mod disappears — that is the {@code was:} record
      * SPEC.md §14 requires, and what {@code /workbay orphans} reports.
      */
-    public record Bay(int index, Optional<ResourceLocation> hosted) {
+    public record Bay(int index, Optional<ResourceLocation> hosted, FaceConfig faces) {
         public static final Codec<Bay> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.INT.fieldOf("Index").forGetter(Bay::index),
-            ResourceLocation.CODEC.optionalFieldOf("Hosted").forGetter(Bay::hosted)
+            ResourceLocation.CODEC.optionalFieldOf("Hosted").forGetter(Bay::hosted),
+            FaceConfig.CODEC.optionalFieldOf("Faces", FaceConfig.NONE).forGetter(Bay::faces)
         ).apply(i, Bay::new));
 
         public static Bay empty(int index) {
-            return new Bay(index, Optional.empty());
+            return new Bay(index, Optional.empty(), FaceConfig.NONE);
         }
+
+        public Bay withHosted(Optional<ResourceLocation> nowHosted) {
+            return new Bay(index, nowHosted, faces);
+        }
+
+        public Bay withFaces(FaceConfig nowFaces) {
+            return new Bay(index, hosted, nowFaces);
+        }
+    }
+
+    /** The bay at an index, minting an empty one rather than returning nothing for a bay in range. */
+    public Bay bay(int index) {
+        return bays.stream().filter(b -> b.index() == index).findFirst().orElseGet(() -> Bay.empty(index));
+    }
+
+    /** Replaces one bay, adding it if this Workbay had never written that index before. */
+    public WorkbayRecord withBay(Bay bay) {
+        List<Bay> updated = new java.util.ArrayList<>(bays.stream()
+            .filter(b -> b.index() != bay.index()).toList());
+        updated.add(bay);
+        updated.sort(java.util.Comparator.comparingInt(Bay::index));
+        return withBays(updated);
     }
 
     /**

@@ -5,6 +5,7 @@ import com.neryos.workbay.world.BayGeometry;
 import com.neryos.workbay.world.WorkbayDimensions;
 import com.neryos.workbay.world.WorkbayRecord;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.server.level.ServerLevel;
 import net.neoforged.neoforge.capabilities.Capabilities;
@@ -97,6 +98,12 @@ public class BusRunner {
         statuses.remove(busId);
     }
 
+    /** Drops one bay's machine-end caches, so a changed face config is re-resolved rather than kept. */
+    public void forgetBay(int bay) {
+        machineItems.remove(bay);
+        machineEnergy.remove(bay);
+    }
+
     /** Drops every cache. Called when the Workbay is removed, so nothing keeps a level alive. */
     public void invalidate() {
         targetItems.clear();
@@ -121,9 +128,15 @@ public class BusRunner {
         }
         BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), bus.bay());
 
+        // Which of the hosted machine's faces this link may use, from the bay's own face config.
+        // Unconfigured means every face, so a bay nobody has opened the screen for behaves exactly
+        // as it did before the config existed.
+        java.util.Set<Direction> faces = record.bay(bus.bay()).faces()
+            .usable(bus.resource(), bus.mode() == BusConfig.Mode.INSERT);
+
         return switch (bus.resource()) {
-            case ITEM -> runItems(bus, targetLevel, target.pos(), backshop, machinePos);
-            case ENERGY -> runEnergy(bus, targetLevel, target.pos(), backshop, machinePos);
+            case ITEM -> runItems(bus, targetLevel, target.pos(), backshop, machinePos, faces);
+            case ENERGY -> runEnergy(bus, targetLevel, target.pos(), backshop, machinePos, faces);
             // Fluids use the same shape and are not wired up yet; a bus set to one simply idles
             // rather than pretending to work.
             case FLUID -> BusStatus.IDLE;
@@ -131,7 +144,7 @@ public class BusRunner {
     }
 
     private BusStatus runItems(BusConfig bus, ServerLevel targetLevel, BlockPos targetPos,
-        ServerLevel backshop, BlockPos machinePos) {
+        ServerLevel backshop, BlockPos machinePos, java.util.Set<Direction> faces) {
         BusEndpoint<IItemHandler> targetEnd = targetItems.computeIfAbsent(bus.id(), id ->
             new BusEndpoint<>(Capabilities.ItemHandler.BLOCK, targetLevel, targetPos, alive,
                 bus.targetFace().orElse(null)));
@@ -145,11 +158,11 @@ public class BusRunner {
         IItemHandler from;
         IItemHandler to;
         if (bus.mode() == BusConfig.Mode.INSERT) {
-            from = machineEnd.resolve(BusRunner::hasAnything);
+            from = machineEnd.resolve(BusRunner::hasAnything, faces);
             to = targetEnd.resolve(h -> h.getSlots() > 0);
         } else {
             from = targetEnd.resolve(BusRunner::hasAnything);
-            to = machineEnd.resolve(h -> h.getSlots() > 0);
+            to = machineEnd.resolve(h -> h.getSlots() > 0, faces);
         }
         if (to == null) {
             return BusStatus.TARGET_NO_PORT;
@@ -161,7 +174,7 @@ public class BusRunner {
     }
 
     private BusStatus runEnergy(BusConfig bus, ServerLevel targetLevel, BlockPos targetPos,
-        ServerLevel backshop, BlockPos machinePos) {
+        ServerLevel backshop, BlockPos machinePos, java.util.Set<Direction> faces) {
         BusEndpoint<IEnergyStorage> targetEnd = targetEnergy.computeIfAbsent(bus.id(), id ->
             new BusEndpoint<>(Capabilities.EnergyStorage.BLOCK, targetLevel, targetPos, alive,
                 bus.targetFace().orElse(null)));
@@ -175,11 +188,11 @@ public class BusRunner {
         IEnergyStorage from;
         IEnergyStorage to;
         if (bus.mode() == BusConfig.Mode.INSERT) {
-            from = machineEnd.resolve(IEnergyStorage::canExtract);
+            from = machineEnd.resolve(IEnergyStorage::canExtract, faces);
             to = targetEnd.resolve(IEnergyStorage::canReceive);
         } else {
             from = targetEnd.resolve(IEnergyStorage::canExtract);
-            to = machineEnd.resolve(IEnergyStorage::canReceive);
+            to = machineEnd.resolve(IEnergyStorage::canReceive, faces);
         }
         if (to == null) {
             return BusStatus.TARGET_NO_PORT;

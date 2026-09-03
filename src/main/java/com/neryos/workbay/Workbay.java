@@ -9,6 +9,7 @@ import com.neryos.workbay.init.WBCapabilities;
 import com.neryos.workbay.init.WBCreativeTabs;
 import com.neryos.workbay.init.WBDataComponents;
 import com.neryos.workbay.init.WBItems;
+import com.neryos.workbay.init.WBMenus;
 import com.neryos.workbay.world.WorkbayTickets;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.bus.api.IEventBus;
@@ -33,6 +34,7 @@ public class Workbay {
         WBItems.register(modEventBus);
         WBDataComponents.register(modEventBus);
         WBCreativeTabs.register(modEventBus);
+        WBMenus.register(modEventBus);
         WorkbayTickets.register(modEventBus);
         modEventBus.addListener(WBCapabilities::register);
 
