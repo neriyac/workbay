@@ -26,7 +26,7 @@ public class WBLanguageProvider extends LanguageProvider {
         addItem(WBItems.SHOPSTEEL, "Shopsteel");
         addItem(WBItems.HOUSING, "Housing");
         addBlock(WBBlocks.CONNECTOR, "Connector");
-        addItem(WBItems.LEVY, "Levy");
+        addBlock(WBBlocks.ASSAY, "Assay");
         addItem(WBItems.EXPANSION_PLATE, "Expansion Plate");
         addItem(WBItems.RESONATOR, "Resonator");
         addItem(WBItems.MULTICHANNEL, "Multichannel Upgrade");
@@ -305,25 +305,40 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("flow.legend.stalled"), "stalled");
 
         add(WorkbayLang.guiKey("upgrades.rate"), "Accepts up to %s FE/t");
-        add(WorkbayLang.guiKey("upgrades.levy"), "Levy in your inventory: %s");
-        add(WorkbayLang.guiKey("upgrades.tax"), "Tax rate: %s%% — the Assay is not built yet");
+        add(WorkbayLang.guiKey("upgrades.levy"), "Levy: %s");
+        add(WorkbayLang.guiKey("upgrades.cost"), "Costs %s Levy, taken from this Workbay's balance "
+            + "when you install it. The next one costs more.");
+        add(WorkbayLang.guiKey("upgrades.unaffordable"), "You have %s Levy and this one costs %s. "
+            + "Raise the skim, or move more goods through your links.");
         add(WorkbayLang.guiKey("upgrades.add"), "Install one %s");
         add(WorkbayLang.guiKey("upgrades.maxed"), "You have as many of these as a Workbay takes.");
         add(WorkbayLang.guiKey("upgrade.expansion_plate"), "Expansion Plate");
-        add(WorkbayLang.guiKey("upgrade.expansion_plate.desc"), "+1 bay, up to eight");
-        add(WorkbayLang.guiKey("upgrade.expansion_plate.cost"), "Costs 4 Levy to craft, rising.");
+        add(WorkbayLang.guiKey("upgrade.expansion_plate.desc"), "+1 bay");
         add(WorkbayLang.guiKey("upgrade.resonator"), "Resonator");
         add(WorkbayLang.guiKey("upgrade.resonator.desc"), "Reaches other dimensions");
-        add(WorkbayLang.guiKey("upgrade.resonator.cost"), "Costs 4 Levy and an Ender Eye to craft.");
         add(WorkbayLang.guiKey("upgrade.multichannel"), "Multichannel");
         add(WorkbayLang.guiKey("upgrade.multichannel.desc"), "One Connector, all three types");
-        add(WorkbayLang.guiKey("upgrade.multichannel.cost"), "Costs 4 Levy and an Amethyst Shard to "
-            + "craft.");
+
+        // The skim. SPEC.md §3: goods going missing must be explained exactly where the loss is
+        // noticed, so the rate is on the dial, on the bays screen and on every row it applies to.
+        add(WorkbayLang.guiKey("skim"), "Skim %s%%");
+        add(WorkbayLang.guiKey("skim.name"), "Skim: %s%% of the goods your links carry");
+        add(WorkbayLang.guiKey("skim.tip"), "Items your links move that count as refined goods are "
+            + "taken at this rate and turned into Levy by the Assay. Click to raise it by five, "
+            + "right-click to lower it. At zero the Workbay takes nothing.");
+        add(WorkbayLang.guiKey("skim.row"), "%s%% skimmed");
+        add(WorkbayLang.guiKey("skim.row.tip"), "This link hands the Assay that share of the "
+            + "refined goods it carries, so less arrives at the far end than leaves.");
+        add(WorkbayLang.guiKey("skim.no_assay"), "No Assay racked");
+        add(WorkbayLang.guiKey("skim.no_assay.tip"), "Nothing is being skimmed: the rate only "
+            + "applies while an Assay is racked in one of this Workbay's bays.");
 
         add(WorkbayLang.messageKey("pair_needs_connector"), "Hold a Connector to pair one.");
         add(WorkbayLang.messageKey("upgrade_maxed"), "This Workbay already has as many of those as "
             + "it takes.");
         add(WorkbayLang.messageKey("upgrade_missing"), "You don't have one of those to install.");
+        add(WorkbayLang.messageKey("upgrade_needs_levy"), "That costs %s Levy and this Workbay has "
+            + "%s. Raise the skim, or move more goods through your links.");
 
         // Tooltips. SPEC.md §6: at most four lines unshifted.
         add(WorkbayLang.tooltipKey("hosting"), "Hosting: %s / %s machines");

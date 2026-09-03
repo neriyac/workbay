@@ -55,6 +55,10 @@ public class WBBlockStateProvider extends BlockStateProvider {
                 .build();
         });
 
+        // Placeholder art, same as everything else in the mod: a flat cartridge is SPEC.md §2's
+        // description and a cube of amethyst is what says "not a machine you plug into" cheapest.
+        simpleBlock(WBBlocks.ASSAY.get(), models().cubeAll("assay", mcBlock("amethyst_block")));
+
         // A Port is only ever seen by a player standing in a room, which cannot happen in v1.
         simpleBlock(WBBlocks.PORT.get(), models().cubeAll("port", mcBlock("chiseled_polished_blackstone")));
     }

@@ -48,6 +48,13 @@ public class WorkbayBlockEntity extends BlockEntity {
     private boolean mirroring;
 
     /**
+     * How long the Assay has been working on the Levy it is currently making. Only counts while
+     * there is a full batch to convert, so the 200 ticks are 200 ticks of work rather than a delay
+     * that starts before the goods arrive.
+     */
+    private int assayTicks;
+
+    /**
      * SPEC.md §9's buffer, accepted on any face and never handing energy back out of the block.
      * The three-layer spend model and round-robin sharing to bays are not built yet, so this is a
      * real buffer the screen reads rather than a number invented for a progress bar.
@@ -234,12 +241,45 @@ public class WorkbayBlockEntity extends BlockEntity {
                 Math.floorMod(pos.hashCode(), BusRunner.WHEEL));
         });
 
+        workbay.settleAssay(server);
+
         // A Connector broken while this Workbay was unloaded could not tell it, so the runner spots
         // the gap instead and the link is swept here, outside the iteration that found it.
         var orphaned = workbay.runner.orphaned();
         if (!orphaned.isEmpty()) {
             orphaned.forEach(workbay::removeBus);
         }
+    }
+
+    /**
+     * Banks what the skim took and turns full batches into Levy. SPEC.md §3.
+     *
+     * <p>Here rather than in the runner because this is a write to the record, and the runner is
+     * mid-iteration over a list that record owns. One write per tick, and only when something
+     * actually changed — a Workbay with the dial at zero never touches the registry.
+     */
+    private void settleAssay(ServerLevel server) {
+        int skimmed = runner.takeSkim();
+        WorkbayRecord record = record().orElse(null);
+        if (record == null) {
+            return;
+        }
+        WorkbayRecord.Assay assay = record.assay();
+        int held = assay.skimmed() + skimmed;
+        int levy = assay.levy();
+        if (held >= com.neryos.workbay.content.assay.AssayBlock.ITEMS_PER_LEVY
+            && com.neryos.workbay.content.assay.AssayBlock.rackedIn(record)
+            && ++assayTicks >= com.neryos.workbay.content.assay.AssayBlock.CONVERT_TICKS) {
+            assayTicks = 0;
+            held -= com.neryos.workbay.content.assay.AssayBlock.ITEMS_PER_LEVY;
+            levy++;
+        }
+        if (held == assay.skimmed() && levy == assay.levy()) {
+            return;
+        }
+        RoomRegistry.get(server.getServer())
+            .put(record.withAssay(assay.withSkimmed(held).withLevy(levy)));
+        setChanged();
     }
 
     /**

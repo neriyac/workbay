@@ -43,5 +43,7 @@ public enum WorkbayAction {
     /** {@code text} is the selected bay's new name; empty falls back to the machine's own. */
     SET_BAY_NAME,
     /** Cycles the selected bay's {@link com.neryos.workbay.world.RedstoneMode}. */
-    CYCLE_REDSTONE
+    CYCLE_REDSTONE,
+    /** Steps the Assay's skim rate up by five, or down by five on a right-click. SPEC.md §3. */
+    SET_SKIM
 }

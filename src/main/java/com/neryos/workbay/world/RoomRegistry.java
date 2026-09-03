@@ -109,7 +109,7 @@ public class RoomRegistry extends SavedData {
         ChunkPos column = allocateBayColumn();
         WorkbayRecord record = new WorkbayRecord(id, mintCode(random), owner, ownerName, false,
             column, WorkbayRecord.Upgrades.NONE, Optional.empty(), List.of(), List.of(), List.of(),
-            0);
+            0, WorkbayRecord.Assay.NONE);
         byId.put(id, record);
         byCode.put(normalise(record.code()), id);
         setDirty();

@@ -21,11 +21,11 @@ public class WBItemModelProvider extends ItemModelProvider {
         // Placeholder art. SPEC.md §7 wants these to read as materials rather than tools.
         flatItem(WBItems.SHOPSTEEL.getId().getPath(), "iron_ingot");
         flatItem(WBItems.HOUSING.getId().getPath(), "copper_ingot");
-        flatItem(WBItems.LEVY.getId().getPath(), "amethyst_shard");
         flatItem(WBItems.EXPANSION_PLATE.getId().getPath(), "iron_nugget");
         flatItem(WBItems.RESONATOR.getId().getPath(), "echo_shard");
         flatItem(WBItems.MULTICHANNEL.getId().getPath(), "prismarine_crystals");
         blockItem(WBBlocks.CONNECTOR.getId().getPath());
+        blockItem(WBBlocks.ASSAY.getId().getPath());
     }
 
     private void blockItem(String name) {

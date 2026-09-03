@@ -1,11 +1,11 @@
 {
   "parent": "minecraft:recipes/root",
   "criteria": {
-    "has_levy": {
+    "has_housing": {
       "conditions": {
         "items": [
           {
-            "items": "workbay:levy"
+            "items": "workbay:housing"
           }
         ]
       },
@@ -21,7 +21,7 @@
   "requirements": [
     [
       "has_the_recipe",
-      "has_levy"
+      "has_housing"
     ]
   ],
   "rewards": {

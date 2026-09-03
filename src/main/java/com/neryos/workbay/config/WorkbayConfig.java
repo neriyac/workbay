@@ -57,9 +57,18 @@ public class WorkbayConfig {
                 .comment("How long a player's anchored Workbays keep running after they log out.")
                 .defineInRange("anchorGraceMinutes", 5, 0, 1440);
 
+            // Also the length of the Expansion Plate ladder: the plate's maximum is this minus the
+            // two bays a base Workbay already grants (WorkbayUpgrade.EXPANSION_PLATE). One number,
+            // so the ceiling and the ladder cannot disagree about where the top is. Eight is where
+            // the bay rack stops fitting the screen and where BayGeometry's Y spacing was baked
+            // into saved worlds, so raising it past eight is a rack and geometry job, not an edit
+            // here -- which is exactly why the number below it is the one worth measuring.
             maxBaysPerWorkbay = builder
-                .comment("Hard ceiling on bays, regardless of Expansion Plates installed.")
-                .defineInRange("maxBaysPerWorkbay", 8, 1, 8);
+                .comment("Hard ceiling on bays, regardless of Expansion Plates installed. The base",
+                    "Workbay grants two, so this also sets how many Expansion Plates can be",
+                    "installed: this minus two.")
+                .defineInRange("maxBaysPerWorkbay", 8, com.neryos.workbay.world.WorkbayRecord.BASE_BAYS,
+                    com.neryos.workbay.world.BayGeometry.MAX_BAYS);
 
             maxNetworksPerPlayer = builder
                 .comment("How many separate Workbay networks one player may own. An unbound Workbay",

@@ -32,12 +32,14 @@ public class WBBlockTagProvider extends BlockTagsProvider {
         // an untagged block. Found in play, not in review, then reproduced (workbayDropsWhenMined).
         tag(BlockTags.MINEABLE_WITH_PICKAXE)
             .add(WBBlocks.WORKBAY.get())
-            .add(WBBlocks.CONNECTOR.get());
+            .add(WBBlocks.CONNECTOR.get())
+            .add(WBBlocks.ASSAY.get());
         // Iron block's own tier: at least a stone pickaxe. Copying the properties did not copy
         // tag membership, so this has to be stated again explicitly.
         tag(BlockTags.NEEDS_STONE_TOOL)
             .add(WBBlocks.WORKBAY.get())
-            .add(WBBlocks.CONNECTOR.get());
+            .add(WBBlocks.CONNECTOR.get())
+            .add(WBBlocks.ASSAY.get());
 
         tag(HostChecks.HOST_DENIED)
             .addTag(BlockTags.BEDS)
@@ -49,8 +51,11 @@ public class WBBlockTagProvider extends BlockTagsProvider {
             // removed, and so it reads correctly to anyone inspecting the tag.
             .add(WBBlocks.WORKBAY.get());
 
-        // Ships empty. It exists so a pack author has somewhere to put a block one of our
-        // heuristics is wrong about, and an entry here beats every rule below it.
-        tag(HostChecks.HOST_ALLOWED);
+        // Ships with exactly one entry, and it is ours. The Assay has no block entity, so the
+        // no_machine heuristic (SPEC.md §11) rejects it -- correctly, for anything else. This is
+        // the documented escape hatch for a block a heuristic is wrong about, and the mod's own
+        // machine is the first block it is wrong about. A pack author adds theirs beside it.
+        tag(HostChecks.HOST_ALLOWED)
+            .add(WBBlocks.ASSAY.get());
     }
 }

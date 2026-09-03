@@ -1,6 +1,7 @@
 package com.neryos.workbay.init;
 
 import com.neryos.workbay.Workbay;
+import com.neryos.workbay.content.assay.AssayBlock;
 import com.neryos.workbay.content.connector.ConnectorBlock;
 import com.neryos.workbay.content.connector.ConnectorItem;
 import com.neryos.workbay.content.port.PortBlock;
@@ -34,6 +35,17 @@ public class WBBlocks {
      * it is placed. Its BlockItem is custom only so the tooltip can name what it is paired to.
      */
     public static final DeferredBlock<ConnectorBlock> CONNECTOR = registerConnector();
+
+    /**
+     * The mod's only machine, and the only source of Levy. Built to be racked: no faces, no block
+     * entity, nothing to connect to on the floor. SPEC.md §2 and §3.
+     */
+    public static final DeferredBlock<AssayBlock> ASSAY = registerWithItem("assay", AssayBlock::new,
+        BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK)
+            .mapColor(MapColor.COLOR_PURPLE)
+            .sound(SoundType.METAL)
+            .strength(3.0F)
+            .noOcclusion());
 
     public static final DeferredBlock<PortBlock> PORT = BLOCKS.register("port", () ->
         new PortBlock(BlockBehaviour.Properties.of()

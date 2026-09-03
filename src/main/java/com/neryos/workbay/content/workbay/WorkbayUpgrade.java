@@ -1,9 +1,12 @@
 package com.neryos.workbay.content.workbay;
 
+import com.neryos.workbay.config.WorkbayConfig;
 import com.neryos.workbay.init.WBItems;
+import com.neryos.workbay.world.WorkbayRecord;
 import net.minecraft.util.StringRepresentable;
 import net.minecraft.world.item.Item;
 
+import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
 /**
@@ -17,17 +20,31 @@ import java.util.function.Supplier;
  * and are deliberately absent here rather than present and inert.
  */
 public enum WorkbayUpgrade implements StringRepresentable {
-    EXPANSION_PLATE("expansion_plate", 7, () -> WBItems.EXPANSION_PLATE.get()),
-    RESONATOR("resonator", 1, () -> WBItems.RESONATOR.get()),
-    MULTICHANNEL("multichannel", 1, () -> WBItems.MULTICHANNEL.get());
+    /**
+     * <b>The maximum is a config value, not a number argued for here.</b> How long the ladder
+     * should be is a balance question, and balance numbers in this mod come from measurement -
+     * so the ceiling is {@code maxBaysPerWorkbay} minus the bays the base Workbay already grants,
+     * and a pack that has actually played to the top can move it without a release. It is derived
+     * from that knob rather than being a second one: two numbers that can disagree about the same
+     * ceiling is how a player ends up holding a plate that installs and does nothing.
+     */
+    EXPANSION_PLATE("expansion_plate",
+        () -> WorkbayConfig.SERVER.maxBaysPerWorkbay.get() - WorkbayRecord.BASE_BAYS,
+        2, 2, () -> WBItems.EXPANSION_PLATE.get()),
+    RESONATOR("resonator", () -> 1, 8, 0, () -> WBItems.RESONATOR.get()),
+    MULTICHANNEL("multichannel", () -> 1, 8, 0, () -> WBItems.MULTICHANNEL.get());
 
     private final String name;
-    private final int max;
+    private final IntSupplier max;
+    private final int baseCost;
+    private final int costStep;
     private final Supplier<Item> item;
 
-    WorkbayUpgrade(String name, int max, Supplier<Item> item) {
+    WorkbayUpgrade(String name, IntSupplier max, int baseCost, int costStep, Supplier<Item> item) {
         this.name = name;
         this.max = max;
+        this.baseCost = baseCost;
+        this.costStep = costStep;
         this.item = item;
     }
 
@@ -37,7 +54,16 @@ public enum WorkbayUpgrade implements StringRepresentable {
     }
 
     public int max() {
-        return max;
+        return Math.max(0, max.getAsInt());
+    }
+
+    /**
+     * What installing the next one costs in Levy. SPEC.md §1: "rising", which a crafting recipe
+     * cannot express - a recipe costs the same the tenth time as the first. The rise lives here,
+     * where the install happens and the screen can name it.
+     */
+    public int levyCost(int installed) {
+        return baseCost + costStep * Math.max(0, installed);
     }
 
     public Item item() {

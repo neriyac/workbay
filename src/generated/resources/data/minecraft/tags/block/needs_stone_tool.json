@@ -1,6 +1,7 @@
 {
   "values": [
     "workbay:workbay",
-    "workbay:connector"
+    "workbay:connector",
+    "workbay:assay"
   ]
 }

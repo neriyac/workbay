@@ -56,7 +56,7 @@ class UpgradesPage extends WorkbayPage {
         header(g, mouseX, mouseY, "UPGRADES");
         preview(g, mouseX, mouseY);
         rows(g, mouseX, mouseY);
-        footer(g);
+        footer(g, mouseX, mouseY);
     }
 
     /** Left: the block, its power bar at full size with exact figures, and the incoming rate. */
@@ -114,6 +114,11 @@ class UpgradesPage extends WorkbayPage {
             int py = y(ROW_Y + index * ROW_PITCH);
             int installed = snap.upgrades().installed(upgrade);
             boolean maxed = installed >= upgrade.max();
+            int cost = upgrade.levyCost(installed);
+            // SPEC.md §4: an unaffordable row draws faint rather than disappearing, because the
+            // ladder is the progression and hiding its rungs hides the game.
+            boolean affordable = snap.levy() >= cost;
+            boolean canInstall = !maxed && affordable;
 
             Draw.well(g, px, py, ROW_W, ROW_H);
 
@@ -127,39 +132,60 @@ class UpgradesPage extends WorkbayPage {
             int countX = px + ROW_W - 36 - font.width(count);
             g.drawString(font, font.plainSubstrByWidth(WorkbayScreen.gui(key).getString(),
                     countX - (px + 28) - 4),
-                px + 28, py + 6, maxed ? Draw.TEXT_FAINT : Draw.TEXT, false);
+                px + 28, py + 6, canInstall ? Draw.TEXT : Draw.TEXT_FAINT, false);
             g.drawString(font, count, countX, py + 6, maxed ? Draw.GREEN : Draw.TEXT_DIM, false);
+
+            // The description shares its line with the price, because the price is the thing the
+            // player is actually deciding on and a tooltip is one hover too late for that.
+            String price = maxed ? "" : WorkbayScreen.gui("upgrades.levy", cost).getString();
+            int priceX = px + ROW_W - 36 - font.width(price);
+            g.drawString(font, price, priceX, py + 19,
+                maxed ? Draw.TEXT_FAINT : affordable ? Draw.GREEN : Draw.RED, false);
             g.drawString(font, font.plainSubstrByWidth(
-                    WorkbayScreen.gui(key + ".desc").getString(), ROW_W - 28 - 36),
+                    WorkbayScreen.gui(key + ".desc").getString(), priceX - (px + 28) - 4),
                 px + 28, py + 19, Draw.TEXT_FAINT, false);
 
             int addX = px + ROW_W - 30;
             int addY = py + 8;
-            if (maxed) {
-                Draw.button(g, addX, addY, 22, 18, false, true);
-                WBIcons.draw(g, WBIcons.PLUS, addX + 5, addY + 3, Draw.TEXT_FAINT);
-                screen.hit(addX, addY, 22, 18, () -> { },
-                    WorkbayScreen.gui(key), WorkbayScreen.gui("upgrades.maxed"));
-            } else {
-                boolean hover = screen.hovered(addX, addY, 22, 18, mouseX, mouseY);
-                Draw.button(g, addX, addY, 22, 18, hover, false);
-                WBIcons.draw(g, WBIcons.PLUS, addX + 5, addY + 3, Draw.TEXT);
-                screen.hit(addX, addY, 22, 18,
-                    () -> screen.send(WorkbayAction.INSTALL_UPGRADE, index),
-                    WorkbayScreen.gui(key), WorkbayScreen.gui("upgrades.add",
-                        WorkbayScreen.gui(key)), WorkbayScreen.gui(key + ".cost"));
-            }
+            boolean hover = canInstall && screen.hovered(addX, addY, 22, 18, mouseX, mouseY);
+            Draw.button(g, addX, addY, 22, 18, hover, maxed, canInstall);
+            WBIcons.draw(g, WBIcons.PLUS, addX + 5, addY + 3,
+                canInstall ? Draw.TEXT : Draw.TEXT_FAINT);
+            screen.hit(addX, addY, 22, 18,
+                canInstall ? () -> screen.send(WorkbayAction.INSTALL_UPGRADE, index) : () -> { },
+                WorkbayScreen.gui(key),
+                maxed ? WorkbayScreen.gui("upgrades.maxed")
+                    : affordable ? WorkbayScreen.gui("upgrades.add", WorkbayScreen.gui(key))
+                    : WorkbayScreen.gui("upgrades.unaffordable", snap.levy(), cost),
+                maxed ? WorkbayScreen.gui("upgrades.maxed") : WorkbayScreen.gui("upgrades.cost", cost));
         }
     }
 
-    /** Levy in stock and the tax rate. The Assay is not built, so the rate is honestly zero. */
-    private void footer(GuiGraphics g) {
+    /**
+     * Levy in stock and the skim dial. SPEC.md §3 and §4: the two live together because they are
+     * the two ends of one loop — the rate is what buys the balance, and the balance is what the
+     * rows above are spending. Nothing else in the mod reads or writes either.
+     */
+    private void footer(GuiGraphics g, int mouseX, int mouseY) {
         var font = screen.font();
+        WorkbaySnapshot snap = snapshot();
         g.fill(x(12), y(HEIGHT - 26), x(WIDTH - 12), y(HEIGHT - 25), Draw.EDGE_DARK);
-        g.drawString(font, WorkbayScreen.gui("upgrades.levy", snapshot().levyInInventory()).getString(),
-            x(12), y(HEIGHT - 19), Draw.TEXT_DIM, false);
-        // Right-aligned off the panel's own edge rather than a hardcoded x, which ran off it.
-        String tax = WorkbayScreen.gui("upgrades.tax", 0).getString();
-        g.drawString(font, tax, x(WIDTH - 12 - font.width(tax)), y(HEIGHT - 19), Draw.TEXT_FAINT, false);
+        g.drawString(font, WorkbayScreen.gui("upgrades.levy", snap.levy()).getString(),
+            x(12), y(HEIGHT - 19), snap.levy() > 0 ? Draw.TEXT : Draw.TEXT_DIM, false);
+
+        // The dial. Left-click steps up by five, right-click down, the way every cycling control in
+        // this mod works — and it clamps at both ends rather than wrapping, because a dial that
+        // rolls 25% straight back to nothing is a dial that switches somebody's income off by
+        // accident. Right-aligned off the panel's own edge rather than a hardcoded x.
+        String rate = WorkbayScreen.gui("skim", snap.skimRate()).getString();
+        int w = font.width(rate) + 10;
+        int px = x(WIDTH - 12 - w);
+        int py = y(HEIGHT - 23);
+        boolean on = snap.skimRate() > 0;
+        boolean hover = screen.hovered(px, py, w, 16, mouseX, mouseY);
+        Draw.button(g, px, py, w, 16, hover, on);
+        g.drawString(font, rate, px + 5, py + 4, on ? Draw.AMBER : Draw.TEXT_FAINT, false);
+        screen.hit(px, py, w, 16, () -> screen.send(WorkbayAction.SET_SKIM),
+            WorkbayScreen.gui("skim.name", snap.skimRate()), WorkbayScreen.gui("skim.tip"));
     }
 }

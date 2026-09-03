@@ -606,6 +606,22 @@ class BaysPage extends WorkbayPage {
             WorkbayScreen.gui("links.sort." + sort.name().toLowerCase(java.util.Locale.ROOT)),
             WorkbayScreen.gui("links.sort.tip"));
 
+        // The skim, at rest, directly above the rows it takes from. SPEC.md §3: goods going missing
+        // must be explained where the loss is noticed, and the loss is noticed on these rows. It is
+        // read-only here — the dial itself lives on the upgrades screen, beside the Levy it buys.
+        boolean assay = hasAssay(snap);
+        String rate = assay || snap.skimRate() == 0
+            ? WorkbayScreen.gui("skim", snap.skimRate()).getString()
+            : WorkbayScreen.gui("skim.no_assay").getString();
+        g.drawString(font, rate, x(LIST_X + 132), y(linksY + 5),
+            skimming(snap) ? Draw.AMBER : Draw.TEXT_FAINT, false);
+        screen.hit(x(LIST_X + 130), y(linksY + 2), font.width(rate) + 4, 14, () -> { },
+            assay || snap.skimRate() == 0
+                ? WorkbayScreen.gui("skim.name", snap.skimRate())
+                : WorkbayScreen.gui("skim.no_assay"),
+            assay || snap.skimRate() == 0
+                ? WorkbayScreen.gui("skim.tip") : WorkbayScreen.gui("skim.no_assay.tip"));
+
         boolean pairHover = screen.hovered(pairX, y(linksY), 46, 18, mouseX, mouseY);
         Draw.button(g, pairX, y(linksY), 46, 18, pairHover, false);
         // The Connector's own item, because the button only does anything while you are holding
@@ -720,8 +736,22 @@ class BaysPage extends WorkbayPage {
         String label = link.label()
             .orElseGet(() -> link.targetBlock().map(BaysPage::displayName)
                 .orElse(WorkbayScreen.gui("links.unknown")).getString());
-        g.drawString(font, font.plainSubstrByWidth(label, 50), px + 80, py + 5,
-            on ? Draw.TEXT : Draw.TEXT_FAINT, false);
+
+        // And what this row is losing, on this row. A tax the player only finds by opening another
+        // screen is the best bug-report generator in the mod (SPEC.md §3). Only item links: fluids
+        // and energy are never skimmed. The name gives up whatever width this needs, right-aligned
+        // against the target column so the two can never overlap at any rate.
+        boolean taxed = skimming(snapshot()) && config.resource() == BusConfig.Resource.ITEM;
+        String cut = taxed
+            ? WorkbayScreen.gui("skim.row", snapshot().skimRate()).getString() : "";
+        if (taxed) {
+            g.drawString(font, cut, px + 134 - font.width(cut), py + 5, Draw.AMBER, false);
+            screen.hit(px + 134 - font.width(cut), py + 3, font.width(cut), 12, () -> { },
+                WorkbayScreen.gui("skim.name", snapshot().skimRate()),
+                WorkbayScreen.gui("skim.row.tip"));
+        }
+        g.drawString(font, font.plainSubstrByWidth(label, 50 - (taxed ? font.width(cut) + 4 : 0)),
+            px + 80, py + 5, on ? Draw.TEXT : Draw.TEXT_FAINT, false);
 
         // The right-hand column is the status word whenever there is one, for every kind of link.
         // An internal row used to print "→ Bay 2" in amber and nothing else, so the one broken link
@@ -1064,6 +1094,21 @@ class BaysPage extends WorkbayPage {
 
     private static Component statusHelp(BusRunner.BusStatus status) {
         return WorkbayScreen.gui("status." + status.name().toLowerCase(java.util.Locale.ROOT) + ".tip");
+    }
+
+    /**
+     * Whether an Assay is racked anywhere in this network. Read off the bay list rather than sent
+     * as a flag: the snapshot already carries what is in every bay, and a second field saying the
+     * same thing is a second field that can disagree with the first.
+     */
+    private static boolean hasAssay(WorkbaySnapshot snap) {
+        return snap.bays().stream().anyMatch(bay ->
+            bay.hosted().filter(com.neryos.workbay.init.WBBlocks.ASSAY.getId()::equals).isPresent());
+    }
+
+    /** A rate with no Assay behind it takes nothing, so no row may claim it is losing anything. */
+    private static boolean skimming(WorkbaySnapshot snap) {
+        return snap.skimRate() > 0 && hasAssay(snap);
     }
 
     private static ItemStack iconFor(Optional<ResourceLocation> id) {

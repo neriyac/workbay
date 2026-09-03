@@ -8,17 +8,14 @@
     "H": {
       "item": "workbay:housing"
     },
-    "L": {
-      "item": "workbay:levy"
-    },
     "S": {
       "item": "workbay:shopsteel"
     }
   },
   "pattern": [
-    "LSL",
+    " S ",
     "SCS",
-    "LHL"
+    " H "
   ],
   "result": {
     "count": 1,

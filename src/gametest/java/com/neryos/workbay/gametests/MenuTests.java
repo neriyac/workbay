@@ -246,11 +246,26 @@ public class MenuTests {
             helper.assertValueEqual(workbay.record().orElseThrow().upgrades().multichannel(), 0,
                 "Multichannel installed before anything is clicked");
 
+            // Holding the item is not enough: an upgrade costs Levy, and the cost rises. A Workbay
+            // that has never run an Assay cannot install anything.
+            menu.act(WorkbayAction.INSTALL_UPGRADE, WorkbayUpgrade.MULTICHANNEL.ordinal(), Optional.empty());
+            helper.assertValueEqual(workbay.record().orElseThrow().upgrades().multichannel(), 0,
+                "Multichannel installed with no Levy banked");
+            helper.assertValueEqual(player.getInventory().countItem(WBItems.MULTICHANNEL.get()), 2,
+                "Multichannel Upgrades left after an install refused for want of Levy");
+
+            int cost = WorkbayUpgrade.MULTICHANNEL.levyCost(0);
+            RoomRegistry registry = RoomRegistry.get(level.getServer());
+            registry.put(workbay.record().orElseThrow()
+                .withAssay(WorkbayRecord.Assay.NONE.withLevy(cost + 3)));
+
             menu.act(WorkbayAction.INSTALL_UPGRADE, WorkbayUpgrade.MULTICHANNEL.ordinal(), Optional.empty());
             helper.assertValueEqual(workbay.record().orElseThrow().upgrades().multichannel(), 1,
                 "Multichannel installed after one click");
             helper.assertValueEqual(player.getInventory().countItem(WBItems.MULTICHANNEL.get()), 1,
                 "Multichannel Upgrades left in the inventory");
+            helper.assertValueEqual(workbay.record().orElseThrow().assay().levy(), 3,
+                "Levy left after paying for one Multichannel");
 
             // Max is one. A second click must refuse rather than eat the item.
             menu.act(WorkbayAction.INSTALL_UPGRADE, WorkbayUpgrade.MULTICHANNEL.ordinal(), Optional.empty());
@@ -262,7 +277,9 @@ public class MenuTests {
             // And what the screen would draw has to agree with what the registry holds.
             WorkbaySnapshot snapshot = WorkbayMenu.build(workbay, player, 0);
             helper.assertValueEqual(snapshot.upgrades().multichannel(), 1, "the snapshot's count");
-            helper.assertValueEqual(snapshot.bayCapacity(), 1, "the snapshot's bay capacity");
+            helper.assertValueEqual(snapshot.bayCapacity(), WorkbayRecord.BASE_BAYS,
+                "the snapshot's bay capacity");
+            helper.assertValueEqual(snapshot.levy(), 3, "the snapshot's Levy balance");
 
             level.setBlock(workbayPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
             helper.succeed();
@@ -472,9 +489,10 @@ public class MenuTests {
             BlockPos pos = helper.absolutePos(new BlockPos(0, 1, 0));
             WorkbayBlockEntity workbay = placeWorkbay(helper, pos, player);
             RoomRegistry registry = RoomRegistry.get(level.getServer());
-            // Three bays, so the target-bay ring has a value on both sides of the hole.
+            // Three bays, so the target-bay ring has a value on both sides of the hole. One plate,
+            // because the base Workbay already grants two (WorkbayRecord.BASE_BAYS).
             registry.put(workbay.record().orElseThrow()
-                .withUpgrades(new WorkbayRecord.Upgrades(2, 0, 0, 0, 0, 0)));
+                .withUpgrades(new WorkbayRecord.Upgrades(1, 0, 0, 0, 0, 0)));
             WorkbayMenu menu = menuFor(workbay, player);
 
             // The redstone ring: forward one step off ALWAYS, then back past it to the far end.

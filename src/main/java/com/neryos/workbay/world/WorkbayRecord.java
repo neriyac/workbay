@@ -37,7 +37,8 @@ public record WorkbayRecord(
     List<Bay> bays,
     List<UUID> rooms,
     List<com.neryos.workbay.bus.BusConfig> buses,
-    int deployedCount) {
+    int deployedCount,
+    Assay assay) {
 
     public static final Codec<WorkbayRecord> CODEC = RecordCodecBuilder.create(i -> i.group(
         UUIDUtil.CODEC.fieldOf("Id").forGetter(WorkbayRecord::id),
@@ -56,32 +57,37 @@ public record WorkbayRecord(
             .forGetter(WorkbayRecord::buses),
         // How many live Workbay blocks are currently bound to this record. Read by placement to
         // decide whether an unbound item may reuse this network or must be refused (SPEC.md §14).
-        Codec.INT.optionalFieldOf("DeployedCount", 0).forGetter(WorkbayRecord::deployedCount)
+        Codec.INT.optionalFieldOf("DeployedCount", 0).forGetter(WorkbayRecord::deployedCount),
+        // Nested rather than three more fields on the root: the codec group caps at sixteen and
+        // these three only ever mean anything together. Absent in a record written before the
+        // Assay existed, which reads back as no Levy, nothing skimmed and a rate of zero -- which
+        // is exactly what that Workbay had.
+        Assay.CODEC.optionalFieldOf("Assay", Assay.NONE).forGetter(WorkbayRecord::assay)
     ).apply(i, WorkbayRecord::new));
 
     public WorkbayRecord withUpgrades(Upgrades newUpgrades) {
         return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, newUpgrades,
-            lastKnownPos, bays, rooms, buses, deployedCount);
+            lastKnownPos, bays, rooms, buses, deployedCount, assay);
     }
 
     public WorkbayRecord withLastKnownPos(GlobalPos pos) {
         return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
-            Optional.of(pos), bays, rooms, buses, deployedCount);
+            Optional.of(pos), bays, rooms, buses, deployedCount, assay);
     }
 
     public WorkbayRecord withLocked(boolean nowLocked) {
         return new WorkbayRecord(id, code, owner, ownerName, nowLocked, bayColumn, upgrades,
-            lastKnownPos, bays, rooms, buses, deployedCount);
+            lastKnownPos, bays, rooms, buses, deployedCount, assay);
     }
 
     public WorkbayRecord withBays(List<Bay> newBays) {
         return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
-            lastKnownPos, List.copyOf(newBays), rooms, buses, deployedCount);
+            lastKnownPos, List.copyOf(newBays), rooms, buses, deployedCount, assay);
     }
 
     public WorkbayRecord withBuses(List<com.neryos.workbay.bus.BusConfig> newBuses) {
         return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
-            lastKnownPos, bays, rooms, List.copyOf(newBuses), deployedCount);
+            lastKnownPos, bays, rooms, List.copyOf(newBuses), deployedCount, assay);
     }
 
     /**
@@ -93,16 +99,63 @@ public record WorkbayRecord(
      */
     public WorkbayRecord withDeployedCount(int nowDeployedCount) {
         return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
-            lastKnownPos, bays, rooms, buses, Math.max(0, nowDeployedCount));
+            lastKnownPos, bays, rooms, buses, Math.max(0, nowDeployedCount), assay);
+    }
+
+    public WorkbayRecord withAssay(Assay nowAssay) {
+        return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
+            lastKnownPos, bays, rooms, buses, deployedCount, nowAssay);
     }
 
     /**
-     * How many bays this Workbay may use: the base one, plus one per Expansion Plate, capped by the
-     * server's {@code maxBaysPerWorkbay}. The cap is applied here rather than at install time so
-     * lowering it never destroys an Expansion Plate somebody already paid Levy for.
+     * Everything the Assay is holding for this network: Levy banked, tagged items skimmed and not
+     * yet converted, and the rate the player set. SPEC.md §3.
+     *
+     * <p>On the record and not in a block entity, because the Assay has no faces and therefore
+     * nothing physical to hand a Levy item to. It is a balance, and the upgrades screen is where it
+     * is read and spent. That also means it survives exactly as well as bays and upgrades do:
+     * breaking the Workbay does not spend somebody's Levy.
+     */
+    public record Assay(int levy, int skimmed, int rate) {
+        public static final Assay NONE = new Assay(0, 0, 0);
+
+        public static final Codec<Assay> CODEC = RecordCodecBuilder.create(i -> i.group(
+            Codec.INT.optionalFieldOf("Levy", 0).forGetter(Assay::levy),
+            Codec.INT.optionalFieldOf("Skimmed", 0).forGetter(Assay::skimmed),
+            Codec.INT.optionalFieldOf("Rate", 0).forGetter(Assay::rate)
+        ).apply(i, Assay::new));
+
+        public Assay withLevy(int nowLevy) {
+            return new Assay(Math.max(0, nowLevy), skimmed, rate);
+        }
+
+        public Assay withSkimmed(int nowSkimmed) {
+            return new Assay(levy, Math.max(0, nowSkimmed), rate);
+        }
+
+        public Assay withRate(int nowRate) {
+            return new Assay(levy, skimmed, nowRate);
+        }
+    }
+
+    /**
+     * The base Workbay's bays, before any Expansion Plate. <b>Two, not one.</b>
+     *
+     * <p>One is a deadlock. The Assay occupies a bay (SPEC.md §3) and exposes no faces, so a link on
+     * its own bay reaches nothing; Levy is only made by skimming goods moving through a link, so
+     * making any Levy at all needs a second bay with traffic in it. Under the per-block model the
+     * player crafted a second Workbay for that; SPEC.md §14's one-deployed-Workbay-per-network
+     * closed that door and turned a soft ceiling into a hard stop with no way out.
+     */
+    public static final int BASE_BAYS = 2;
+
+    /**
+     * How many bays this Workbay may use: {@link #BASE_BAYS}, plus one per Expansion Plate, capped
+     * by the server's {@code maxBaysPerWorkbay}. The cap is applied here rather than at install time
+     * so lowering it never destroys an Expansion Plate somebody already paid Levy for.
      */
     public int bayCapacity() {
-        return Math.min(1 + upgrades.expansionPlates(),
+        return Math.min(BASE_BAYS + upgrades.expansionPlates(),
             com.neryos.workbay.config.WorkbayConfig.SERVER.maxBaysPerWorkbay.get());
     }
 

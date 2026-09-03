@@ -71,6 +71,29 @@ public final class BusTransfer {
     }
 
     /**
+     * Takes up to {@code budget} matching items out of a handler and <b>destroys them</b>. The
+     * Assay's skim (SPEC.md §3): the goods do not go anywhere, they become Levy, and there is no
+     * buffer for them to sit in because the Assay has no faces for one to be reachable through.
+     *
+     * <p>Taken from the <em>source</em> before the move rather than deducted from what arrives, so
+     * a partly-refused insert can never leave the tax having been charged twice.
+     *
+     * @return how many items were actually taken
+     */
+    public static int take(IItemHandler from, int budget,
+        java.util.function.Predicate<ItemStack> allowed) {
+        int taken = 0;
+        for (int slot = 0; slot < from.getSlots() && taken < budget; slot++) {
+            ItemStack sample = from.extractItem(slot, budget - taken, true);
+            if (sample.isEmpty() || !allowed.test(sample)) {
+                continue;
+            }
+            taken += from.extractItem(slot, sample.getCount(), false).getCount();
+        }
+        return taken;
+    }
+
+    /**
      * Moves up to {@code budget} energy. Energy handlers already simulate natively, so the pattern
      * is the same shape: ask what would move, then move exactly that.
      */

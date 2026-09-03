@@ -35,10 +35,13 @@ public record WorkbaySnapshot(
     List<Bay> bays,
     List<Link> links,
     WorkbayRecord.Upgrades upgrades,
-    int levyInInventory) {
+    /** Levy banked by this network's Assay, not items in anyone's pockets. SPEC.md §3. */
+    int levy,
+    /** The skim, as a whole percent. Drawn at rest on the bays screen and on every item row. */
+    int skimRate) {
 
     public static final WorkbaySnapshot EMPTY = new WorkbaySnapshot("", false, 1, 0, 0, 1,
-        List.of(), List.of(), WorkbayRecord.Upgrades.NONE, 0);
+        List.of(), List.of(), WorkbayRecord.Upgrades.NONE, 0, 0);
 
     public static final Codec<WorkbaySnapshot> CODEC = RecordCodecBuilder.create(i -> i.group(
         Codec.STRING.fieldOf("Code").forGetter(WorkbaySnapshot::code),
@@ -50,7 +53,8 @@ public record WorkbaySnapshot(
         Bay.CODEC.listOf().fieldOf("Bays").forGetter(WorkbaySnapshot::bays),
         Link.CODEC.listOf().fieldOf("Links").forGetter(WorkbaySnapshot::links),
         WorkbayRecord.Upgrades.CODEC.fieldOf("Upgrades").forGetter(WorkbaySnapshot::upgrades),
-        Codec.INT.fieldOf("Levy").forGetter(WorkbaySnapshot::levyInInventory)
+        Codec.INT.fieldOf("Levy").forGetter(WorkbaySnapshot::levy),
+        Codec.INT.fieldOf("SkimRate").forGetter(WorkbaySnapshot::skimRate)
     ).apply(i, WorkbaySnapshot::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, WorkbaySnapshot> STREAM_CODEC =

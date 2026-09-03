@@ -13,7 +13,7 @@
     },
     "has_the_recipe": {
       "conditions": {
-        "recipe": "workbay:resonator"
+        "recipe": "workbay:assay"
       },
       "trigger": "minecraft:recipe_unlocked"
     }
@@ -26,7 +26,7 @@
   ],
   "rewards": {
     "recipes": [
-      "workbay:resonator"
+      "workbay:assay"
     ]
   }
 }

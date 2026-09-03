@@ -2,8 +2,8 @@
   "type": "minecraft:crafting_shaped",
   "category": "misc",
   "key": {
-    "C": {
-      "item": "minecraft:ender_eye"
+    "D": {
+      "item": "minecraft:diamond"
     },
     "H": {
       "item": "workbay:housing"
@@ -13,12 +13,11 @@
     }
   },
   "pattern": [
-    " S ",
-    "SCS",
-    " H "
+    "SDS",
+    "SHS"
   ],
   "result": {
     "count": 1,
-    "id": "workbay:resonator"
+    "id": "workbay:assay"
   }
 }

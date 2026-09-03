@@ -1,5 +1,6 @@
 package com.neryos.workbay.bus;
 
+import com.neryos.workbay.content.assay.AssayBlock;
 import com.neryos.workbay.init.WBBlocks;
 import com.neryos.workbay.world.BayGeometry;
 import com.neryos.workbay.world.RedstoneMode;
@@ -45,6 +46,16 @@ public class BusRunner {
         java.util.EnumSet.allOf(Direction.class);
 
     private int delay = WHEEL;
+
+    /**
+     * The skim's fractional remainder, in hundredths of an item, and what it has taken since the
+     * block entity last collected. A rate of 15% on a budget of 8 is 1.2 items a step; without a
+     * carry that is either one item (a 12.5% tax) or two (25%), and the dial would mean something
+     * different at every rate. Transient on purpose: it is worth less than one item and rebuilding
+     * it after a restart costs nothing.
+     */
+    private int skimCarry;
+    private int pendingSkim;
 
     /** SPEC.md §4's redstone gate. Edge detection lives here so the block entity stays a handle. */
     private boolean powered;
@@ -122,6 +133,17 @@ public class BusRunner {
         return statuses.getOrDefault(busId, BusStatus.IDLE);
     }
 
+    /**
+     * Items the skim has taken since this was last called, handed to the block entity to bank on
+     * the record. Collected rather than written here: the runner must not rewrite the record it is
+     * being ticked with, and one write a tick beats one write per link.
+     */
+    public int takeSkim() {
+        int skimmed = pendingSkim;
+        pendingSkim = 0;
+        return skimmed;
+    }
+
     /** Forgets one link's caches and status, so a removed link stops holding a level reference. */
     public void forget(UUID busId) {
         targetItems.remove(busId);
@@ -179,7 +201,7 @@ public class BusRunner {
         }
 
         return switch (bus.resource()) {
-            case ITEM -> runItems(bus, targetLevel, target.pos(), backshop, machinePos, faces);
+            case ITEM -> runItems(record, bus, targetLevel, target.pos(), backshop, machinePos, faces);
             case ENERGY -> runEnergy(bus, targetLevel, target.pos(), backshop, machinePos, faces);
             // Fluids use the same shape and are not wired up yet. Reported, not idled: the row's
             // resource icon is one click away from the mode icon, so a link cycled to fluids by
@@ -188,8 +210,9 @@ public class BusRunner {
         };
     }
 
-    private BusStatus runItems(BusConfig bus, ServerLevel targetLevel, BlockPos targetPos,
-        ServerLevel backshop, BlockPos machinePos, java.util.Set<Direction> faces) {
+    private BusStatus runItems(WorkbayRecord record, BusConfig bus, ServerLevel targetLevel,
+        BlockPos targetPos, ServerLevel backshop, BlockPos machinePos,
+        java.util.Set<Direction> faces) {
         BusEndpoint<IItemHandler> targetEnd = targetItems.computeIfAbsent(bus.id(), id ->
             new BusEndpoint<>(Capabilities.ItemHandler.BLOCK, targetLevel, targetPos, alive,
                 bus.targetFace().orElse(null)));
@@ -219,8 +242,38 @@ public class BusRunner {
             return anyHandler ? BusStatus.IDLE
                 : insert ? BusStatus.MACHINE_NO_PORT : BusStatus.TARGET_NO_PORT;
         }
-        return BusTransfer.moveItems(from, to, bus.rate(), allowed) > 0
-            ? BusStatus.RUNNING : BusStatus.IDLE;
+        // The Assay's cut comes out of the source and out of this step's budget, so the link moves
+        // less rather than the destination being short-changed after the fact. SPEC.md §3.
+        int taxed = skim(record, from, bus, allowed);
+        int moved = BusTransfer.moveItems(from, to, bus.rate() - taxed, allowed);
+        return moved + taxed > 0 ? BusStatus.RUNNING : BusStatus.IDLE;
+    }
+
+    /**
+     * Diverts the Assay's share of what this link is about to move. SPEC.md §3.
+     *
+     * <p>Gated on an Assay actually being racked, because a tax with nothing to convert the goods
+     * into is not a tax, it is items disappearing. Items only: fluids and energy are never skimmed.
+     */
+    private int skim(WorkbayRecord record, IItemHandler from, BusConfig bus,
+        java.util.function.Predicate<net.minecraft.world.item.ItemStack> allowed) {
+        int rate = record.assay().rate();
+        if (rate <= 0 || !AssayBlock.rackedIn(record)) {
+            return 0;
+        }
+        skimCarry += bus.rate() * rate;
+        int cut = skimCarry / 100;
+        if (cut <= 0) {
+            return 0;
+        }
+        int taken = BusTransfer.take(from, cut,
+            allowed.and(stack -> stack.is(AssayBlock.LEVY_INPUT)));
+        // Whatever the source could not supply is dropped rather than owed: keeping it would grow
+        // without bound on a link that never carries a taggable item, and then tax a stack of iron
+        // at a hundred percent the moment one arrived.
+        skimCarry = taken < cut ? skimCarry % 100 : skimCarry - taken * 100;
+        pendingSkim += taken;
+        return taken;
     }
 
     /**

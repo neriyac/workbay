@@ -69,25 +69,35 @@ public class WBRecipeProvider extends RecipeProvider {
             .unlockedBy("has_shopsteel", has(WBItems.SHOPSTEEL.get()))
             .save(output);
 
-        // The upgrade ladder. Each is Housing + Shopsteel + Levy, Levy rising along the line
-        // (SPEC.md §3). Levy only comes out of an Assay, which is not built yet, so these are
-        // shipped and uncraftable rather than quietly cheapened to something reachable.
-        upgrade(output, WBItems.EXPANSION_PLATE.get(), 2, Items.IRON_INGOT);
-        upgrade(output, WBItems.RESONATOR.get(), 4, Items.ENDER_EYE);
-        upgrade(output, WBItems.MULTICHANNEL.get(), 4, Items.AMETHYST_SHARD);
+        // The mod's only machine. SPEC.md §3: Housing + Shopsteel + a diamond, and it does nothing
+        // at all until it is racked in a bay.
+        ShapedRecipeBuilder.shaped(RecipeCategory.MISC, WBBlocks.ASSAY.get())
+            .pattern("SDS")
+            .pattern("SHS")
+            .define('S', WBItems.SHOPSTEEL.get())
+            .define('D', Items.DIAMOND)
+            .define('H', WBItems.HOUSING.get())
+            .unlockedBy("has_housing", has(WBItems.HOUSING.get()))
+            .save(output);
+
+        // The upgrade ladder. Materials here, Levy at install: SPEC.md §1 says the Levy cost
+        // *rises* along each line, and a recipe costs the same the tenth time as the first. So the
+        // recipe is what the plate is made of and WorkbayUpgrade#levyCost is what it costs to fit.
+        upgrade(output, WBItems.EXPANSION_PLATE.get(), Items.IRON_INGOT);
+        upgrade(output, WBItems.RESONATOR.get(), Items.ENDER_EYE);
+        upgrade(output, WBItems.MULTICHANNEL.get(), Items.AMETHYST_SHARD);
     }
 
-    private void upgrade(RecipeOutput output, net.minecraft.world.item.Item result, int levy,
+    private void upgrade(RecipeOutput output, net.minecraft.world.item.Item result,
         net.minecraft.world.item.Item core) {
         ShapedRecipeBuilder.shaped(RecipeCategory.MISC, result)
-            .pattern("LSL")
+            .pattern(" S ")
             .pattern("SCS")
-            .pattern("LHL")
-            .define('L', WBItems.LEVY.get())
+            .pattern(" H ")
             .define('S', WBItems.SHOPSTEEL.get())
             .define('H', WBItems.HOUSING.get())
             .define('C', core)
-            .unlockedBy("has_levy", has(WBItems.LEVY.get()))
+            .unlockedBy("has_housing", has(WBItems.HOUSING.get()))
             .save(output);
     }
 }
