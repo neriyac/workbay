@@ -90,6 +90,10 @@ neoForge {
     runs {
         client {
             client()
+            // To drive the client without a human, add:
+            //   programArguments.addAll '--quickPlaySingleplayer', '<world name in run/saves>'
+            // It boots straight past the menus. Left out by default because it fails on a fresh
+            // clone, which has no world yet. See CLAUDE.md.
         }
 
         server {
