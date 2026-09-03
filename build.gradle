@@ -38,7 +38,13 @@ sourceSets {
 }
 
 repositories {
-    // Add here additional repositories if required by some of the dependencies below.
+    // Mekanism, for the cross-mod gametests (SPEC.md §15). Its own maven; EnderIO publishes to
+    // no public maven at all, which is why only one foreign mod is wired up here.
+    maven {
+        name = 'ModMaven'
+        url = 'https://modmaven.dev'
+        content { includeGroup 'mekanism' }
+    }
 }
 
 base {
@@ -155,6 +161,12 @@ configurations {
 }
 
 dependencies {
+    // A real third-party mod, loaded only by runGameTestServer. The whole product claim is that
+    // Workbay hosts other mods' machines, and until this was here nothing proved it. Mekanism is
+    // the harder partner on purpose: owner UUIDs written in setPlacedBy, sided config, and the
+    // read-only null-side handler SPEC.md §9 warns about.
+    gametestRuntimeOnly "mekanism:Mekanism:${mekanism_version}"
+
     // NeoForge's test framework, used by the gametest source set (same as EnderIO).
     gametestImplementation("net.neoforged:testframework:${neo_version}") { transitive = false }
     // Available at runtime in the client/server runs too, but not published as a dependency.
