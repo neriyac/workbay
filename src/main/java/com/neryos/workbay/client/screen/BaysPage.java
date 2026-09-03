@@ -596,11 +596,13 @@ class BaysPage extends WorkbayPage {
         // Clear of the heading, which is no longer the fixed-width word "LINKS": it now carries the
         // bay number, and at LIST_X+44 the funnel sat on top of it.
         iconButton(g, mouseX, mouseY, x(LIST_X + 86), y(linksY), WBIcons.FILTER, true,
-            () -> filter = Filter.values()[(filter.ordinal() + 1) % Filter.values().length],
+            () -> filter = Filter.values()[Math.floorMod(
+                filter.ordinal() + (screen.back() ? -1 : 1), Filter.values().length)],
             WorkbayScreen.gui("links.filter." + filter.name().toLowerCase(java.util.Locale.ROOT)),
             WorkbayScreen.gui("links.filter.tip"));
         iconButton(g, mouseX, mouseY, x(LIST_X + 108), y(linksY), WBIcons.SORT, true,
-            () -> sort = Sort.values()[(sort.ordinal() + 1) % Sort.values().length],
+            () -> sort = Sort.values()[Math.floorMod(
+                sort.ordinal() + (screen.back() ? -1 : 1), Sort.values().length)],
             WorkbayScreen.gui("links.sort." + sort.name().toLowerCase(java.util.Locale.ROOT)),
             WorkbayScreen.gui("links.sort.tip"));
 
@@ -729,30 +731,30 @@ class BaysPage extends WorkbayPage {
             // Bay to bay: the target is a bay number, not a block, and — unlike every other link —
             // there is nothing in the world to re-anchor it to, so this is the one target a player
             // may actually change from the row.
-            String bayTarget = broken ? statusName(link.status()).getString()
+            String bayTarget = broken ? statusShort(link.status()).getString()
                 : link.targetBay().map(b -> "→ Bay " + (b + 1))
                     .orElse(WorkbayScreen.gui("links.unknown").getString());
-            g.drawString(font, font.plainSubstrByWidth(bayTarget, 48), px + 136, py + 5,
+            g.drawString(font, font.plainSubstrByWidth(bayTarget, 60), px + 136, py + 5,
                 broken ? statusColour(link.status()) : Draw.BLUE, false);
-            screen.hit(px + 136, py + 2, 48, ROW_PITCH - 4,
+            screen.hit(px + 136, py + 2, 60, ROW_PITCH - 4,
                 () -> screen.send(WorkbayAction.LINK_CYCLE_TARGET_BAY, config.id()),
                 broken ? statusName(link.status()) : WorkbayScreen.gui("links.internal.retarget"),
                 broken ? statusHelp(link.status())
                     : WorkbayScreen.gui("links.internal.retarget.tip"));
         } else {
             Component target = broken
-                ? statusName(link.status())
+                ? statusShort(link.status())
                 : link.targetBlock().map(BaysPage::displayName).orElse(WorkbayScreen.gui("links.unknown"));
-            g.drawString(font, font.plainSubstrByWidth(target.getString(), 48), px + 136, py + 5,
+            g.drawString(font, font.plainSubstrByWidth(target.getString(), 60), px + 136, py + 5,
                 broken ? statusColour(link.status()) : Draw.TEXT_DIM, false);
         }
 
-        faceButton(g, mouseX, mouseY, px + 188, py + 3, config);
-        filterSlot(g, px + 206, py + 1, config);
+        faceButton(g, mouseX, mouseY, px + 200, py + 3, config);
+        filterSlot(g, px + 216, py + 1, config);
 
-        WBIcons.draw(g, WBIcons.CROSS, px + 228, py + 3,
-            screen.hovered(px + 228, py + 3, 12, 12, mouseX, mouseY) ? Draw.RED : Draw.TEXT_FAINT);
-        screen.hit(px + 228, py + 3, 12, 12,
+        WBIcons.draw(g, WBIcons.CROSS, px + 238, py + 3,
+            screen.hovered(px + 238, py + 3, 12, 12, mouseX, mouseY) ? Draw.RED : Draw.TEXT_FAINT);
+        screen.hit(px + 238, py + 3, 12, 12,
             () -> screen.send(WorkbayAction.LINK_REMOVE, config.id()),
             WorkbayScreen.gui("links.remove"), WorkbayScreen.gui("links.remove.tip"));
     }
@@ -1045,6 +1047,15 @@ class BaysPage extends WorkbayPage {
             case TARGET_NOT_LOADED, TARGET_NO_PORT, MACHINE_NO_PORT, MACHINE_NO_FACE,
                  RESOURCE_NOT_CARRIED -> Draw.AMBER;
         };
+    }
+
+    /**
+     * The row's form of a status, two words at most. The long one is the tooltip's title and does
+     * not fit a 60-pixel column: "No face for this" arrived on screen as "No face f", which reads
+     * as a rendering fault rather than as a fault in the link. Same split as {@code bay.short.*}.
+     */
+    private static Component statusShort(BusRunner.BusStatus status) {
+        return WorkbayScreen.gui("status.short." + status.name().toLowerCase(java.util.Locale.ROOT));
     }
 
     private static Component statusName(BusRunner.BusStatus status) {

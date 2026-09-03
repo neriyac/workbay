@@ -189,16 +189,15 @@ public record BusConfig(
     }
 
     /**
-     * The next face in the picker's cycle: any, then the six in the order
-     * {@link Direction#values()} declares, then back to any.
+     * One step round the face picker's ring of seven: any, then the six in the order
+     * {@link Direction#values()} declares, then back to any. {@code back} is a right-click.
      */
-    public static Optional<Direction> nextFace(Optional<Direction> face) {
-        if (face.isEmpty()) {
-            return Optional.of(Direction.values()[0]);
-        }
-        int next = face.get().ordinal() + 1;
-        return next >= Direction.values().length ? Optional.empty()
-            : Optional.of(Direction.values()[next]);
+    public static Optional<Direction> stepFace(Optional<Direction> face, boolean back) {
+        int count = Direction.values().length + 1;
+        // "Any" is slot 0 of the ring and each direction sits one past its own ordinal.
+        int here = face.map(d -> d.ordinal() + 1).orElse(0);
+        int next = Math.floorMod(here + (back ? -1 : 1), count);
+        return next == 0 ? Optional.empty() : Optional.of(Direction.values()[next - 1]);
     }
 
     public enum Resource implements StringRepresentable {
@@ -215,8 +214,9 @@ public record BusConfig(
             return name;
         }
 
-        public Resource next() {
-            return values()[(ordinal() + 1) % values().length];
+        /** One step round the ring. Back is what a right-click asks for. */
+        public Resource step(boolean back) {
+            return values()[Math.floorMod(ordinal() + (back ? -1 : 1), values().length)];
         }
     }
 

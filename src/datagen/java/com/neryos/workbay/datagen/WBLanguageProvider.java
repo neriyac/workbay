@@ -113,7 +113,7 @@ public class WBLanguageProvider extends LanguageProvider {
             + "commits it, Escape leaves it alone, and an empty name goes back to the machine's.");
         add(WorkbayLang.guiKey("redstone.always"), "Redstone: always");
         add(WorkbayLang.guiKey("redstone.always.tip"), "This bay's links run whatever the redstone "
-            + "at the Workbay is doing. Click to change.");
+            + "at the Workbay is doing. Click to change; right-click steps back.");
         add(WorkbayLang.guiKey("redstone.with_signal"), "Redstone: with a signal");
         add(WorkbayLang.guiKey("redstone.with_signal.tip"), "This bay's links run only while the "
             + "Workbay has a redstone signal.");
@@ -160,7 +160,8 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("faces.fluid"), "Fluid faces");
         add(WorkbayLang.guiKey("faces.energy"), "Energy faces");
         add(WorkbayLang.guiKey("faces.tip"), "The cube shows one resource type at a time, so a face "
-            + "can take items in and send energy out.");
+            + "can take items in and send energy out. Click a face to cycle it in, out, off; "
+            + "right-click steps back.");
         add(WorkbayLang.guiKey("faces.face"), "Face: %s");
         add(WorkbayLang.guiKey("faces.role.none"), "Unset. With no face set, links use whichever "
             + "face answers.");
@@ -179,22 +180,22 @@ public class WBLanguageProvider extends LanguageProvider {
             + "to another one, with no Connector and nothing to place in the world.");
         add(WorkbayLang.guiKey("links.internal.retarget"), "Change which bay");
         add(WorkbayLang.guiKey("links.internal.retarget.tip"), "Click to point this link at the "
-            + "next bay instead.");
+            + "next bay instead. Right-click steps back.");
         add(WorkbayLang.messageKey("internal_link_needs_second_bay"), "This Workbay only has one "
             + "bay. Install an Expansion Plate before linking bay to bay.");
         add(WorkbayLang.guiKey("links.filter.this_bay"), "Showing: this bay");
         add(WorkbayLang.guiKey("links.filter.all_bays"), "Showing: all bays");
         add(WorkbayLang.guiKey("links.filter.problems"), "Showing: problems only");
-        add(WorkbayLang.guiKey("links.filter.tip"), "Click to change which links this list shows.");
+        add(WorkbayLang.guiKey("links.filter.tip"), "Click to change which links this list shows. Right-click steps back.");
         add(WorkbayLang.guiKey("links.sort.added"), "In the order they were made");
         add(WorkbayLang.guiKey("links.sort.bay"), "Sorted by bay");
         add(WorkbayLang.guiKey("links.sort.type"), "Sorted by resource type");
         add(WorkbayLang.guiKey("links.sort.status"), "Sorted by status, problems first");
-        add(WorkbayLang.guiKey("links.sort.tip"), "Click to change the order.");
+        add(WorkbayLang.guiKey("links.sort.tip"), "Click to change the order. Right-click steps back.");
         add(WorkbayLang.guiKey("links.type.item"), "Carries items");
         add(WorkbayLang.guiKey("links.type.fluid"), "Carries fluids");
         add(WorkbayLang.guiKey("links.type.energy"), "Carries energy");
-        add(WorkbayLang.guiKey("links.type.tip"), "Click to change what this link carries.");
+        add(WorkbayLang.guiKey("links.type.tip"), "Click to change what this link carries. Right-click steps back.");
         add(WorkbayLang.guiKey("links.none.here"), "No links on this bay. %s on other bays \u2014 press Add to move one here.");
         add(WorkbayLang.guiKey("links.adding"), "TO BAY %s");
         add(WorkbayLang.guiKey("links.add"), "Add a link");
@@ -227,7 +228,8 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("links.face.east"), "East face");
         add(WorkbayLang.guiKey("links.face.tip"), "Which side of the target block this link "
             + "reaches into. Machines that keep their input and output in separate slots expose "
-            + "them on separate faces, so pin one. Any face uses whichever answers first.");
+            + "them on separate faces, so pin one. Any face uses whichever answers first. "
+            + "Right-click steps back.");
         add(WorkbayLang.guiKey("links.mode.insert"), "Sends into the target");
         add(WorkbayLang.guiKey("links.mode.extract"), "Pulls out of the target");
         add(WorkbayLang.guiKey("links.mode.tip"), "Click to turn this link around.");
@@ -252,6 +254,19 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("links.filterslot.clear"), "Click to clear it.");
         add(WorkbayLang.guiKey("links.unknown"), "not loaded");
 
+        // The row's column is 60 pixels. The long names above are tooltip titles and do not fit
+        // it; "No face for this" arrived on screen as "No face f". Same split as bay.short.*.
+        add(WorkbayLang.guiKey("status.short.running"), "Running");
+        add(WorkbayLang.guiKey("status.short.idle"), "Idle");
+        add(WorkbayLang.guiKey("status.short.disabled"), "Off");
+        add(WorkbayLang.guiKey("status.short.held_by_redstone"), "Held");
+        add(WorkbayLang.guiKey("status.short.connector_gone"), "Gone");
+        add(WorkbayLang.guiKey("status.short.target_missing"), "No target");
+        add(WorkbayLang.guiKey("status.short.target_not_loaded"), "Unloaded");
+        add(WorkbayLang.guiKey("status.short.target_no_port"), "No port");
+        add(WorkbayLang.guiKey("status.short.machine_no_port"), "No machine");
+        add(WorkbayLang.guiKey("status.short.resource_not_carried"), "No fluids");
+        add(WorkbayLang.guiKey("status.short.machine_no_face"), "No face");
         add(WorkbayLang.guiKey("status.running"), "Running");
         add(WorkbayLang.guiKey("status.running.tip"), "This link moved something on its last turn.");
         add(WorkbayLang.guiKey("status.idle"), "Idle");

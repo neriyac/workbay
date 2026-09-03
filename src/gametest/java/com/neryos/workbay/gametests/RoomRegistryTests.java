@@ -122,7 +122,7 @@ public class RoomRegistryTests {
                         net.minecraft.resources.ResourceLocation.parse("mekanism:enrichment_chamber")),
                         com.neryos.workbay.world.FaceConfig.NONE
                             .cycled(com.neryos.workbay.bus.BusConfig.Resource.ITEM,
-                                net.minecraft.core.Direction.NORTH),
+                                net.minecraft.core.Direction.NORTH, false),
                         // Both new bay fields ride the same round trip, so a codec that drops one
                         // is caught here rather than the first time a player names a bay.
                         "Ore line",

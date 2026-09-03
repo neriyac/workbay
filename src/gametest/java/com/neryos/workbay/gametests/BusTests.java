@@ -289,7 +289,7 @@ public class BusTests {
 
             // Exactly what was set in play: one face, in, for items. Nothing marked out.
             RoomRegistry.get(level.getServer()).put(record.withBay(
-                record.bay(0).withFaces(FaceConfig.NONE.cycled(BusConfig.Resource.ITEM, Direction.WEST))));
+                record.bay(0).withFaces(FaceConfig.NONE.cycled(BusConfig.Resource.ITEM, Direction.WEST, false))));
             workbay.forgetBay(0);
 
             BusConfig link = connect(helper, workbay, targetPos.above(), Direction.DOWN, player);
@@ -341,7 +341,7 @@ public class BusTests {
             BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
 
             RoomRegistry.get(level.getServer()).put(record.withBay(
-                record.bay(0).withFaces(FaceConfig.NONE.cycled(BusConfig.Resource.ITEM, Direction.WEST))));
+                record.bay(0).withFaces(FaceConfig.NONE.cycled(BusConfig.Resource.ITEM, Direction.WEST, false))));
             workbay.forgetBay(0);
 
             BusConfig link = connect(helper, workbay, targetPos.above(), Direction.DOWN, player);
@@ -397,9 +397,9 @@ public class BusTests {
             // West in, east out. Exactly what was set in play.
             RoomRegistry.get(level.getServer()).put(record.withBay(record.bay(0).withFaces(
                 FaceConfig.NONE
-                    .cycled(BusConfig.Resource.ITEM, Direction.WEST)
-                    .cycled(BusConfig.Resource.ITEM, Direction.EAST)
-                    .cycled(BusConfig.Resource.ITEM, Direction.EAST))));
+                    .cycled(BusConfig.Resource.ITEM, Direction.WEST, false)
+                    .cycled(BusConfig.Resource.ITEM, Direction.EAST, false)
+                    .cycled(BusConfig.Resource.ITEM, Direction.EAST, false))));
             workbay.forgetBay(0);
 
             BusConfig send = connect(helper, workbay, sendTo.above(), Direction.DOWN, player);

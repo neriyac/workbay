@@ -182,7 +182,7 @@ public class MenuTests {
             RoomRegistry registry = RoomRegistry.get(level.getServer());
             WorkbayRecord shut = registry.byId(record.id()).orElseThrow();
             registry.put(shut.withBay(shut.bay(0).withFaces(
-                FaceConfig.NONE.cycled(BusConfig.Resource.ITEM, Direction.NORTH))));
+                FaceConfig.NONE.cycled(BusConfig.Resource.ITEM, Direction.NORTH, false))));
             workbay.forgetBay(0);
 
             ItemStack connector = new ItemStack(WBBlocks.CONNECTOR.get());
@@ -209,7 +209,7 @@ public class MenuTests {
                 .thenExecute(() -> {
                     WorkbayRecord open = registry.byId(record.id()).orElseThrow();
                     registry.put(open.withBay(open.bay(0).withFaces(
-                        open.bay(0).faces().cycled(BusConfig.Resource.ITEM, Direction.NORTH))));
+                        open.bay(0).faces().cycled(BusConfig.Resource.ITEM, Direction.NORTH, false))));
                     workbay.forgetBay(0);
                 })
                 .thenWaitUntil(() -> {
@@ -353,7 +353,7 @@ public class MenuTests {
             theirs.act(WorkbayAction.CYCLE_FACE,
                 BusConfig.Resource.ITEM.ordinal() | (Direction.WEST.ordinal() << 4), Optional.empty());
             theirs.act(WorkbayAction.PASTE_BAY, FaceConfig.NONE
-                .cycled(BusConfig.Resource.ITEM, Direction.EAST).bits(), Optional.empty());
+                .cycled(BusConfig.Resource.ITEM, Direction.EAST, false).bits(), Optional.empty());
 
             FaceConfig after = workbay.record().orElseThrow().bay(0).faces();
             helper.assertValueEqual(after, FaceConfig.NONE,
@@ -448,6 +448,78 @@ public class MenuTests {
             java.util.List<java.util.UUID> after = workbay.buses().stream()
                 .map(BusConfig::id).toList();
             helper.assertValueEqual(after, ids, "link order after editing the first link three times");
+            helper.succeed();
+        });
+    }
+
+    /**
+     * Right-click steps a cycling control to the <em>previous</em> value, everywhere one cycles.
+     *
+     * <p>Worth a test rather than eyeballing because the interesting cases are the wraps, and each
+     * of the four rings wraps differently: the redstone modes and the face roles are plain enums,
+     * the target face is a ring of seven whose first slot is "any" rather than a Direction, and
+     * the target bay is a ring with a hole in it — the link's own bay is skipped, in whichever
+     * direction it is being skipped from.
+     */
+    @GameTest
+    @TestHolder(description = "Right-clicking a cycling control steps it back, wraps included.")
+    public static void rightClickStepsACycleBackwards(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos pos = helper.absolutePos(new BlockPos(0, 1, 0));
+            WorkbayBlockEntity workbay = placeWorkbay(helper, pos, player);
+            RoomRegistry registry = RoomRegistry.get(level.getServer());
+            // Three bays, so the target-bay ring has a value on both sides of the hole.
+            registry.put(workbay.record().orElseThrow()
+                .withUpgrades(new WorkbayRecord.Upgrades(2, 0, 0, 0, 0, 0)));
+            WorkbayMenu menu = menuFor(workbay, player);
+
+            // The redstone ring: forward one step off ALWAYS, then back past it to the far end.
+            menu.act(WorkbayAction.CYCLE_REDSTONE, 0, Optional.empty(), Optional.empty(), false);
+            helper.assertValueEqual(workbay.record().orElseThrow().bay(0).redstone(),
+                com.neryos.workbay.world.RedstoneMode.WITH_SIGNAL, "redstone after a left-click");
+            menu.act(WorkbayAction.CYCLE_REDSTONE, 0, Optional.empty(), Optional.empty(), true);
+            menu.act(WorkbayAction.CYCLE_REDSTONE, 0, Optional.empty(), Optional.empty(), true);
+            helper.assertValueEqual(workbay.record().orElseThrow().bay(0).redstone(),
+                com.neryos.workbay.world.RedstoneMode.PULSE, "redstone wrapped backwards past ALWAYS");
+
+            // A face role, off the cube: NONE backwards is OUTPUT, not INPUT.
+            menu.act(WorkbayAction.CYCLE_FACE,
+                BusConfig.Resource.ITEM.ordinal() | (Direction.NORTH.ordinal() << 4),
+                Optional.empty(), Optional.empty(), true);
+            helper.assertValueEqual(
+                workbay.record().orElseThrow().bay(0).faces()
+                    .role(BusConfig.Resource.ITEM, Direction.NORTH),
+                FaceConfig.Role.OUTPUT, "a face role stepped backwards off NONE");
+
+            // An internal link, for the two rings that live on a row.
+            menu.act(WorkbayAction.SELECT_BAY, 0, Optional.empty());
+            menu.act(WorkbayAction.CREATE_INTERNAL_LINK, 1, Optional.empty());
+            BusConfig link = workbay.buses().stream().filter(BusConfig::internal).findFirst()
+                .orElseThrow(() -> new GameTestAssertException("no internal link was made"));
+
+            // The face ring starts on "any", so one step back is the LAST direction, not the first.
+            menu.act(WorkbayAction.LINK_CYCLE_TARGET_FACE, 0, Optional.of(link.id()),
+                Optional.empty(), true);
+            helper.assertValueEqual(workbay.bus(link.id()).orElseThrow().targetFace(),
+                Optional.of(Direction.values()[Direction.values().length - 1]),
+                "the target face stepped backwards off any");
+
+            // Bay 1 holds the link and bay 2 is its target, so stepping back from bay 2 has to skip
+            // bay 1 -- the link's own -- and land on bay 3.
+            menu.act(WorkbayAction.LINK_CYCLE_TARGET_BAY, 0, Optional.of(link.id()),
+                Optional.empty(), true);
+            WorkbayRecord record = workbay.record().orElseThrow();
+            helper.assertValueEqual(workbay.bus(link.id()).orElseThrow().target().pos(),
+                BayGeometry.machinePos(record.bayColumn(), 2),
+                "the target bay stepped backwards, skipping the link's own bay");
+
+            WorkbayTickets.release(level.getServer().getLevel(WorkbayDimensions.BACKSHOP),
+                record.id(), record.bayColumn());
+            level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
             helper.succeed();
         });
     }

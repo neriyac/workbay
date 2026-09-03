@@ -148,11 +148,17 @@ public class WorkbayMenu extends AbstractContainerMenu {
      * or a player whose menu has moved on must not be able to eject somebody's machine.
      */
     public void act(WorkbayAction action, long arg, Optional<UUID> linkId) {
-        act(action, arg, linkId, Optional.empty());
+        act(action, arg, linkId, Optional.empty(), false);
     }
 
+    /**
+     * @param back the control was right-clicked, so every cycle here steps to the previous value
+     *             instead of the next one. One flag rather than a mirrored action per control:
+     *             the guards above are the reason these are actions at all, and they must not be
+     *             written out twice.
+     */
     public void act(WorkbayAction action, long arg, Optional<UUID> linkId,
-        Optional<String> text) {
+        Optional<String> text, boolean back) {
         if (workbay == null || !(player instanceof ServerPlayer serverPlayer)
             || player.isSpectator() || !stillValid(player)) {
             return;
@@ -172,21 +178,22 @@ public class WorkbayMenu extends AbstractContainerMenu {
             case RACK -> rack(serverPlayer, record);
             case EJECT -> eject(serverPlayer, record);
             case TOGGLE_LOCK -> toggleLock(serverPlayer, record);
-            case CYCLE_FACE -> cycleFace(serverPlayer, record, (int) arg);
+            case CYCLE_FACE -> cycleFace(serverPlayer, record, (int) arg, back);
             case PAIR -> pair(serverPlayer, record);
             case INSTALL_UPGRADE -> install(serverPlayer, record, (int) arg);
             case PASTE_BAY -> pasteBay(serverPlayer, record, arg);
             case LINK_FLIP_MODE -> editLink(linkId, link -> link.withMode(link.mode().flip()));
-            case LINK_CYCLE_RESOURCE -> editLink(linkId, link -> link.withResource(link.resource().next()));
+            case LINK_CYCLE_RESOURCE ->
+                editLink(linkId, link -> link.withResource(link.resource().step(back)));
             case LINK_TOGGLE_ENABLED -> editLink(linkId, link -> link.withEnabled(!link.enabled()));
             case LINK_REMOVE -> linkId.ifPresent(workbay::removeBus);
-            case LINK_CYCLE_TARGET_FACE ->
-                editLink(linkId, link -> link.withTargetFace(BusConfig.nextFace(link.targetFace())));
+            case LINK_CYCLE_TARGET_FACE -> editLink(linkId,
+                link -> link.withTargetFace(BusConfig.stepFace(link.targetFace(), back)));
             case SET_FILTER -> editLink(linkId, link -> link.withFilter(filterItem(arg)));
             case SET_BAY_NAME -> editBay(serverPlayer, record,
                 bay -> bay.withName(text.orElse("").strip()));
             case CYCLE_REDSTONE -> editBay(serverPlayer, record,
-                bay -> bay.withRedstone(bay.redstone().next()));
+                bay -> bay.withRedstone(bay.redstone().step(back)));
             case CREATE_INTERNAL_LINK -> createInternalLink(serverPlayer, record, (int) arg);
             case LINK_ASSIGN_BAY -> {
                 int bay = (int) arg;
@@ -197,7 +204,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
             case LINK_CYCLE_TARGET_BAY -> editLink(linkId, link -> link.internal()
                 ? link.withTarget(GlobalPos.of(WorkbayDimensions.BACKSHOP,
                     BayGeometry.machinePos(record.bayColumn(),
-                        nextOtherBay(record, link.bay(), currentTargetBay(record, link)))))
+                        otherBay(record, link.bay(), currentTargetBay(record, link), back))))
                 : link);
         }
         // This menu has no slots (SPEC.md §4), so the vanilla per-tick sync that normally covers
@@ -308,7 +315,8 @@ public class WorkbayMenu extends AbstractContainerMenu {
         RoomRegistry.get(serverPlayer.server).put(record.withLocked(!record.locked()));
     }
 
-    private void cycleFace(ServerPlayer serverPlayer, WorkbayRecord record, int packed) {
+    private void cycleFace(ServerPlayer serverPlayer, WorkbayRecord record, int packed,
+        boolean back) {
         if (refused(serverPlayer, record)) {
             return;
         }
@@ -317,7 +325,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
         Direction face = Direction.values()[
             Math.clamp((packed >> 4) & 0xF, 0, Direction.values().length - 1)];
         WorkbayRecord.Bay bay = record.bay(selectedBay);
-        setFaces(serverPlayer, record, bay.faces().cycled(resource, face));
+        setFaces(serverPlayer, record, bay.faces().cycled(resource, face, back));
     }
 
     /**
@@ -376,7 +384,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
         // falls through to the next other bay rather than being refused: this action predates the
         // picker and is still sent with no useful arg from a keybind or an older client.
         boolean usable = wanted >= 0 && wanted < capacity && wanted != selectedBay;
-        int targetBay = usable ? wanted : nextOtherBay(record, selectedBay, selectedBay);
+        int targetBay = usable ? wanted : otherBay(record, selectedBay, selectedBay, false);
         GlobalPos anchor = GlobalPos.of(serverPlayer.level().dimension(), workbay.getBlockPos());
         GlobalPos target = GlobalPos.of(WorkbayDimensions.BACKSHOP,
             BayGeometry.machinePos(record.bayColumn(), targetBay));
@@ -393,11 +401,14 @@ public class WorkbayMenu extends AbstractContainerMenu {
         return link.bay();
     }
 
-    /** The next bay after {@code current} that is not {@code sourceBay} itself, wrapping. */
-    private static int nextOtherBay(WorkbayRecord record, int sourceBay, int current) {
+    /**
+     * The next bay after {@code current} that is not {@code sourceBay} itself, wrapping — or the
+     * previous one when {@code back}, which is what a right-click on the row's target asks for.
+     */
+    private static int otherBay(WorkbayRecord record, int sourceBay, int current, boolean back) {
         int capacity = record.bayCapacity();
         for (int step = 1; step <= capacity; step++) {
-            int candidate = (current + step) % capacity;
+            int candidate = Math.floorMod(current + (back ? -step : step), capacity);
             if (candidate != sourceBay) {
                 return candidate;
             }

@@ -21,9 +21,13 @@ import java.util.UUID;
  *
  * <p>{@code arg} is a long because pasting a bay's face config is one action carrying 36 bits of
  * it. A second packet type for that one button would be the same guard written twice.
+ *
+ * <p>{@code back} is which way a cycling control was asked to step: left-click forward,
+ * right-click backward. It rides the action rather than being a separate action per direction,
+ * because every one of them is the same button with the same guards.
  */
 public record ActionPacket(int containerId, WorkbayAction action, long arg,
-    Optional<UUID> link, Optional<String> text)
+    Optional<UUID> link, Optional<String> text, boolean back)
     implements CustomPacketPayload {
 
     public static final Type<ActionPacket> TYPE = new Type<>(Workbay.rl("action"));
@@ -40,6 +44,7 @@ public record ActionPacket(int containerId, WorkbayAction action, long arg,
             UUIDUtil.STREAM_CODEC.apply(ByteBufCodecs::optional), ActionPacket::link,
             // Capped, because it is drawn on a 130-pixel line and arrives from a client.
             ByteBufCodecs.stringUtf8(64).apply(ByteBufCodecs::optional), ActionPacket::text,
+            ByteBufCodecs.BOOL, ActionPacket::back,
             ActionPacket::new);
 
     @Override
@@ -50,7 +55,7 @@ public record ActionPacket(int containerId, WorkbayAction action, long arg,
     public static void handle(ActionPacket packet, IPayloadContext context) {
         if (context.player().containerMenu instanceof WorkbayMenu menu
             && menu.containerId == packet.containerId()) {
-            menu.act(packet.action(), packet.arg(), packet.link(), packet.text());
+            menu.act(packet.action(), packet.arg(), packet.link(), packet.text(), packet.back());
         }
     }
 }

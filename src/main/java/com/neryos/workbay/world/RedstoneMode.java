@@ -27,8 +27,9 @@ public enum RedstoneMode implements StringRepresentable {
         return name;
     }
 
-    public RedstoneMode next() {
-        return values()[(ordinal() + 1) % values().length];
+    /** One step round the ring. Back is what a right-click asks for. */
+    public RedstoneMode step(boolean back) {
+        return values()[Math.floorMod(ordinal() + (back ? -1 : 1), values().length)];
     }
 
     /**

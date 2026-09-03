@@ -33,8 +33,9 @@ public record FaceConfig(int items, int fluids, int energy) {
     public enum Role {
         NONE, INPUT, OUTPUT;
 
-        public Role next() {
-            return values()[(ordinal() + 1) % values().length];
+        /** One step round the ring. Back is what a right-click asks for. */
+        public Role step(boolean back) {
+            return values()[Math.floorMod(ordinal() + (back ? -1 : 1), values().length)];
         }
     }
 
@@ -42,10 +43,10 @@ public record FaceConfig(int items, int fluids, int energy) {
         return Role.values()[(packed(resource) >> (face.ordinal() * 2)) & 0b11];
     }
 
-    public FaceConfig cycled(BusConfig.Resource resource, Direction face) {
+    public FaceConfig cycled(BusConfig.Resource resource, Direction face, boolean back) {
         int shift = face.ordinal() * 2;
         int updated = (packed(resource) & ~(0b11 << shift))
-            | (role(resource, face).next().ordinal() << shift);
+            | (role(resource, face).step(back).ordinal() << shift);
         return switch (resource) {
             case ITEM -> new FaceConfig(updated, fluids, energy);
             case FLUID -> new FaceConfig(items, updated, energy);

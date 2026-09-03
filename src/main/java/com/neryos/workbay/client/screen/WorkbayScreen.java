@@ -51,6 +51,16 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
     @Nullable
     private java.util.function.Consumer<String> onRenamed;
 
+    /**
+     * True while a right-click is being dispatched, so every cycling control steps <b>backwards</b>.
+     *
+     * <p>A field read during dispatch rather than a second Runnable on every {@code hit}: forty-odd
+     * call sites would each have to name a mirrored lambda, and the mirror is always the same
+     * question — which way round the ring. The server-side ones carry it on the action packet; the
+     * client-only ones (the list's filter and sort) read it straight from here.
+     */
+    private boolean back;
+
     public WorkbayScreen(WorkbayMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
     }
@@ -208,6 +218,11 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         return ghosts;
     }
 
+    /** Which way a cycling control was asked to step. Right-click is backwards. */
+    public boolean back() {
+        return back;
+    }
+
     public boolean hovered(int x, int y, int w, int h, double mx, double my) {
         return mx >= x && mx < x + w && my >= y && my < y + h;
     }
@@ -285,15 +300,21 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
             endRename(true);
             return true;
         }
-        if (button == 0) {
+        // Right-click is the same control asked for the previous value instead of the next. Every
+        // control in the mod that cycles reads it, and the ones that do not simply ignore it, which
+        // is why it is one flag here rather than a second handler on each.
+        if (button == 0 || button == 1) {
+            back = button == 1;
             // Reverse order, so a control drawn on top of another wins the click the way it looks.
             for (int i = hits.size() - 1; i >= 0; i--) {
                 if (hits.get(i).contains(mouseX, mouseY)) {
                     hits.get(i).onClick().run();
+                    back = false;
                     playClick();
                     return true;
                 }
             }
+            back = false;
         }
         return super.mouseClicked(mouseX, mouseY, button);
     }
@@ -353,7 +374,8 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
     }
 
     private void send(WorkbayAction action, long arg, Optional<UUID> link, Optional<String> text) {
-        PacketDistributor.sendToServer(new ActionPacket(menu.containerId, action, arg, link, text));
+        PacketDistributor.sendToServer(
+            new ActionPacket(menu.containerId, action, arg, link, text, back));
         // Applied here as well so the selection tracks the click rather than the round trip.
         if (action == WorkbayAction.SELECT_BAY) {
             menu.setSelectedBayClientSide((int) arg);
