@@ -65,6 +65,7 @@ class BaysPage extends WorkbayPage {
     private static final int CUBE_CX = 266;
     private static final int CUBE_CY = 106;
     private static final int CUBE_SIZE = 30;
+    private static final int FACES_X = 232;
     private static final int WELL_X = 232;
     private static final int WELL_Y = 76;
     private static final int WELL_W = 68;
@@ -236,17 +237,22 @@ class BaysPage extends WorkbayPage {
             }
         }
 
-        g.drawString(font, empty
-            ? WorkbayScreen.gui("bay.n", snap.selectedBay() + 1).getString()
-            : displayName(bay.hosted().orElseThrow()).getString(),
+        // Everything in this column is clamped to where the faces panel starts. A machine name is
+        // whatever another mod called it, and an unclamped one runs across the cube and off the
+        // panel entirely.
+        int room = FACES_X - 4 - 98;
+        g.drawString(font, font.plainSubstrByWidth(empty
+                ? WorkbayScreen.gui("bay.n", snap.selectedBay() + 1).getString()
+                : displayName(bay.hosted().orElseThrow()).getString(), room),
             x(98), y(56), Draw.TEXT, false);
 
         Draw.bar(g, x(98), y(68), 84, 9, bay.energy(), bay.energyCapacity(), Draw.AMBER);
-        g.drawString(font, bay.energyCapacity() == 0 ? "—"
-                : Draw.compact(bay.energy()) + " / " + Draw.compact(bay.energyCapacity()) + " FE",
-            x(186), y(69), Draw.TEXT_DIM, false);
+        String power = bay.energyCapacity() == 0 ? "—"
+            : Draw.compact(bay.energy()) + " / " + Draw.compact(bay.energyCapacity());
+        g.drawString(font, power, x(FACES_X - 4 - font.width(power)), y(69), Draw.TEXT_DIM, false);
 
-        g.drawString(font, statusLine(bay).getString(), x(98), y(82), statusColour(bay.state()), false);
+        g.drawString(font, font.plainSubstrByWidth(statusLine(bay).getString(), room),
+            x(98), y(82), statusColour(bay.state()), false);
 
         // Four 20x20 buttons at y=98. Only Eject does anything: Bay View, rename and the redstone
         // gate are SPEC.md §5's and are drawn faint rather than hidden, so the layout is honest
@@ -267,8 +273,12 @@ class BaysPage extends WorkbayPage {
             WorkbayScreen.gui("button.redstone"), WorkbayScreen.gui("unbuilt"));
     }
 
+    /**
+     * The short form. The long one — "nothing can reach this machine on any face" — is a sentence,
+     * and a sentence does not fit on a line 130 pixels wide; it lives in the bay's tooltip.
+     */
     private Component statusLine(WorkbaySnapshot.Bay bay) {
-        return WorkbayScreen.gui("bay." + bay.state().name().toLowerCase(java.util.Locale.ROOT));
+        return WorkbayScreen.gui("bay.short." + bay.state().name().toLowerCase(java.util.Locale.ROOT));
     }
 
     private static int statusColour(WorkbaySnapshot.State state) {
@@ -362,11 +372,18 @@ class BaysPage extends WorkbayPage {
         return true;
     }
 
+    /**
+     * The block to draw, turned to face the camera. A machine's default state is not reliably the
+     * one whose front points north — some mods default south — and the preview has to open showing
+     * the front of the thing, every time, or the player is configuring the back of a machine they
+     * cannot identify.
+     */
     @org.jetbrains.annotations.Nullable
     private static BlockState blockFor(Optional<ResourceLocation> id) {
         return id.map(BuiltInRegistries.BLOCK::get)
             .filter(block -> block != net.minecraft.world.level.block.Blocks.AIR)
             .map(net.minecraft.world.level.block.Block::defaultBlockState)
+            .map(BlockPreview::facingCamera)
             .orElse(null);
     }
 

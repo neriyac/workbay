@@ -67,7 +67,8 @@ class UpgradesPage extends WorkbayPage {
         Draw.well(g, x(WELL_X), y(WELL_Y), WELL_W, WELL_H);
         // The Workbay's own block, rendered by the game rather than drawn: this screen is where a
         // player looks at what they are upgrading.
-        PREVIEW.render(g, com.neryos.workbay.init.WBBlocks.WORKBAY.get().defaultBlockState(),
+        PREVIEW.render(g, BlockPreview.facingCamera(
+                com.neryos.workbay.init.WBBlocks.WORKBAY.get().defaultBlockState()),
             x(WELL_X + WELL_W / 2), y(WELL_Y + WELL_H / 2), 34);
         g.drawString(font, WorkbayScreen.gui("faces.drag").getString(), x(WELL_X), y(WELL_Y + WELL_H + 3),
             Draw.TEXT_FAINT, false);
@@ -157,7 +158,8 @@ class UpgradesPage extends WorkbayPage {
         g.fill(x(12), y(HEIGHT - 26), x(WIDTH - 12), y(HEIGHT - 25), Draw.EDGE_DARK);
         g.drawString(font, WorkbayScreen.gui("upgrades.levy", snapshot().levyInInventory()).getString(),
             x(12), y(HEIGHT - 19), Draw.TEXT_DIM, false);
-        g.drawString(font, WorkbayScreen.gui("upgrades.tax", 0).getString(),
-            x(178), y(HEIGHT - 19), Draw.TEXT_FAINT, false);
+        // Right-aligned off the panel's own edge rather than a hardcoded x, which ran off it.
+        String tax = WorkbayScreen.gui("upgrades.tax", 0).getString();
+        g.drawString(font, tax, x(WIDTH - 12 - font.width(tax)), y(HEIGHT - 19), Draw.TEXT_FAINT, false);
     }
 }

@@ -12,6 +12,7 @@ import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.neoforged.neoforge.client.model.data.ModelData;
 import org.jetbrains.annotations.Nullable;
 
@@ -38,6 +39,22 @@ public class BlockPreview {
 
     private boolean dragging;
     private double dragged;
+
+    /**
+     * The same block with whatever facing property it has pointed north, which is the side
+     * {@link #DEFAULT_YAW} looks at. Without it the preview opens on the back of half the machines
+     * in the game, because a default block state is not reliably north-facing.
+     */
+    public static BlockState facingCamera(BlockState state) {
+        if (state.hasProperty(BlockStateProperties.HORIZONTAL_FACING)) {
+            return state.setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.NORTH);
+        }
+        if (state.hasProperty(BlockStateProperties.FACING)
+            && BlockStateProperties.FACING.getPossibleValues().contains(Direction.NORTH)) {
+            return state.setValue(BlockStateProperties.FACING, Direction.NORTH);
+        }
+        return state;
+    }
 
     /** Turned back to the angle the screen opened at, so a lost block is one double-click away. */
     public void reset() {
@@ -155,13 +172,19 @@ public class BlockPreview {
         return rotate(face.getStepX(), face.getStepY(), face.getStepZ())[2] > 0.15F;
     }
 
+    /**
+     * Yaw about +Y then pitch about +X, both right-handed, exactly as {@code Axis.YP} and
+     * {@code Axis.XP} do them. The pitch used to be applied with the sign inverted, which left the
+     * markers correct for the horizontal faces and swapped for the vertical pair: tilting up to
+     * look at the bottom of a machine labelled it U.
+     */
     private float[] rotate(float x, float y, float z) {
         double yawRad = Math.toRadians(yaw);
         double pitchRad = Math.toRadians(pitch);
         float x1 = (float) (x * Math.cos(yawRad) + z * Math.sin(yawRad));
         float z1 = (float) (-x * Math.sin(yawRad) + z * Math.cos(yawRad));
-        float y2 = (float) (y * Math.cos(pitchRad) + z1 * Math.sin(pitchRad));
-        float z2 = (float) (-y * Math.sin(pitchRad) + z1 * Math.cos(pitchRad));
+        float y2 = (float) (y * Math.cos(pitchRad) - z1 * Math.sin(pitchRad));
+        float z2 = (float) (y * Math.sin(pitchRad) + z1 * Math.cos(pitchRad));
         return new float[] { x1, y2, z2 };
     }
 }

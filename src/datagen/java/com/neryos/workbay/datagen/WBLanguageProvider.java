@@ -112,6 +112,12 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("bay.idle"), "Idle");
         add(WorkbayLang.guiKey("bay.inert"), "Nothing can reach this machine on any face. It keeps "
             + "running; no link can use it.");
+        // The one-word forms the machine block's status line uses. The sentences above are tooltips.
+        add(WorkbayLang.guiKey("bay.short.running"), "Running");
+        add(WorkbayLang.guiKey("bay.short.idle"), "Idle");
+        add(WorkbayLang.guiKey("bay.short.inert"), "No ports");
+        add(WorkbayLang.guiKey("bay.short.empty"), "Empty bay");
+        add(WorkbayLang.guiKey("bay.short.locked"), "Locked");
 
         add(WorkbayLang.guiKey("faces.item"), "Item faces");
         add(WorkbayLang.guiKey("faces.fluid"), "Fluid faces");

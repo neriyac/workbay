@@ -113,10 +113,29 @@ public class MenuTests {
                 "the bay being empty after ejecting");
             helper.assertValueEqual(workbay.record().orElseThrow().bay(0).hosted().isEmpty(), true,
                 "the registry knowing bay 0 is empty");
-            if (player.getInventory().countItem(Blocks.FURNACE.asItem()) < 3) {
-                helper.fail("the ejected furnace did not come back to the player");
-                return;
+
+            // Exactly three furnaces: the two still in hand plus the one that came back. Racking
+            // takes the machine and ejecting returns it — neither may quietly hand out a copy.
+            helper.assertValueEqual(player.getInventory().countItem(Blocks.FURNACE.asItem()), 3,
+                "furnaces the player holds after the round trip");
+
+            // And it comes back carrying what was inside it, not as a fresh block. A furnace keeps
+            // its contents in the `container` data component rather than in block_entity_data —
+            // this test asserted the wrong one first and went red, which is how that was found.
+            int coal = 0;
+            for (int slot = 0; slot < player.getInventory().getContainerSize(); slot++) {
+                ItemStack stack = player.getInventory().getItem(slot);
+                var contents = stack.get(net.minecraft.core.component.DataComponents.CONTAINER);
+                if (!stack.is(Blocks.FURNACE.asItem()) || contents == null) {
+                    continue;
+                }
+                for (ItemStack inside : contents.nonEmptyItems()) {
+                    if (inside.is(Items.COAL)) {
+                        coal += inside.getCount();
+                    }
+                }
             }
+            helper.assertValueEqual(coal, 7, "coal carried out of the bay on the ejected furnace");
             WorkbayTickets.release(backshop, record.id(), record.bayColumn());
             level.setBlock(workbayPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
             helper.succeed();
