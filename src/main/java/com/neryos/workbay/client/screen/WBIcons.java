@@ -121,17 +121,24 @@ public final class WBIcons {
         ".##########.",
     };
 
+    /**
+     * A repeater: two posts on a base plate. Third attempt, and the first that reads as itself.
+     * A ring drew as a gemstone, a torch drew as a trophy -- a blob on a stem is a blob on a stem
+     * at twelve pixels -- and redstone dust's cross was indistinguishable from {@link #PLUS},
+     * which is a button that means "add" two inches away on the same screen. This silhouette
+     * looks like nothing else in the set.
+     */
     public static final String[] REDSTONE = {
         "............",
-        "....####....",
-        "...######...",
-        "...######...",
-        "....####....",
-        ".....##.....",
-        ".....##.....",
-        ".....##.....",
-        ".....##.....",
-        "....####....",
+        "...##...##..",
+        "...##...##..",
+        "...##...##..",
+        "...##...##..",
+        ".##########.",
+        ".##########.",
+        ".##########.",
+        "............",
+        "............",
         "............",
         "............",
     };
