@@ -321,14 +321,18 @@ class BaysPage extends WorkbayPage {
         int room = FACES_X - 4 - 98;
         String shown = nameOf(bay, snap.selectedBay());
         if (!screen.renaming()) {
-            g.drawString(font, font.plainSubstrByWidth(shown, room), x(98), y(56), Draw.TEXT, false);
+            clip(g, shown, x(98), y(56), room, Draw.TEXT);
         }
 
         if (bay.energyCapacity() > 0) {
-            Draw.bar(g, x(98), y(68), 84, 9, bay.energy(), bay.energyCapacity(), Draw.AMBER);
+            // The bar stops where the figures start rather than at a fixed 84. At 84 it ran twelve
+            // pixels under a Mekanism cube's "0 / 1600.0k" - invisible while an empty bar was black
+            // inside, and plain the moment the empty part got its tint.
             String power = Draw.compact(bay.energy()) + " / " + Draw.compact(bay.energyCapacity());
+            int barW = Math.max(20, FACES_X - 4 - font.width(power) - 6 - 98);
+            Draw.bar(g, x(98), y(68), barW, 9, bay.energy(), bay.energyCapacity(), Draw.AMBER);
             g.drawString(font, power, x(FACES_X - 4 - font.width(power)), y(69), Draw.TEXT_DIM, false);
-            screen.hit(x(98), y(68), 84, 9, () -> { },
+            screen.hit(x(98), y(68), barW, 9, () -> { },
                 WorkbayScreen.gui("power", Draw.exact(bay.energy()),
                     Draw.exact(bay.energyCapacity())),
                 WorkbayScreen.gui("power.machine.tip"));
@@ -348,8 +352,7 @@ class BaysPage extends WorkbayPage {
             g.drawString(font, mode, x(FACES_X - 4 - font.width(mode)), y(82), Draw.TEXT_DIM, false);
         }
         int statusRoom = room - (mode.isEmpty() ? 0 : font.width(mode) + 6);
-        g.drawString(font, font.plainSubstrByWidth(statusLine(bay).getString(), statusRoom),
-            x(98), y(82), statusColour(bay.state()), false);
+        clip(g, statusLine(bay), x(98), y(82), statusRoom, statusColour(bay.state()));
 
         // The button row at y=98, 20x20 on a 24px pitch. Bay View is the last of the six and is
         // real now: SPEC.md §4's rule is that a control whose screen is not built is hidden rather
@@ -794,9 +797,8 @@ class BaysPage extends WorkbayPage {
                 WorkbayScreen.gui("skim.name", snapshot().skimRate()),
                 WorkbayScreen.gui("skim.row.tip"));
         }
-        g.drawString(font,
-            font.plainSubstrByWidth(label, taxed ? 48 - font.width(cut) : 50),
-            px + 80, py + 5, on ? Draw.TEXT : Draw.TEXT_FAINT, false);
+        clip(g, label, px + 80, py + 5, taxed ? 48 - font.width(cut) : 50,
+            on ? Draw.TEXT : Draw.TEXT_FAINT);
 
         // The right-hand column is the status word whenever there is one, for every kind of link.
         // An internal row used to print "→ Bay 2" in amber and nothing else, so the one broken link
@@ -809,8 +811,8 @@ class BaysPage extends WorkbayPage {
             String bayTarget = broken ? statusShort(link.status()).getString()
                 : link.targetBay().map(b -> "→ Bay " + (b + 1))
                     .orElse(WorkbayScreen.gui("links.unknown").getString());
-            g.drawString(font, font.plainSubstrByWidth(bayTarget, 60), px + 136, py + 5,
-                broken ? statusColour(link.status()) : Draw.BLUE, false);
+            clip(g, bayTarget, px + 136, py + 5, 60,
+                broken ? statusColour(link.status()) : Draw.BLUE);
             screen.hit(px + 136, py + 2, 60, ROW_PITCH - 4,
                 () -> screen.send(WorkbayAction.LINK_CYCLE_TARGET_BAY, config.id()),
                 broken ? statusName(link.status()) : WorkbayScreen.gui("links.internal.retarget"),
@@ -820,8 +822,8 @@ class BaysPage extends WorkbayPage {
             Component target = broken
                 ? statusShort(link.status())
                 : link.targetBlock().map(BaysPage::displayName).orElse(WorkbayScreen.gui("links.unknown"));
-            g.drawString(font, font.plainSubstrByWidth(target.getString(), 60), px + 136, py + 5,
-                broken ? statusColour(link.status()) : Draw.TEXT_DIM, false);
+            clip(g, target, px + 136, py + 5, 60,
+                broken ? statusColour(link.status()) : Draw.TEXT_DIM);
         }
 
         faceButton(g, mouseX, mouseY, px + 200, py + 3, config);
@@ -1000,8 +1002,7 @@ class BaysPage extends WorkbayPage {
                 String label = link.label()
                     .orElseGet(() -> link.targetBlock().map(BaysPage::displayName)
                         .orElse(WorkbayScreen.gui("links.unknown")).getString());
-                g.drawString(font, font.plainSubstrByWidth(label, 70), px + 34, py + 5,
-                    ticked ? Draw.TEXT : Draw.TEXT_DIM, false);
+                clip(g, label, px + 34, py + 5, 70, ticked ? Draw.TEXT : Draw.TEXT_DIM);
                 // An internal link's target is a machine in the Backshop, which this client has
                 // never loaded, so asking for the block there gets air. Name the bay instead --
                 // the same branch the row itself makes.
@@ -1010,8 +1011,8 @@ class BaysPage extends WorkbayPage {
                         .orElse(WorkbayScreen.gui("links.unknown").getString())
                     : link.targetBlock().map(BaysPage::displayName)
                         .orElse(WorkbayScreen.gui("links.unknown")).getString();
-                g.drawString(font, font.plainSubstrByWidth(from, 90), px + 110, py + 5,
-                    config.internal() ? Draw.BLUE : Draw.TEXT_DIM, false);
+                clip(g, from, px + 110, py + 5, 90,
+                    config.internal() ? Draw.BLUE : Draw.TEXT_DIM);
                 g.drawString(font, "B" + (config.bay() + 1), px + 206, py + 5, Draw.TEXT_FAINT, false);
                 screen.hit(px, py, LIST_W - 14, ROW_PITCH - 2, () -> {
                     if (!pickedLinks.remove(config.id())) {
@@ -1027,8 +1028,7 @@ class BaysPage extends WorkbayPage {
                 WBIcons.draw(g, WBIcons.ARROW_RIGHT, px + 18, py + 3, Draw.BLUE);
                 String label = "Bay " + (bay + 1)
                     + (other == null || other.name().isEmpty() ? "" : " \u00b7 " + other.name());
-                g.drawString(font, font.plainSubstrByWidth(label, 120), px + 34, py + 5,
-                    ticked ? Draw.TEXT : Draw.TEXT_DIM, false);
+                clip(g, label, px + 34, py + 5, 120, ticked ? Draw.TEXT : Draw.TEXT_DIM);
                 g.drawString(font, WorkbayScreen.gui("links.add.nowire").getString(),
                     px + 160, py + 5, Draw.TEXT_FAINT, false);
                 screen.hit(px, py, LIST_W - 14, ROW_PITCH - 2, () -> {

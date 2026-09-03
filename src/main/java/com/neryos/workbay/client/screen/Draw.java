@@ -103,9 +103,21 @@ public final class Draw {
         bevel(g, x, y, w, h, true, hovered ? SELECT : EDGE_LIGHT, EDGE_DARK);
     }
 
-    /** A horizontal fill bar. Empty draws the well alone, so zero never reads as one pixel of full. */
+    /**
+     * A horizontal fill bar.
+     *
+     * <p>The empty part is the bar's own colour at a fifth, not the bare slot. An outlined
+     * rectangle with nothing in it reads as a text field that failed to render, which is exactly
+     * how the upgrades screen's power bar looked sitting above "0 / 100000 FE" - so the one reading
+     * a player most needs to recognise was the one that did not look like a bar at all. Tinted, the
+     * empty channel is visibly the same object as the full one, and zero is a bar that is empty.
+     *
+     * <p>Zero still fills no pixels: the minimum of one pixel applies only above zero, so a bar
+     * that is nearly empty is distinguishable from one that is empty.
+     */
     public static void bar(GuiGraphics g, int x, int y, int w, int h, int value, int max, int argb) {
         slot(g, x, y, w, h);
+        g.fill(x + 1, y + 1, x + w - 1, y + h - 1, (argb & 0x00FFFFFF) | 0x33000000);
         if (max <= 0 || value <= 0) {
             return;
         }

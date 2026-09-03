@@ -92,6 +92,35 @@ abstract class WorkbayPage {
         }
     }
 
+    /**
+     * The mod's one and only way to draw a string that might not fit.
+     *
+     * <p>{@code Font#plainSubstrByWidth} on its own cuts mid-word and says nothing: "Reaches other
+     * di" reads as a rendering fault, and the player has no way to find out what the row actually
+     * said. Every truncation in the three screens goes through here instead, so a string either
+     * fits or it ends in an ellipsis and carries the whole of itself in a tooltip. There is no
+     * third outcome, and no call site that can quietly get it wrong.
+     *
+     * <p>Nothing outside this method calls {@code plainSubstrByWidth}, the same way nothing outside
+     * {@link Draw} fills a bare rectangle.
+     */
+    protected void clip(GuiGraphics g, String text, int px, int py, int room, int colour) {
+        var font = screen.font();
+        if (font.width(text) <= room) {
+            g.drawString(font, text, px, py, colour, false);
+            return;
+        }
+        String head = font.plainSubstrByWidth(text, Math.max(0, room - font.width(ELLIPSIS)));
+        g.drawString(font, head + ELLIPSIS, px, py, colour, false);
+        screen.overflow(px, py - 1, room, font.lineHeight + 1, Component.literal(text));
+    }
+
+    protected void clip(GuiGraphics g, Component text, int px, int py, int room, int colour) {
+        clip(g, text.getString(), px, py, room, colour);
+    }
+
+    private static final String ELLIPSIS = "…";
+
     /** Draws an 18x18 icon button and registers its click and tooltip in one place. */
     protected void iconButton(GuiGraphics g, int mouseX, int mouseY, int px, int py, String[] icon,
         boolean active, Runnable onClick, Component... tooltip) {

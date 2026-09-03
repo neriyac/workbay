@@ -119,8 +119,7 @@ class FlowPage extends WorkbayPage {
     private void node(GuiGraphics g, int px, int py, Component label, int fill) {
         Draw.well(g, px, py, NODE_W, NODE_H);
         g.fill(px + 1, py + 1, px + NODE_W - 1, py + NODE_H - 1, fill);
-        g.drawString(screen.font(), screen.font().plainSubstrByWidth(label.getString(), NODE_W - 8),
-            px + 4, py + 5, Draw.TEXT_DIM, false);
+        clip(g, label, px + 4, py + 5, NODE_W - 8, Draw.TEXT_DIM);
     }
 
     /** A straight line with a two-pixel head. Enough to read a direction at this size. */

@@ -326,12 +326,16 @@ public class WBLanguageProvider extends LanguageProvider {
             + "Raise the skim, or move more goods through your links.");
         add(WorkbayLang.guiKey("upgrades.add"), "Install one %s");
         add(WorkbayLang.guiKey("upgrades.maxed"), "You have as many of these as a Workbay takes.");
+        // The three descriptions have 74 pixels each, beside a price that reaches "Levy: 102".
+        // Anything longer is cut, and a cut description is worse than a short one - it reads as a
+        // rendering fault and tells the player nothing. The sentence lives in the Add button's
+        // tooltip, which is where this mod's text budget goes.
         add(WorkbayLang.guiKey("upgrade.expansion_plate"), "Expansion Plate");
         add(WorkbayLang.guiKey("upgrade.expansion_plate.desc"), "+1 bay");
         add(WorkbayLang.guiKey("upgrade.resonator"), "Resonator");
-        add(WorkbayLang.guiKey("upgrade.resonator.desc"), "Other dimensions");
+        add(WorkbayLang.guiKey("upgrade.resonator.desc"), "Any dimension");
         add(WorkbayLang.guiKey("upgrade.multichannel"), "Multichannel");
-        add(WorkbayLang.guiKey("upgrade.multichannel.desc"), "All three on one");
+        add(WorkbayLang.guiKey("upgrade.multichannel.desc"), "All 3 in one");
 
         // The skim. SPEC.md §3: goods going missing must be explained exactly where the loss is
         // noticed, so the rate is on the dial, on the bays screen and on every row it applies to.

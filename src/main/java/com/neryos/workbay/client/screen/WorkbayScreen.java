@@ -180,6 +180,26 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
 
     // ------------------------------------------------------------- clickable
 
+    /**
+     * A string that would not fit where it was drawn, and the whole of what it said.
+     *
+     * <p>Kept apart from {@link Hit} on purpose: a cut string must never swallow the click that
+     * belongs to the row it sits on, and it must never shadow that row's own tooltip either. So
+     * these are consulted only after every hit has declined, and never for clicks at all. Registered
+     * by {@code WorkbayPage#clip}, which is the only thing in the mod allowed to shorten a string.
+     */
+    private record Overflow(int x, int y, int w, int h, Component full) {
+        boolean contains(double mx, double my) {
+            return mx >= x && mx < x + w && my >= y && my < y + h;
+        }
+    }
+
+    private final List<Overflow> overflows = new ArrayList<>();
+
+    public void overflow(int x, int y, int w, int h, Component full) {
+        overflows.add(new Overflow(x, y, w, h, full));
+    }
+
     /** A shape inside a hit's bounding box. The isometric cube's faces are the only non-rectangles. */
     public interface Inside {
         boolean test(double mx, double my);
@@ -233,6 +253,7 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
     protected void renderBg(GuiGraphics graphics, float partial, int mouseX, int mouseY) {
         hits.clear();
         ghosts.clear();
+        overflows.clear();
         // Cleared here, not in the page: the flow and upgrade pages have no rows to hover, and a
         // highlight left behind by the bays page would outline a block nothing on screen mentions.
         com.neryos.workbay.client.LinkHighlight.clear();
@@ -262,6 +283,14 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         for (Hit hit : hits) {
             if (hit.tooltip() != null && hit.contains(mouseX, mouseY)) {
                 graphics.renderTooltip(font, wrapTooltip(hit.tooltip()), mouseX, mouseY);
+                return;
+            }
+        }
+        // Only when nothing else claimed the pixel. Most cut strings sit inside a row whose own
+        // tooltip already names them in full; this is for the ones that do not.
+        for (Overflow cut : overflows) {
+            if (cut.contains(mouseX, mouseY)) {
+                graphics.renderTooltip(font, wrapTooltip(List.of(cut.full())), mouseX, mouseY);
                 return;
             }
         }

@@ -29,6 +29,22 @@ class UpgradesPage extends WorkbayPage {
     private static final int ROW_H = 34;
     private static final int ROW_PITCH = 38;
 
+    /**
+     * The row's three columns, fixed rather than derived from what happens to be in them.
+     *
+     * <p>Both the count and the price used to be right-aligned against the Add button and the text
+     * clamped to whatever they left over, so a cost that grew a digit ate the description's last
+     * characters — the row that told you the least was the one about to charge you the most. The
+     * price column is sized for {@code Levy: 102}, the top of the Expansion Plate ladder, and the
+     * text gets everything to its left whatever the number turns out to be.
+     */
+    private static final int TEXT_X = 28;
+    private static final int RIGHT_EDGE = ROW_W - 36;
+    private static final int COUNT_W = 32;
+    private static final int PRICE_W = 52;
+    private static final int NAME_W = RIGHT_EDGE - COUNT_W - TEXT_X - 4;
+    private static final int DESC_W = RIGHT_EDGE - PRICE_W - TEXT_X - 4;
+
     /** The block preview turns as the player drags it, since it is the only art on the screen. */
     private static final BlockPreview PREVIEW = new BlockPreview();
 
@@ -137,24 +153,22 @@ class UpgradesPage extends WorkbayPage {
             g.renderItem(icon, px + 6, py + 9);
 
             String key = "upgrade." + upgrade.getSerializedName();
-            // The count is right-aligned on the name's line and the description gets the whole
-            // second line: side by side, the two collided and the description was cut mid-word.
+            // Name over description on the left, count over price on the right. Both right-hand
+            // figures are right-aligned inside one fixed column, so neither can reach back into
+            // the text.
             String count = installed + " / " + upgrade.max();
-            int countX = px + ROW_W - 36 - font.width(count);
-            g.drawString(font, font.plainSubstrByWidth(WorkbayScreen.gui(key).getString(),
-                    countX - (px + 28) - 4),
-                px + 28, py + 6, canInstall ? Draw.TEXT : Draw.TEXT_FAINT, false);
-            g.drawString(font, count, countX, py + 6, maxed ? Draw.GREEN : Draw.TEXT_DIM, false);
+            clip(g, WorkbayScreen.gui(key), px + TEXT_X, py + 6, NAME_W,
+                canInstall ? Draw.TEXT : Draw.TEXT_FAINT);
+            g.drawString(font, count, px + RIGHT_EDGE - font.width(count), py + 6,
+                maxed ? Draw.GREEN : Draw.TEXT_DIM, false);
 
-            // The description shares its line with the price, because the price is the thing the
-            // player is actually deciding on and a tooltip is one hover too late for that.
+            // The price is on the row rather than in the tooltip, because it is the thing the
+            // player is deciding on and a hover is one step too late for that.
             String price = maxed ? "" : WorkbayScreen.gui("upgrades.levy", cost).getString();
-            int priceX = px + ROW_W - 36 - font.width(price);
-            g.drawString(font, price, priceX, py + 19,
+            g.drawString(font, price, px + RIGHT_EDGE - font.width(price), py + 19,
                 maxed ? Draw.TEXT_FAINT : affordable ? Draw.GREEN : Draw.RED, false);
-            g.drawString(font, font.plainSubstrByWidth(
-                    WorkbayScreen.gui(key + ".desc").getString(), priceX - (px + 28) - 4),
-                px + 28, py + 19, Draw.TEXT_FAINT, false);
+            clip(g, WorkbayScreen.gui(key + ".desc"), px + TEXT_X, py + 19, DESC_W,
+                Draw.TEXT_FAINT);
 
             int addX = px + ROW_W - 30;
             int addY = py + 8;
