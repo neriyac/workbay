@@ -86,10 +86,16 @@ public record BusConfig(
     public static final StreamCodec<RegistryFriendlyByteBuf, BusConfig> STREAM_CODEC =
         ByteBufCodecs.fromCodecWithRegistries(CODEC);
 
+    /**
+     * A new link starts <b>disabled</b>. Placing a Connector is how a link is made, and a link that
+     * starts moving the moment it exists will empty a chest into the wrong machine before the
+     * player has seen the row — which is exactly what happened in play. Enabling it is one click
+     * on the row's checkbox.
+     */
     public static BusConfig create(UUID id, int bay, Resource resource, Mode mode,
         GlobalPos connector, GlobalPos target) {
         return new BusConfig(id, resource.defaultName(mode), bay, resource, mode, connector, target,
-            Optional.empty(), Optional.empty(), DEFAULT_RATE, DEFAULT_SPEED, DyeColor.WHITE, true,
+            Optional.empty(), Optional.empty(), DEFAULT_RATE, DEFAULT_SPEED, DyeColor.WHITE, false,
             Optional.empty());
     }
 
@@ -159,7 +165,7 @@ public record BusConfig(
         }
 
         public String defaultName(Mode mode) {
-            return (mode == Mode.INSERT ? "Send " : "Pull ") + name;
+            return (mode == Mode.INSERT ? "Push " : "Pull ") + name;
         }
     }
 

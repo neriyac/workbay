@@ -192,7 +192,9 @@ public class MenuTests {
             level.setBlock(chestPos.above(), state, Block.UPDATE_ALL);
             WBBlocks.CONNECTOR.get().setPlacedBy(level, chestPos.above(), state, player, connector);
             BusConfig link = workbay.buses().get(0);
-            workbay.addBus(link.withRate(64).withSpeed(10));
+            // A placed Connector's link starts disabled (SPEC.md §7); this test is about the face
+            // config, so it turns the link on itself rather than testing that too.
+            workbay.addBus(link.withRate(64).withSpeed(10).withEnabled(true));
 
             helper.startSequence()
                 .thenIdle(200)
@@ -400,6 +402,52 @@ public class MenuTests {
             menu.act(WorkbayAction.SET_FILTER, -1, Optional.of(link.id()));
             helper.assertValueEqual(workbay.bus(link.id()).orElseThrow().filter(), Optional.empty(),
                 "the filter after clicking the slot to clear it");
+            helper.succeed();
+        });
+    }
+
+    /**
+     * Reported from play: toggling a link's checkbox visibly jumped it to the bottom of the list.
+     * The screen's default sort has no comparator at all and relies on the snapshot's own list
+     * order — {@link com.neryos.workbay.content.workbay.WorkbayBlockEntity#addBus} used to remove
+     * the edited link and append it, which silently reordered the list on every single edit.
+     */
+    @GameTest
+    @TestHolder(description = "Editing a link does not change its position in the list.")
+    public static void editingALinkDoesNotReorderTheList(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(7, 5, 7));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos pos = helper.absolutePos(new BlockPos(1, 1, 1));
+            WorkbayBlockEntity workbay = placeWorkbay(helper, pos, player);
+
+            // Three links, three different targets, so their order is unambiguous.
+            java.util.List<java.util.UUID> ids = new java.util.ArrayList<>();
+            for (int i = 0; i < 3; i++) {
+                BlockPos targetPos = helper.absolutePos(new BlockPos(3 + i, 1, 3));
+                level.setBlock(targetPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+                ItemStack connector = new ItemStack(WBBlocks.CONNECTOR.get());
+                WorkbayBlock.pair(connector, workbay.record().orElseThrow(),
+                    GlobalPos.of(level.dimension(), pos), 0);
+                BlockState state = WBBlocks.CONNECTOR.get().defaultBlockState()
+                    .setValue(ConnectorBlock.FACING, Direction.DOWN);
+                level.setBlock(targetPos.above(), state, Block.UPDATE_ALL);
+                WBBlocks.CONNECTOR.get().setPlacedBy(level, targetPos.above(), state, player, connector);
+                ids.add(workbay.buses().get(workbay.buses().size() - 1).id());
+            }
+
+            WorkbayMenu menu = menuFor(workbay, player);
+            // Edit the FIRST link every way the row offers: enable it, flip its mode, rename its
+            // filter. Any one of these used to send it to the back of the list.
+            menu.act(WorkbayAction.LINK_TOGGLE_ENABLED, 0, Optional.of(ids.get(0)));
+            menu.act(WorkbayAction.LINK_FLIP_MODE, 0, Optional.of(ids.get(0)));
+            menu.act(WorkbayAction.LINK_CYCLE_RESOURCE, 0, Optional.of(ids.get(0)));
+
+            java.util.List<java.util.UUID> after = workbay.buses().stream()
+                .map(BusConfig::id).toList();
+            helper.assertValueEqual(after, ids, "link order after editing the first link three times");
             helper.succeed();
         });
     }

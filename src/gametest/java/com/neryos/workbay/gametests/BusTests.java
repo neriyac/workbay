@@ -85,7 +85,10 @@ public class BusTests {
             helper.fail("placing a paired Connector did not create a link");
             throw new IllegalStateException("no link");
         }
-        return links.get(links.size() - 1);
+        // A placed Connector makes a link that is switched off, so nothing moves before the player
+        // has looked at the row. These tests are about what moves once it is on, so they turn it on
+        // the way a player does. aNewLinkStartsSwitchedOff asserts the default itself.
+        return links.get(links.size() - 1).withEnabled(true);
     }
 
     private static void tearDown(ExtendedGameTestHelper helper, BlockPos workbayPos) {
@@ -631,6 +634,47 @@ public class BusTests {
                     "items moved after a second rising edge"))
                 .thenExecute(() -> level.setBlock(leverPos, Blocks.AIR.defaultBlockState(),
                     Block.UPDATE_ALL))
+                .thenExecute(() -> tearDown(helper, workbayPos))
+                .thenSucceed();
+        });
+    }
+
+    /**
+     * Placing a Connector used to start a link running immediately, which emptied a chest into the
+     * wrong machine before the row had been read. A link is made switched off now.
+     */
+    @GameTest
+    @TestHolder(description = "A link made by placing a Connector starts switched off.")
+    public static void aNewLinkStartsSwitchedOff(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos targetPos = helper.absolutePos(new BlockPos(4, 1, 4));
+
+            level.setBlock(targetPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.CHEST));
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+            if (backshop.getBlockEntity(machinePos) instanceof Container hosted) {
+                hosted.setItem(0, new ItemStack(Items.IRON_INGOT, 16));
+            }
+
+            connect(helper, workbay, targetPos.above(), Direction.DOWN, player);
+            BusConfig asCreated = workbay.buses().get(0);
+            if (asCreated.enabled()) {
+                helper.fail("a link made by placing a Connector was already running");
+                return;
+            }
+
+            helper.startSequence()
+                .thenIdle(80)
+                .thenExecute(() -> helper.assertValueEqual(
+                    countIn(level, targetPos, Items.IRON_INGOT), 0,
+                    "items moved by a link nobody switched on"))
                 .thenExecute(() -> tearDown(helper, workbayPos))
                 .thenSucceed();
         });

@@ -103,9 +103,26 @@ public class WorkbayBlockEntity extends BlockEntity {
         return List.copyOf(buses);
     }
 
+    /**
+     * Adds a new link, or replaces an existing one <em>in place</em>. The row list has no sort
+     * comparator by default and relies on this list's own order for that — so a naive
+     * remove-then-append here silently sent a link to the bottom of the screen every time its
+     * enabled flag, name, filter or anything else about it changed. Found in play: toggling a
+     * link's checkbox visibly jumped it to the end of the list.
+     */
     public void addBus(BusConfig bus) {
-        buses.removeIf(existing -> existing.id().equals(bus.id()));
-        buses.add(bus);
+        int existing = -1;
+        for (int i = 0; i < buses.size(); i++) {
+            if (buses.get(i).id().equals(bus.id())) {
+                existing = i;
+                break;
+            }
+        }
+        if (existing >= 0) {
+            buses.set(existing, bus);
+        } else {
+            buses.add(bus);
+        }
         setChanged();
     }
 

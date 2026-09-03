@@ -67,8 +67,8 @@ public class WBLanguageProvider extends LanguageProvider {
             + "against the block you want to link.");
         add(WorkbayLang.messageKey("connector_unpaired"), "This Connector isn't paired yet. "
             + "Right-click a Workbay with it first.");
-        add(WorkbayLang.messageKey("connector_linked"), "Linked to %s. Workbay %s now has a row for "
-            + "it.");
+        add(WorkbayLang.messageKey("connector_linked"), "Linked to %s. Workbay %s has a row for it, "
+            + "switched off until you turn it on.");
         add(WorkbayLang.messageKey("connector_full"), "This Connector already carries everything it "
             + "can. Install a Multichannel Upgrade to carry items, fluids and energy on one.");
         add(WorkbayLang.messageKey("connector_no_workbay"), "The Workbay this Connector is paired "
@@ -171,6 +171,7 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("links.filter.all_bays"), "Showing: all bays");
         add(WorkbayLang.guiKey("links.filter.problems"), "Showing: problems only");
         add(WorkbayLang.guiKey("links.filter.tip"), "Click to change which links this list shows.");
+        add(WorkbayLang.guiKey("links.sort.added"), "In the order they were made");
         add(WorkbayLang.guiKey("links.sort.bay"), "Sorted by bay");
         add(WorkbayLang.guiKey("links.sort.type"), "Sorted by resource type");
         add(WorkbayLang.guiKey("links.sort.status"), "Sorted by status, problems first");
@@ -182,14 +183,17 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("links.mode.insert"), "Sends into the target");
         add(WorkbayLang.guiKey("links.mode.extract"), "Pulls out of the target");
         add(WorkbayLang.guiKey("links.mode.tip"), "Click to turn this link around.");
-        add(WorkbayLang.guiKey("links.gear"), "Link settings");
-        add(WorkbayLang.guiKey("links.gear.tip"), "Open this link's controls, including removing it.");
-        add(WorkbayLang.guiKey("links.toggle"), "Enable or disable");
-        add(WorkbayLang.guiKey("links.toggle.tip"), "A disabled link stays in the list and moves "
-            + "nothing.");
         add(WorkbayLang.guiKey("links.remove"), "Remove this link");
         add(WorkbayLang.guiKey("links.remove.tip"), "The Connector stays where it is. Right-click it "
             + "to link it again.");
+        add(WorkbayLang.guiKey("links.enable"), "Off");
+        add(WorkbayLang.guiKey("links.enable.tip"), "A new link starts off, so nothing moves until "
+            + "you have looked at the row. Click to turn it on.");
+        add(WorkbayLang.guiKey("links.disable"), "On");
+        add(WorkbayLang.guiKey("links.disable.tip"), "Click to stop this link without deleting it.");
+        add(WorkbayLang.guiKey("links.bay"), "Bay %s");
+        add(WorkbayLang.guiKey("links.bay.tip"), "The bay this link moves to and from. Every link "
+            + "belongs to exactly one.");
         add(WorkbayLang.guiKey("links.filterslot"), "Filter");
         add(WorkbayLang.guiKey("links.filterslot.tip"), "Drag an item here from the recipe list, "
             + "or click while holding one, and this link moves only that item.");

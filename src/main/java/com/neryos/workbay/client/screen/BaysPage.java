@@ -74,7 +74,8 @@ class BaysPage extends WorkbayPage {
     /** Client-side view state: the list's filter, sort, scroll and which row's gear is open. */
     private enum Filter { THIS_BAY, ALL_BAYS, PROBLEMS }
 
-    private enum Sort { BAY, TYPE, STATUS }
+    /** ADDED is first and is the default: a list that reorders itself is a list you cannot learn. */
+    private enum Sort { ADDED, BAY, TYPE, STATUS }
 
     /**
      * What Copy holds. Static and client-side on purpose: the point of copying a bay is pasting it
@@ -84,8 +85,10 @@ class BaysPage extends WorkbayPage {
     @org.jetbrains.annotations.Nullable
     private static FaceConfig copied;
 
-    private static Filter filter = Filter.THIS_BAY;
-    private static Sort sort = Sort.STATUS;
+    // All bays, in the order links were made. A link belongs to one bay, but the list is the
+    // Workbay's, and hiding the other seven bays' links by default hides most of the machine.
+    private static Filter filter = Filter.ALL_BAYS;
+    private static Sort sort = Sort.ADDED;
     private static BusConfig.Resource faceType = BusConfig.Resource.ITEM;
 
     /** Kept between openings, so the angle a player turned a machine to is still there next time. */
@@ -101,8 +104,6 @@ class BaysPage extends WorkbayPage {
     private static String previewSubject;
 
     private int scroll;
-    @org.jetbrains.annotations.Nullable
-    private UUID openGear;
 
     BaysPage(WorkbayScreen screen) {
         super(screen);
@@ -561,9 +562,21 @@ class BaysPage extends WorkbayPage {
             com.neryos.workbay.client.LinkHighlight.set(config.target());
         }
 
-        g.fill(px, py + 4, px + 10, py + 14, Draw.EDGE_DARK);
-        g.fill(px + 1, py + 5, px + 9, py + 13, statusColour(link.status()));
-        screen.hit(px, py + 4, 10, 10, () -> { },
+        // On and off are one click on the row, not two clicks through a menu. Anything a player
+        // does to a link often enough to notice belongs where they can already see it.
+        boolean on = config.enabled();
+        Draw.slot(g, px, py + 3, 12, 12);
+        if (on) {
+            WBIcons.draw(g, WBIcons.CHECK, px, py + 3, Draw.GREEN);
+        }
+        screen.hit(px, py + 3, 12, 12,
+            () -> screen.send(WorkbayAction.LINK_TOGGLE_ENABLED, config.id()),
+            WorkbayScreen.gui(on ? "links.disable" : "links.enable"),
+            WorkbayScreen.gui(on ? "links.disable.tip" : "links.enable.tip"));
+
+        g.fill(px + 16, py + 4, px + 26, py + 14, Draw.EDGE_DARK);
+        g.fill(px + 17, py + 5, px + 25, py + 13, statusColour(link.status()));
+        screen.hit(px + 16, py + 4, 10, 10, () -> { },
             statusName(link.status()), statusHelp(link.status()));
 
         String[] typeIcon = switch (config.resource()) {
@@ -571,38 +584,44 @@ class BaysPage extends WorkbayPage {
             case FLUID -> WBIcons.FLUIDS;
             case ENERGY -> WBIcons.ENERGY;
         };
-        WBIcons.draw(g, typeIcon, px + 14, py + 3, Draw.TEXT_DIM);
-        screen.hit(px + 14, py + 3, 12, 12,
+        WBIcons.draw(g, typeIcon, px + 30, py + 3, Draw.TEXT_DIM);
+        screen.hit(px + 30, py + 3, 12, 12,
             () -> screen.send(WorkbayAction.LINK_CYCLE_RESOURCE, config.id()),
             WorkbayScreen.gui("links.type." + config.resource().getSerializedName()),
             WorkbayScreen.gui("links.type.tip"));
 
-        WBIcons.draw(g, config.mode() == BusConfig.Mode.INSERT ? WBIcons.INSERT : WBIcons.EXTRACT,
-            px + 30, py + 3, Draw.TEXT_DIM);
-        screen.hit(px + 30, py + 3, 12, 12,
+        // A plain arrow, pointing the way the resource travels: the machine is this row's left and
+        // the target its right, so insert points right and extract points left.
+        boolean insert = config.mode() == BusConfig.Mode.INSERT;
+        WBIcons.draw(g, insert ? WBIcons.ARROW_RIGHT : WBIcons.ARROW_LEFT, px + 46, py + 3,
+            insert ? Draw.BLUE : Draw.GREEN);
+        screen.hit(px + 46, py + 3, 12, 12,
             () -> screen.send(WorkbayAction.LINK_FLIP_MODE, config.id()),
             WorkbayScreen.gui("links.mode." + config.mode().getSerializedName()),
             WorkbayScreen.gui("links.mode.tip"));
 
-        g.drawString(font, font.plainSubstrByWidth(config.name(), 52), px + 48, py + 5,
-            config.enabled() ? Draw.TEXT : Draw.TEXT_FAINT, false);
+        // Which bay, because the list shows every bay's links by default now.
+        String badge = "B" + (config.bay() + 1);
+        g.drawString(font, badge, px + 62, py + 5, Draw.TEXT_DIM, false);
+        screen.hit(px + 62, py + 3, 16, 12, () -> { },
+            WorkbayScreen.gui("links.bay", config.bay() + 1), WorkbayScreen.gui("links.bay.tip"));
+
+        g.drawString(font, font.plainSubstrByWidth(config.name(), 50), px + 80, py + 5,
+            on ? Draw.TEXT : Draw.TEXT_FAINT, false);
 
         Component target = link.status().isProblem()
             ? statusName(link.status())
             : link.targetBlock().map(BaysPage::displayName).orElse(WorkbayScreen.gui("links.unknown"));
-        g.drawString(font, font.plainSubstrByWidth(target.getString(), 92), px + 104, py + 5,
+        g.drawString(font, font.plainSubstrByWidth(target.getString(), 64), px + 136, py + 5,
             link.status().isProblem() ? statusColour(link.status()) : Draw.TEXT_DIM, false);
 
-        filterSlot(g, px + 200, py + 1, config);
+        filterSlot(g, px + 206, py + 1, config);
 
-        boolean open = config.id().equals(openGear);
-        iconButton(g, mouseX, mouseY, px + 222, py, WBIcons.GEAR, open,
-            () -> openGear = open ? null : config.id(),
-            WorkbayScreen.gui("links.gear"), WorkbayScreen.gui("links.gear.tip"));
-
-        if (open) {
-            gearMenu(g, mouseX, mouseY, config, px + 132, py + ROW_PITCH - 2);
-        }
+        WBIcons.draw(g, WBIcons.CROSS, px + 228, py + 3,
+            screen.hovered(px + 228, py + 3, 12, 12, mouseX, mouseY) ? Draw.RED : Draw.TEXT_FAINT);
+        screen.hit(px + 228, py + 3, 12, 12,
+            () -> screen.send(WorkbayAction.LINK_REMOVE, config.id()),
+            WorkbayScreen.gui("links.remove"), WorkbayScreen.gui("links.remove.tip"));
     }
 
     /**
@@ -651,44 +670,24 @@ class BaysPage extends WorkbayPage {
             BuiltInRegistries.ITEM.getId(stack.getItem()), config.id());
     }
 
-    /** The gear's two real controls. Everything else it will hold is SPEC.md §5's link settings. */
-    private void gearMenu(GuiGraphics g, int mouseX, int mouseY, BusConfig config, int px, int py) {
-        var font = screen.font();
-        Draw.panel(g, px, py, 106, 20);
-        boolean hoverToggle = screen.hovered(px + 2, py + 2, 50, 16, mouseX, mouseY);
-        Draw.button(g, px + 2, py + 2, 50, 16, hoverToggle, !config.enabled());
-        g.drawString(font, config.enabled() ? "Disable" : "Enable", px + 6, py + 6,
-            Draw.TEXT, false);
-        screen.hit(px + 2, py + 2, 50, 16, () -> {
-            screen.send(WorkbayAction.LINK_TOGGLE_ENABLED, config.id());
-            openGear = null;
-        }, WorkbayScreen.gui("links.toggle"), WorkbayScreen.gui("links.toggle.tip"));
-
-        boolean hoverRemove = screen.hovered(px + 54, py + 2, 50, 16, mouseX, mouseY);
-        Draw.button(g, px + 54, py + 2, 50, 16, hoverRemove, false);
-        g.drawString(font, "Remove", px + 58, py + 6, Draw.RED, false);
-        screen.hit(px + 54, py + 2, 50, 16, () -> {
-            screen.send(WorkbayAction.LINK_REMOVE, config.id());
-            openGear = null;
-        }, WorkbayScreen.gui("links.remove"), WorkbayScreen.gui("links.remove.tip"));
-    }
-
     private List<WorkbaySnapshot.Link> visibleLinks(WorkbaySnapshot snap) {
+        // ADDED has no comparator on purpose: the snapshot arrives in the order the links were
+        // made, and re-sorting it is what makes rows move under the player's cursor.
         Comparator<WorkbaySnapshot.Link> order = switch (sort) {
+            case ADDED -> null;
             case BAY -> Comparator.comparingInt(link -> link.config().bay());
             case TYPE -> Comparator.comparing(link -> link.config().resource());
             // Problems first: the default, because the screen's job at rest is to surface them.
             case STATUS -> Comparator.comparing((WorkbaySnapshot.Link link) -> !link.status().isProblem())
                 .thenComparing(link -> link.config().bay());
         };
-        return snap.links().stream()
+        var kept = snap.links().stream()
             .filter(link -> switch (filter) {
                 case THIS_BAY -> link.config().bay() == snap.selectedBay();
                 case ALL_BAYS -> true;
                 case PROBLEMS -> link.status().isProblem();
-            })
-            .sorted(order)
-            .toList();
+            });
+        return (order == null ? kept : kept.sorted(order)).toList();
     }
 
     @Override
