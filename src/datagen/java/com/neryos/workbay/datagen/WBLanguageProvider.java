@@ -321,9 +321,9 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("upgrade.expansion_plate"), "Expansion Plate");
         add(WorkbayLang.guiKey("upgrade.expansion_plate.desc"), "+1 bay");
         add(WorkbayLang.guiKey("upgrade.resonator"), "Resonator");
-        add(WorkbayLang.guiKey("upgrade.resonator.desc"), "Reaches other dimensions");
+        add(WorkbayLang.guiKey("upgrade.resonator.desc"), "Other dimensions");
         add(WorkbayLang.guiKey("upgrade.multichannel"), "Multichannel");
-        add(WorkbayLang.guiKey("upgrade.multichannel.desc"), "One Connector, all three types");
+        add(WorkbayLang.guiKey("upgrade.multichannel.desc"), "All three on one");
 
         // The skim. SPEC.md §3: goods going missing must be explained exactly where the loss is
         // noticed, so the rate is on the dial, on the bays screen and on every row it applies to.
@@ -332,7 +332,8 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("skim.tip"), "Items your links move that count as refined goods are "
             + "taken at this rate and turned into Levy by the Assay. Click to raise it by five, "
             + "right-click to lower it. At zero the Workbay takes nothing.");
-        add(WorkbayLang.guiKey("skim.row"), "%s%% skimmed");
+        // The number alone. The row has about thirty pixels for this and the sentence is sixty.
+        add(WorkbayLang.guiKey("skim.row"), "%s%%");
         add(WorkbayLang.guiKey("skim.row.tip"), "This link hands the Assay that share of the "
             + "refined goods it carries, so less arrives at the far end than leaves.");
         add(WorkbayLang.guiKey("skim.no_assay"), "No Assay racked");

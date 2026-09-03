@@ -739,18 +739,24 @@ class BaysPage extends WorkbayPage {
 
         // And what this row is losing, on this row. A tax the player only finds by opening another
         // screen is the best bug-report generator in the mod (SPEC.md §3). Only item links: fluids
-        // and energy are never skimmed. The name gives up whatever width this needs, right-aligned
-        // against the target column so the two can never overlap at any rate.
+        // and energy are never skimmed.
+        //
+        // Just the number. "25% skimmed" is sixty pixels on a row that has thirty to spare: drawn
+        // right-aligned it ran back over the bay badge and squeezed the link's own name out
+        // entirely, so the row read "B225% skimmed Chest". Found in play, on the first row the
+        // feature ever drew. The sentence lives in the tooltip, which is where this mod's text
+        // budget is spent anyway (SPEC.md §4).
         boolean taxed = skimming(snapshot()) && config.resource() == BusConfig.Resource.ITEM;
         String cut = taxed
             ? WorkbayScreen.gui("skim.row", snapshot().skimRate()).getString() : "";
         if (taxed) {
-            g.drawString(font, cut, px + 134 - font.width(cut), py + 5, Draw.AMBER, false);
-            screen.hit(px + 134 - font.width(cut), py + 3, font.width(cut), 12, () -> { },
+            g.drawString(font, cut, px + 132 - font.width(cut), py + 5, Draw.AMBER, false);
+            screen.hit(px + 132 - font.width(cut), py + 3, font.width(cut), 12, () -> { },
                 WorkbayScreen.gui("skim.name", snapshot().skimRate()),
                 WorkbayScreen.gui("skim.row.tip"));
         }
-        g.drawString(font, font.plainSubstrByWidth(label, 50 - (taxed ? font.width(cut) + 4 : 0)),
+        g.drawString(font,
+            font.plainSubstrByWidth(label, taxed ? 48 - font.width(cut) : 50),
             px + 80, py + 5, on ? Draw.TEXT : Draw.TEXT_FAINT, false);
 
         // The right-hand column is the status word whenever there is one, for every kind of link.
