@@ -96,11 +96,16 @@ public record BusConfig(
      * A new link starts <b>disabled</b>. Placing a Connector is how a link is made, and a link that
      * starts moving the moment it exists will empty a chest into the wrong machine before the
      * player has seen the row — which is exactly what happened in play. Enabling it is one click
-     * on the row's checkbox.
+     * on the row's power button.
+     *
+     * <p><b>And it starts with no name at all.</b> The row derives one from what the link points at
+     * ({@link com.neryos.workbay.menu.WorkbaySnapshot.Link#label()}), which is the only thing that
+     * tells four rows apart; a stored default was the same three words on every one of them, and it
+     * went stale the moment the link was retargeted.
      */
     public static BusConfig create(UUID id, int bay, Resource resource, Mode mode,
         GlobalPos connector, GlobalPos target) {
-        return new BusConfig(id, resource.defaultName(mode), bay, resource, mode, connector, target,
+        return new BusConfig(id, "", bay, resource, mode, connector, target,
             Optional.empty(), Optional.empty(), DEFAULT_RATE, DEFAULT_SPEED, DyeColor.WHITE, false,
             Optional.empty(), false);
     }
@@ -112,7 +117,7 @@ public record BusConfig(
      * mirroring guarantee the transfer core already has just applies.
      */
     public static BusConfig createInternal(UUID id, int bay, GlobalPos anchor, GlobalPos target) {
-        return new BusConfig(id, "Bay link", bay, Resource.ITEM, Mode.INSERT, anchor, target,
+        return new BusConfig(id, "", bay, Resource.ITEM, Mode.INSERT, anchor, target,
             Optional.empty(), Optional.empty(), DEFAULT_RATE, DEFAULT_SPEED, DyeColor.WHITE, false,
             Optional.empty(), true);
     }
@@ -143,15 +148,13 @@ public record BusConfig(
     }
 
     public BusConfig withMode(Mode newMode) {
-        return new BusConfig(id, defaultNamed() ? resource.defaultName(newMode) : name, bay,
-            resource, newMode, connector, target, targetFace, machineFace, rate, speed, channel,
-            enabled, filter, internal);
+        return new BusConfig(id, name, bay, resource, newMode, connector, target, targetFace,
+            machineFace, rate, speed, channel, enabled, filter, internal);
     }
 
     public BusConfig withResource(Resource newResource) {
-        return new BusConfig(id, defaultNamed() ? newResource.defaultName(mode) : name, bay,
-            newResource, mode, connector, target, targetFace, machineFace, rate, speed, channel,
-            enabled, filter, internal);
+        return new BusConfig(id, name, bay, newResource, mode, connector, target, targetFace,
+            machineFace, rate, speed, channel, enabled, filter, internal);
     }
 
     public BusConfig withName(String newName) {
@@ -198,11 +201,6 @@ public record BusConfig(
             : Optional.of(Direction.values()[next]);
     }
 
-    /** True while the player has not renamed this link, so flipping its type may re-default it. */
-    private boolean defaultNamed() {
-        return name.equals(resource.defaultName(mode));
-    }
-
     public enum Resource implements StringRepresentable {
         ITEM("item"), FLUID("fluid"), ENERGY("energy");
 
@@ -219,10 +217,6 @@ public record BusConfig(
 
         public Resource next() {
             return values()[(ordinal() + 1) % values().length];
-        }
-
-        public String defaultName(Mode mode) {
-            return (mode == Mode.INSERT ? "Push " : "Pull ") + name;
         }
     }
 

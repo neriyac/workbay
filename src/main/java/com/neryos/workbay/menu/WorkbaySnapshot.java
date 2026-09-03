@@ -102,6 +102,22 @@ public record WorkbaySnapshot(
             // client has no way to invert a Backshop position back into a bay index.
             Codec.INT.optionalFieldOf("TargetBay").forGetter(Link::targetBay)
         ).apply(i, Link::new));
+
+        /**
+         * What the row calls this link: the name the player gave it, or one derived from what it
+         * points at. Empty means "the target block's own name", which only the client can resolve
+         * because that is where the language file lives.
+         *
+         * <p>Derived on every draw rather than stored at creation. A stored default was literally
+         * the word "Bay link" on every internal row, and baking the target into it instead would go
+         * stale the first time somebody retargeted the link.
+         */
+        public Optional<String> label() {
+            if (!config.name().isBlank()) {
+                return Optional.of(config.name());
+            }
+            return config.internal() ? targetBay().map(bay -> "Bay " + (bay + 1)) : Optional.empty();
+        }
     }
 
     /** One helper rather than a StringRepresentable on every enum that only ever rides a packet. */

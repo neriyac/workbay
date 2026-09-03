@@ -99,6 +99,8 @@
   "gui.workbay.links.none.here": "No links on this bay. %s on other bays — press Add to move one here.",
   "gui.workbay.links.pair": "Pair a Connector",
   "gui.workbay.links.pair.tip": "Pairs the Connector in your hand to this Workbay and the selected bay. Place it on the block you want linked.",
+  "gui.workbay.links.problems": "%s needing attention",
+  "gui.workbay.links.problems.tip": "Click to list only the links that are in trouble. Each one is marked with a red bar and says what is wrong with it.",
   "gui.workbay.links.remove": "Remove this link",
   "gui.workbay.links.remove.tip": "The Connector stays where it is. Right-click it to link it again.",
   "gui.workbay.links.sort.added": "In the order they were made",

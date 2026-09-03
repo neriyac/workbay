@@ -239,6 +239,9 @@ public class WBLanguageProvider extends LanguageProvider {
             + "you have looked at the row. Click to turn it on.");
         add(WorkbayLang.guiKey("links.disable"), "On");
         add(WorkbayLang.guiKey("links.disable.tip"), "Click to stop this link without deleting it.");
+        add(WorkbayLang.guiKey("links.problems"), "%s needing attention");
+        add(WorkbayLang.guiKey("links.problems.tip"), "Click to list only the links that are in "
+            + "trouble. Each one is marked with a red bar and says what is wrong with it.");
         add(WorkbayLang.guiKey("links.bay"), "Bay %s");
         add(WorkbayLang.guiKey("links.bay.tip"), "The bay this link moves to and from. Every link "
             + "belongs to exactly one.");

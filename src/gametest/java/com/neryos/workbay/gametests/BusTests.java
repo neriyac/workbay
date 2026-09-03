@@ -822,4 +822,73 @@ public class BusTests {
                 .thenSucceed();
         });
     }
+
+    /**
+     * A row is named after what its link points at, and stays named after it when the link is
+     * retargeted. SPEC.md §4's list is unreadable otherwise: every internal link used to carry the
+     * stored name "Bay link", so four rows on one bay were four identical rows.
+     *
+     * <p>The name is <b>derived, not stored</b> — which is the half worth guarding. Baking the
+     * target into the name at creation would read correctly on the day it was made and lie the
+     * moment somebody pointed the link at a different bay, which is one click on the row.
+     */
+    @GameTest(timeoutTicks = 400)
+    @TestHolder(description = "A link with no name of its own is named after what it points at.")
+    public static void aLinkIsNamedAfterWhatItPointsAt(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos chestPos = helper.absolutePos(new BlockPos(3, 1, 0));
+            helper.setBlock(new BlockPos(3, 1, 0), Blocks.CHEST);
+
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.CHEST));
+            // Three bays, so retargeting has somewhere else to go than straight back.
+            RoomRegistry.get(level.getServer()).put(workbay.record().orElseThrow()
+                .withUpgrades(new WorkbayRecord.Upgrades(2, 0, 0, 0, 0, 0)));
+
+            player.moveTo(workbayPos.getX() + 0.5, workbayPos.getY(), workbayPos.getZ() + 0.5);
+            WorkbayMenu menu = new WorkbayMenu(1, player.getInventory(), workbay,
+                WorkbayMenu.build(workbay, player, 0));
+            menu.act(WorkbayAction.SELECT_BAY, 0, Optional.empty());
+            menu.act(WorkbayAction.CREATE_INTERNAL_LINK, 1, Optional.empty());
+
+            BusConfig internal = workbay.buses().stream().filter(BusConfig::internal).findFirst()
+                .orElseThrow(() -> new GameTestAssertException("no internal link was made"));
+            helper.assertValueEqual(labelOf(workbay, player, internal.id()), Optional.of("Bay 2"),
+                "the name of a link pointing at bay 2");
+
+            // One click on the row's target. The name has to follow it.
+            menu.act(WorkbayAction.LINK_CYCLE_TARGET_BAY, 0, Optional.of(internal.id()));
+            helper.assertValueEqual(labelOf(workbay, player, internal.id()), Optional.of("Bay 3"),
+                "the name of the same link after it was pointed at bay 3");
+
+            // And a name the player typed outranks both.
+            workbay.addBus(workbay.bus(internal.id()).orElseThrow().withName("Furnace feed"));
+            helper.assertValueEqual(labelOf(workbay, player, internal.id()),
+                Optional.of("Furnace feed"), "a link the player named");
+
+            // An external link carries no stored name either; the row reads the target block's own
+            // name, which only the client can resolve, so the snapshot hands back nothing.
+            BusConfig external = connect(helper, workbay, chestPos.above(), Direction.DOWN, player);
+            helper.assertValueEqual(external.name(), "", "a new external link's stored name");
+            helper.assertValueEqual(labelOf(workbay, player, external.id()), Optional.empty(),
+                "an external link's derived name, which the client resolves from the block");
+
+            tearDown(helper, workbayPos);
+            helper.succeed();
+        });
+    }
+
+    /** The row's name, straight out of the snapshot the screen actually draws. */
+    private static Optional<String> labelOf(WorkbayBlockEntity workbay, GameTestPlayer player,
+        java.util.UUID id) {
+        return WorkbayMenu.build(workbay, player, 0).links().stream()
+            .filter(link -> link.config().id().equals(id))
+            .findFirst()
+            .orElseThrow(() -> new GameTestAssertException("the snapshot has no row for " + id))
+            .label();
+    }
 }

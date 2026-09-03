@@ -180,9 +180,24 @@ class BaysPage extends WorkbayPage {
             textX, y(31), Draw.TEXT_DIM, false);
         g.drawString(font, snap.links().size() + " links", textX + 62, y(31), Draw.TEXT_DIM, false);
 
+        // The count and the list have to agree, and the list is filtered to one bay by default — so
+        // the count is a control, not a label: clicking it shows exactly the rows it is counting.
+        // Without that the header can honestly say "1 problem" while every visible row looks fine.
         int problems = snap.problems();
-        g.drawString(font, problems == 0 ? "no problems" : problems + " problem" + (problems == 1 ? "" : "s"),
-            textX + 112, y(31), problems == 0 ? Draw.TEXT_FAINT : Draw.RED, false);
+        String problemText = problems == 0 ? "no problems"
+            : problems + " problem" + (problems == 1 ? "" : "s");
+        boolean problemHover = problems > 0
+            && screen.hovered(textX + 112, y(29), font.width(problemText) + 2, 12, mouseX, mouseY);
+        g.drawString(font, problemText, textX + 112, y(31),
+            problems == 0 ? Draw.TEXT_FAINT : problemHover ? Draw.TEXT : Draw.RED, false);
+        if (problems > 0) {
+            screen.hit(textX + 112, y(29), font.width(problemText) + 2, 12, () -> {
+                filter = Filter.PROBLEMS;
+                adding = false;
+                scroll = 0;
+            }, WorkbayScreen.gui("links.problems", problems),
+                WorkbayScreen.gui("links.problems.tip"));
+        }
 
         // A bar with no figure beside it reads as broken, and an empty one reads as broken twice
         // over, so with no capacity at all the words replace the bar entirely (SPEC.md §7).
@@ -338,59 +353,37 @@ class BaysPage extends WorkbayPage {
         // The button row at y=98, 20x20 on a 24px pitch. Bay View is not here: SPEC.md §4 says a
         // control whose screen is not built is hidden, not drawn faint, because faint is honest for
         // one session and furniture after two.
+        //
+        // All five are drawn glyphs, not item sprites. An item says what a thing is made of, not
+        // what it does: a sheet of paper does not read as "copy" and a boot reads as nothing at
+        // all. Item sprites are kept for content — the hosted machine, the bay rack, the three
+        // resource types — which is the same line Mekanism and AE2 draw.
         boolean canEject = !empty;
-        actionButton(g, mouseX, mouseY, x(50), WBIcons.EJECT, canEject,
+        actionButton(g, mouseX, mouseY, x(50), WBIcons.EJECT, canEject, false,
             () -> screen.send(WorkbayAction.EJECT),
             WorkbayScreen.gui("button.eject"), WorkbayScreen.gui("button.eject.tip"));
         boolean unlocked = bay.state() != WorkbaySnapshot.State.LOCKED;
-        itemButton(g, mouseX, mouseY, x(74), net.minecraft.world.item.Items.NAME_TAG, unlocked, true,
+        actionButton(g, mouseX, mouseY, x(74), WBIcons.RENAME, unlocked, false,
             () -> screen.beginRename(x(98), y(53), room, 14, bay.name(),
                 typed -> screen.sendText(WorkbayAction.SET_BAY_NAME, typed)),
             WorkbayScreen.gui("button.rename"), WorkbayScreen.gui("button.rename.tip"));
-        // The dust is lit only while the gate is actually in use, so the button says which state
-        // it is in before the player hovers it.
+        // Lit only while the gate is actually in use, so the button says which state it is in
+        // before the player hovers it.
         boolean gated = bay.redstone() != com.neryos.workbay.world.RedstoneMode.ALWAYS;
-        itemButton(g, mouseX, mouseY, x(98), net.minecraft.world.item.Items.REDSTONE, unlocked,
-            gated,
+        actionButton(g, mouseX, mouseY, x(98), WBIcons.REDSTONE, unlocked, gated,
             () -> screen.send(WorkbayAction.CYCLE_REDSTONE),
             WorkbayScreen.gui("redstone." + bay.redstone().getSerializedName()),
             WorkbayScreen.gui("redstone." + bay.redstone().getSerializedName() + ".tip"));
 
         // Copy and paste. Eight bays running the same machine is the first complaint this mod will
-        // get, and Mekanism answers it with a Configuration Card (SPEC.md §7). Paper and a book and
-        // quill, because a clipboard is not a Minecraft thing but writing something down to copy it
-        // elsewhere is.
-        itemButton(g, mouseX, mouseY, x(122), net.minecraft.world.item.Items.PAPER, true, true,
+        // get, and Mekanism answers it with a Configuration Card (SPEC.md §7).
+        actionButton(g, mouseX, mouseY, x(122), WBIcons.COPY, true, false,
             () -> copied = bay.faces(),
             WorkbayScreen.gui("button.copy"), WorkbayScreen.gui("button.copy.tip"));
-        itemButton(g, mouseX, mouseY, x(146), net.minecraft.world.item.Items.WRITABLE_BOOK,
-            copied != null, copied != null,
+        actionButton(g, mouseX, mouseY, x(146), WBIcons.PASTE, copied != null, false,
             () -> screen.send(WorkbayAction.PASTE_BAY, copied.bits()),
             WorkbayScreen.gui("button.paste"),
             WorkbayScreen.gui(copied == null ? "button.paste.empty" : "button.paste.tip"));
-    }
-
-    /**
-     * The same button with the game's own item sprite on it. A name tag and a redstone dust say
-     * "rename" and "redstone" to anyone who has played Minecraft, which no 12x12 grid we draw by
-     * hand is going to beat. Kept to controls that have an obvious vanilla item — the three
-     * resource-type buttons stay drawn glyphs so they read as one set.
-     */
-    private void itemButton(GuiGraphics g, int mouseX, int mouseY, int px,
-        net.minecraft.world.item.Item icon, boolean enabled, boolean lit, Runnable onClick,
-        Component name, Component tip) {
-        boolean hover = screen.hovered(px, y(98), 20, 20, mouseX, mouseY);
-        Draw.button(g, px, y(98), 20, 20, hover && enabled, lit && enabled, enabled);
-        g.renderItem(new ItemStack(icon), px + 2, y(100));
-        // An item sprite cannot be tinted, so "off" and "disabled" are washes over the top rather
-        // than dimmer colours -- above the item's own layer, or they draw underneath it.
-        if (!enabled || !lit) {
-            g.pose().pushPose();
-            g.pose().translate(0, 0, 300);
-            g.fill(px + 1, y(99), px + 19, y(117), enabled ? 0x99202329 : 0xC0202329);
-            g.pose().popPose();
-        }
-        screen.hit(px, y(98), 20, 20, enabled ? onClick : () -> { }, name, tip);
     }
 
     private static net.minecraft.world.item.ItemStack resourceItem(BusConfig.Resource resource) {
@@ -419,9 +412,9 @@ class BaysPage extends WorkbayPage {
 
     /** A 20x20 button in the machine row: enabled draws lit and clicks, disabled draws sunken. */
     private void actionButton(GuiGraphics g, int mouseX, int mouseY, int px, String[] icon,
-        boolean enabled, Runnable onClick, Component name, Component tip) {
+        boolean enabled, boolean lit, Runnable onClick, Component name, Component tip) {
         boolean hover = screen.hovered(px, y(98), 20, 20, mouseX, mouseY);
-        Draw.button(g, px, y(98), 20, 20, hover && enabled, false, enabled);
+        Draw.button(g, px, y(98), 20, 20, hover && enabled, lit && enabled, enabled);
         WBIcons.draw(g, icon, px + 4, y(102), enabled ? Draw.TEXT : Draw.TEXT_FAINT);
         screen.hit(px, y(98), 20, 20, enabled ? onClick : () -> { }, name, tip);
     }
@@ -672,13 +665,21 @@ class BaysPage extends WorkbayPage {
             com.neryos.workbay.client.LinkHighlight.set(config.target());
         }
 
-        // On and off are one click on the row, not two clicks through a menu. Anything a player
-        // does to a link often enough to notice belongs where they can already see it.
+        // Broken gets a red bar in the well's own left gutter, where nothing else lives. The
+        // header can say "1 problem" and every row still look fine otherwise: the status swatch
+        // alone is a 10px chip that a player scanning thirty rows does not see, and a disabled row
+        // is dim, which is what "broken" used to look like too. Dim is the player's own doing;
+        // red is the mod's.
+        if (link.status().isProblem()) {
+            g.fill(px - 3, py, px - 1, py + ROW_PITCH - 2, Draw.RED);
+        }
+
+        // On and off are one click on the row, not two clicks through a menu. A power symbol, not
+        // a tick: the picker's tick means "selected for adding", and one control that means two
+        // things is a control that means neither.
         boolean on = config.enabled();
         Draw.slot(g, px, py + 3, 12, 12);
-        if (on) {
-            WBIcons.draw(g, WBIcons.CHECK, px, py + 3, Draw.GREEN);
-        }
+        WBIcons.draw(g, WBIcons.POWER, px, py + 3, on ? Draw.GREEN : Draw.TEXT_FAINT);
         screen.hit(px, py + 3, 12, 12,
             () -> screen.send(WorkbayAction.LINK_TOGGLE_ENABLED, config.id()),
             WorkbayScreen.gui(on ? "links.disable" : "links.enable"),
@@ -711,27 +712,39 @@ class BaysPage extends WorkbayPage {
         screen.hit(px + 62, py + 3, 16, 12, () -> { },
             WorkbayScreen.gui("links.bay", config.bay() + 1), WorkbayScreen.gui("links.bay.tip"));
 
-        g.drawString(font, font.plainSubstrByWidth(config.name(), 50), px + 80, py + 5,
+        // The name, and where it comes from when the player has not given one: the bay an internal
+        // link points at, or the target block's own name. Four rows all called "Bay link" was the
+        // whole list unreadable at a glance.
+        String label = link.label()
+            .orElseGet(() -> link.targetBlock().map(BaysPage::displayName)
+                .orElse(WorkbayScreen.gui("links.unknown")).getString());
+        g.drawString(font, font.plainSubstrByWidth(label, 50), px + 80, py + 5,
             on ? Draw.TEXT : Draw.TEXT_FAINT, false);
 
+        // The right-hand column is the status word whenever there is one, for every kind of link.
+        // An internal row used to print "→ Bay 2" in amber and nothing else, so the one broken link
+        // the header was counting never said what was wrong with it anywhere on screen.
+        boolean broken = link.status().isProblem();
         if (config.internal()) {
             // Bay to bay: the target is a bay number, not a block, and — unlike every other link —
             // there is nothing in the world to re-anchor it to, so this is the one target a player
             // may actually change from the row.
-            String bayTarget = link.targetBay().map(b -> "→ Bay " + (b + 1))
-                .orElse(WorkbayScreen.gui("links.unknown").getString());
+            String bayTarget = broken ? statusName(link.status()).getString()
+                : link.targetBay().map(b -> "→ Bay " + (b + 1))
+                    .orElse(WorkbayScreen.gui("links.unknown").getString());
             g.drawString(font, font.plainSubstrByWidth(bayTarget, 48), px + 136, py + 5,
-                link.status().isProblem() ? statusColour(link.status()) : Draw.BLUE, false);
+                broken ? statusColour(link.status()) : Draw.BLUE, false);
             screen.hit(px + 136, py + 2, 48, ROW_PITCH - 4,
                 () -> screen.send(WorkbayAction.LINK_CYCLE_TARGET_BAY, config.id()),
-                WorkbayScreen.gui("links.internal.retarget"),
-                WorkbayScreen.gui("links.internal.retarget.tip"));
+                broken ? statusName(link.status()) : WorkbayScreen.gui("links.internal.retarget"),
+                broken ? statusHelp(link.status())
+                    : WorkbayScreen.gui("links.internal.retarget.tip"));
         } else {
-            Component target = link.status().isProblem()
+            Component target = broken
                 ? statusName(link.status())
                 : link.targetBlock().map(BaysPage::displayName).orElse(WorkbayScreen.gui("links.unknown"));
             g.drawString(font, font.plainSubstrByWidth(target.getString(), 48), px + 136, py + 5,
-                link.status().isProblem() ? statusColour(link.status()) : Draw.TEXT_DIM, false);
+                broken ? statusColour(link.status()) : Draw.TEXT_DIM, false);
         }
 
         faceButton(g, mouseX, mouseY, px + 188, py + 3, config);
@@ -907,7 +920,10 @@ class BaysPage extends WorkbayPage {
                 }
                 checkbox(g, px, py + 3, ticked);
                 resourceIcon(g, config.resource(), px + 18, py + 3, 0.75F);
-                g.drawString(font, font.plainSubstrByWidth(config.name(), 70), px + 34, py + 5,
+                String label = link.label()
+                    .orElseGet(() -> link.targetBlock().map(BaysPage::displayName)
+                        .orElse(WorkbayScreen.gui("links.unknown")).getString());
+                g.drawString(font, font.plainSubstrByWidth(label, 70), px + 34, py + 5,
                     ticked ? Draw.TEXT : Draw.TEXT_DIM, false);
                 // An internal link's target is a machine in the Backshop, which this client has
                 // never loaded, so asking for the block there gets air. Name the bay instead --
@@ -924,7 +940,7 @@ class BaysPage extends WorkbayPage {
                     if (!pickedLinks.remove(config.id())) {
                         pickedLinks.add(config.id());
                     }
-                }, WorkbayScreen.gui("links.add.link", config.name(), config.bay() + 1),
+                }, WorkbayScreen.gui("links.add.link", label, config.bay() + 1),
                     WorkbayScreen.gui("links.add.link.tip", selected + 1));
             } else {
                 int bay = bays.get(index);
@@ -972,7 +988,11 @@ class BaysPage extends WorkbayPage {
         g.fill(trackX + 1, thumbY, trackX + 4, thumbY + thumbH, Draw.TEXT_FAINT);
     }
 
-    /** The same tick the row's on/off control uses, so ticked means the same thing on both lists. */
+    /**
+     * The picker's tick, and the only tick in the mod: it means <b>selected for adding</b>. The
+     * list's rows carry a power symbol instead, because one control cannot mean "ticked to attach"
+     * on one list and "switched on" on the other.
+     */
     private void checkbox(GuiGraphics g, int px, int py, boolean ticked) {
         Draw.slot(g, px, py, 12, 12);
         if (ticked) {

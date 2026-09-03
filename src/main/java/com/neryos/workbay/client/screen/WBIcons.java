@@ -371,6 +371,26 @@ public final class WBIcons {
         "............",
     };
 
+    /**
+     * On/off. The universal power symbol, and deliberately <b>not</b> a tick: a tick in the picker
+     * means "selected for adding" and a tick on a row meant "enabled", which is one control saying
+     * two things. SPEC.md §7.
+     */
+    public static final String[] POWER = {
+        "............",
+        ".....##.....",
+        ".....##.....",
+        "..##.##.##..",
+        ".##..##..##.",
+        ".##......##.",
+        ".##......##.",
+        ".##......##.",
+        "..##....##..",
+        "...######...",
+        "............",
+        "............",
+    };
+
     public static final String[] BACK = {
         "............",
         "............",
