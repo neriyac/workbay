@@ -9,6 +9,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.material.PushReaction;
 import net.neoforged.testframework.DynamicTest;
 import net.neoforged.testframework.annotation.ForEachTest;
 import net.neoforged.testframework.annotation.TestHolder;
@@ -70,16 +71,9 @@ public class HostGateTests {
             // A Workbay inside a Workbay gets its own message, not the denylist's.
             expectDenied(helper, new ItemStack(WBBlocks.WORKBAY.get()), "recursion");
 
-            // A machine pistons cannot move is still hostable. SPEC.md §11 lists a piston-reaction
-            // heuristic; it is not implemented because every Mekanism machine would fail it, and a
-            // bay breaks and re-places a machine rather than pushing it. If this starts failing,
-            // that heuristic has come back and it takes Mekanism with it.
-            if (Blocks.FURNACE.defaultBlockState().getPistonPushReaction()
-                == net.minecraft.world.level.material.PushReaction.BLOCK) {
-                expectAllowed(helper, new ItemStack(Blocks.FURNACE));
-            }
-
-            // And the machines that should just work.
+            // The machines that should just work. The piston-reaction case is covered by
+            // aForeignMachineIsHostable, because no vanilla block entity sets PushReaction.BLOCK
+            // and a check against one that does not is a check that cannot fail.
             expectAllowed(helper, new ItemStack(Blocks.FURNACE));
             expectAllowed(helper, new ItemStack(Blocks.CHEST));
             expectAllowed(helper, new ItemStack(Blocks.BARREL));
@@ -103,6 +97,14 @@ public class HostGateTests {
                 if (block == Blocks.AIR) {
                     helper.fail(id + " is not registered; check the gametestRuntimeOnly Mekanism "
                         + "dependency in build.gradle");
+                    return;
+                }
+                // OPEN_ISSUES #20: SPEC.md §11 once denied PushReaction.BLOCK as `immovable`, which
+                // turned away every one of these. Asserting the reaction is present means the test
+                // cannot pass vacuously — the case being defended has to actually be here.
+                if (block.defaultBlockState().getPistonPushReaction() != PushReaction.BLOCK) {
+                    helper.fail(id + " is no longer PushReaction.BLOCK, so this test no longer "
+                        + "covers the heuristic OPEN_ISSUES #20 removed");
                     return;
                 }
                 expectAllowed(helper, new ItemStack(block));
