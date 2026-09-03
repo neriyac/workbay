@@ -173,7 +173,7 @@ class FlowPage extends WorkbayPage {
         return switch (status) {
             case RUNNING -> Draw.GREEN;
             case IDLE -> Draw.EDGE_LIGHT;
-            case DISABLED -> Draw.GREY;
+            case DISABLED, HELD_BY_REDSTONE -> Draw.GREY;
             case TARGET_MISSING, CONNECTOR_GONE -> Draw.RED;
             case TARGET_NOT_LOADED, TARGET_NO_PORT, MACHINE_NO_PORT, MACHINE_NO_FACE,
                  RESOURCE_NOT_CARRIED -> Draw.AMBER;

@@ -28,5 +28,9 @@ public enum WorkbayAction {
     /** {@code arg} is a whole {@link com.neryos.workbay.world.FaceConfig} in bits. */
     PASTE_BAY,
     /** {@code arg} is an item's registry id, or -1 to clear. {@code link} names the row. */
-    SET_FILTER
+    SET_FILTER,
+    /** {@code text} is the selected bay's new name; empty falls back to the machine's own. */
+    SET_BAY_NAME,
+    /** Cycles the selected bay's {@link com.neryos.workbay.world.RedstoneMode}. */
+    CYCLE_REDSTONE
 }

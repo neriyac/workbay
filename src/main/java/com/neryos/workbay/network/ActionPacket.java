@@ -22,7 +22,8 @@ import java.util.UUID;
  * <p>{@code arg} is a long because pasting a bay's face config is one action carrying 36 bits of
  * it. A second packet type for that one button would be the same guard written twice.
  */
-public record ActionPacket(int containerId, WorkbayAction action, long arg, Optional<UUID> link)
+public record ActionPacket(int containerId, WorkbayAction action, long arg,
+    Optional<UUID> link, Optional<String> text)
     implements CustomPacketPayload {
 
     public static final Type<ActionPacket> TYPE = new Type<>(Workbay.rl("action"));
@@ -37,6 +38,8 @@ public record ActionPacket(int containerId, WorkbayAction action, long arg, Opti
             ACTION, ActionPacket::action,
             ByteBufCodecs.VAR_LONG, ActionPacket::arg,
             UUIDUtil.STREAM_CODEC.apply(ByteBufCodecs::optional), ActionPacket::link,
+            // Capped, because it is drawn on a 130-pixel line and arrives from a client.
+            ByteBufCodecs.stringUtf8(64).apply(ByteBufCodecs::optional), ActionPacket::text,
             ActionPacket::new);
 
     @Override
@@ -47,7 +50,7 @@ public record ActionPacket(int containerId, WorkbayAction action, long arg, Opti
     public static void handle(ActionPacket packet, IPayloadContext context) {
         if (context.player().containerMenu instanceof WorkbayMenu menu
             && menu.containerId == packet.containerId()) {
-            menu.act(packet.action(), packet.arg(), packet.link());
+            menu.act(packet.action(), packet.arg(), packet.link(), packet.text());
         }
     }
 }

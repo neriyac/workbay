@@ -102,7 +102,23 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("button.eject.tip"), "Take this machine out of its bay, with "
             + "everything inside it.");
         add(WorkbayLang.guiKey("button.rename"), "Rename");
-        add(WorkbayLang.guiKey("button.redstone"), "Redstone");
+        add(WorkbayLang.guiKey("button.rename.tip"), "Give this bay a name of your own. Return "
+            + "commits it, Escape leaves it alone, and an empty name goes back to the machine's.");
+        add(WorkbayLang.guiKey("redstone.always"), "Redstone: always");
+        add(WorkbayLang.guiKey("redstone.always.tip"), "This bay's links run whatever the redstone "
+            + "at the Workbay is doing. Click to change.");
+        add(WorkbayLang.guiKey("redstone.with_signal"), "Redstone: with a signal");
+        add(WorkbayLang.guiKey("redstone.with_signal.tip"), "This bay's links run only while the "
+            + "Workbay has a redstone signal.");
+        add(WorkbayLang.guiKey("redstone.without_signal"), "Redstone: without a signal");
+        add(WorkbayLang.guiKey("redstone.without_signal.tip"), "This bay's links run only while the "
+            + "Workbay has no redstone signal.");
+        add(WorkbayLang.guiKey("redstone.pulse"), "Redstone: pulse");
+        add(WorkbayLang.guiKey("redstone.pulse.tip"), "One operation each time the signal turns on, "
+            + "so a clock moves exactly one load per tick of the clock.");
+        add(WorkbayLang.guiKey("status.held_by_redstone"), "Held");
+        add(WorkbayLang.guiKey("status.held_by_redstone.tip"), "Waiting on this bay's redstone "
+            + "mode. Nothing is wrong; this is what you asked it to do.");
         add(WorkbayLang.guiKey("button.copy"), "Copy this bay");
         add(WorkbayLang.guiKey("button.copy.tip"), "Copies this bay's face settings, so the next "
             + "seven do not have to be set by hand.");

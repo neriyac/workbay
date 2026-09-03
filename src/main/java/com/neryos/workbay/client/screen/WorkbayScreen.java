@@ -41,6 +41,16 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
     @Nullable
     private WorkbayPage current;
 
+    /**
+     * The rename field, when one is open. SPEC.md §4: an {@code EditBox} over the name line,
+     * committed by Return and abandoned by Escape.
+     */
+    @Nullable
+    private net.minecraft.client.gui.components.EditBox renaming;
+
+    @Nullable
+    private java.util.function.Consumer<String> onRenamed;
+
     public WorkbayScreen(WorkbayMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
     }
@@ -54,6 +64,9 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         };
         imageWidth = current.width();
         imageHeight = current.height();
+        // init() clears every widget, so a field left over from before a resize would be a ghost.
+        renaming = null;
+        onRenamed = null;
         super.init();
     }
 
@@ -78,6 +91,72 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
 
     public int top() {
         return topPos;
+    }
+
+    /** Opens the rename field over a line of the page. Called from the page while it draws. */
+    public void beginRename(int x, int y, int w, int h, String initial,
+        java.util.function.Consumer<String> committed) {
+        if (renaming != null) {
+            return;
+        }
+        renaming = new net.minecraft.client.gui.components.EditBox(font, x, y, w, h,
+            Component.empty());
+        renaming.setMaxLength(48);
+        renaming.setValue(initial);
+        renaming.moveCursorToEnd(false);
+        renaming.setFocused(true);
+        setFocused(renaming);
+        onRenamed = committed;
+        addRenderableWidget(renaming);
+    }
+
+    public boolean renaming() {
+        return renaming != null;
+    }
+
+    private void endRename(boolean commit) {
+        if (renaming == null) {
+            return;
+        }
+        String value = renaming.getValue();
+        removeWidget(renaming);
+        renaming = null;
+        setFocused(null);
+        var committed = onRenamed;
+        onRenamed = null;
+        if (commit && committed != null) {
+            committed.accept(value);
+        }
+    }
+
+    /**
+     * While the rename field is open it takes the keyboard whole. Without this, {@code e} closes
+     * the screen mid-word and Escape throws the player out instead of abandoning the edit — both
+     * are {@link AbstractContainerScreen}'s defaults and both are wrong here.
+     */
+    @Override
+    public boolean keyPressed(int key, int scan, int modifiers) {
+        if (renaming != null) {
+            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER
+                || key == org.lwjgl.glfw.GLFW.GLFW_KEY_KP_ENTER) {
+                endRename(true);
+                return true;
+            }
+            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE) {
+                endRename(false);
+                return true;
+            }
+            return renaming.keyPressed(key, scan, modifiers) || renaming.canConsumeInput();
+        }
+        return super.keyPressed(key, scan, modifiers);
+    }
+
+    @Override
+    public boolean charTyped(char typed, int modifiers) {
+        if (renaming != null) {
+            return renaming.charTyped(typed, modifiers);
+        }
+        return super.charTyped(typed, modifiers);
     }
 
     public net.minecraft.client.gui.Font font() {
@@ -177,6 +256,10 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         if (current != null && current.mousePressed(mouseX, mouseY, button)) {
             return true;
         }
+        if (renaming != null && !renaming.isMouseOver(mouseX, mouseY)) {
+            endRename(true);
+            return true;
+        }
         if (button == 0) {
             // Reverse order, so a control drawn on top of another wins the click the way it looks.
             for (int i = hits.size() - 1; i >= 0; i--) {
@@ -224,24 +307,28 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
     // --------------------------------------------------------------- actions
 
     public void send(WorkbayAction action) {
-        send(action, 0, Optional.empty());
+        send(action, 0, Optional.empty(), Optional.empty());
     }
 
     public void send(WorkbayAction action, long arg) {
-        send(action, arg, Optional.empty());
+        send(action, arg, Optional.empty(), Optional.empty());
     }
 
     public void send(WorkbayAction action, UUID link) {
-        send(action, 0, Optional.of(link));
+        send(action, 0, Optional.of(link), Optional.empty());
     }
 
     /** An action that needs both a number and a row: the filter slot is the only one so far. */
     public void send(WorkbayAction action, long arg, UUID link) {
-        send(action, arg, Optional.of(link));
+        send(action, arg, Optional.of(link), Optional.empty());
     }
 
-    private void send(WorkbayAction action, long arg, Optional<UUID> link) {
-        PacketDistributor.sendToServer(new ActionPacket(menu.containerId, action, arg, link));
+    public void sendText(WorkbayAction action, String text) {
+        send(action, 0, Optional.empty(), Optional.of(text));
+    }
+
+    private void send(WorkbayAction action, long arg, Optional<UUID> link, Optional<String> text) {
+        PacketDistributor.sendToServer(new ActionPacket(menu.containerId, action, arg, link, text));
         // Applied here as well so the selection tracks the click rather than the round trip.
         if (action == WorkbayAction.SELECT_BAY) {
             menu.setSelectedBayClientSide((int) arg);

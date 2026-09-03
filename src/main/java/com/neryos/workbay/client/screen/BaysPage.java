@@ -211,8 +211,9 @@ class BaysPage extends WorkbayPage {
     }
 
     private Component[] bayTooltip(WorkbaySnapshot.Bay bay) {
-        Component name = bay.hosted().map(BaysPage::displayName)
-            .orElse(WorkbayScreen.gui("bay.empty"));
+        Component name = bay.name().isEmpty()
+            ? bay.hosted().map(BaysPage::displayName).orElse(WorkbayScreen.gui("bay.empty"))
+            : Component.literal(bay.name());
         return switch (bay.state()) {
             case LOCKED -> new Component[] {
                 WorkbayScreen.gui("bay.locked").copy().withStyle(ChatFormatting.GRAY),
@@ -268,10 +269,10 @@ class BaysPage extends WorkbayPage {
         // whatever another mod called it, and an unclamped one runs across the cube and off the
         // panel entirely.
         int room = FACES_X - 4 - 98;
-        g.drawString(font, font.plainSubstrByWidth(empty
-                ? WorkbayScreen.gui("bay.n", snap.selectedBay() + 1).getString()
-                : displayName(bay.hosted().orElseThrow()).getString(), room),
-            x(98), y(56), Draw.TEXT, false);
+        String shown = nameOf(bay, snap.selectedBay());
+        if (!screen.renaming()) {
+            g.drawString(font, font.plainSubstrByWidth(shown, room), x(98), y(56), Draw.TEXT, false);
+        }
 
         if (bay.energyCapacity() > 0) {
             Draw.bar(g, x(98), y(68), 84, 9, bay.energy(), bay.energyCapacity(), Draw.AMBER);
@@ -290,6 +291,11 @@ class BaysPage extends WorkbayPage {
 
         g.drawString(font, font.plainSubstrByWidth(statusLine(bay).getString(), room),
             x(98), y(82), statusColour(bay.state()), false);
+        if (bay.redstone() != com.neryos.workbay.world.RedstoneMode.ALWAYS) {
+            String mode = WorkbayScreen.gui(
+                "redstone." + bay.redstone().getSerializedName()).getString();
+            g.drawString(font, mode, x(FACES_X - 4 - font.width(mode)), y(82), Draw.TEXT_DIM, false);
+        }
 
         // The button row at y=98, 20x20 on a 24px pitch. Bay View is not here: SPEC.md §4 says a
         // control whose screen is not built is hidden, not drawn faint, because faint is honest for
@@ -298,10 +304,15 @@ class BaysPage extends WorkbayPage {
         actionButton(g, mouseX, mouseY, x(50), WBIcons.EJECT, canEject,
             () -> screen.send(WorkbayAction.EJECT),
             WorkbayScreen.gui("button.eject"), WorkbayScreen.gui("button.eject.tip"));
-        unbuiltButton(g, x(74), y(98), 20, WBIcons.RENAME,
-            WorkbayScreen.gui("button.rename"), WorkbayScreen.gui("unbuilt"));
-        unbuiltButton(g, x(98), y(98), 20, WBIcons.REDSTONE,
-            WorkbayScreen.gui("button.redstone"), WorkbayScreen.gui("unbuilt"));
+        boolean unlocked = bay.state() != WorkbaySnapshot.State.LOCKED;
+        actionButton(g, mouseX, mouseY, x(74), WBIcons.RENAME, unlocked,
+            () -> screen.beginRename(x(98), y(53), room, 14, bay.name(),
+                typed -> screen.sendText(WorkbayAction.SET_BAY_NAME, typed)),
+            WorkbayScreen.gui("button.rename"), WorkbayScreen.gui("button.rename.tip"));
+        actionButton(g, mouseX, mouseY, x(98), WBIcons.REDSTONE, unlocked,
+            () -> screen.send(WorkbayAction.CYCLE_REDSTONE),
+            WorkbayScreen.gui("redstone." + bay.redstone().getSerializedName()),
+            WorkbayScreen.gui("redstone." + bay.redstone().getSerializedName() + ".tip"));
 
         // Copy and paste. Eight bays running the same machine is the first complaint this mod will
         // get, and Mekanism answers it with a Configuration Card (SPEC.md §7).
@@ -664,7 +675,7 @@ class BaysPage extends WorkbayPage {
         return switch (status) {
             case RUNNING -> Draw.GREEN;
             case IDLE -> Draw.BLUE;
-            case DISABLED -> Draw.GREY;
+            case DISABLED, HELD_BY_REDSTONE -> Draw.GREY;
             case TARGET_MISSING, CONNECTOR_GONE -> Draw.RED;
             // Amber is "you can fix this from here". The face config and an unreachable machine
             // both are; a target that has gone is not.
@@ -683,6 +694,15 @@ class BaysPage extends WorkbayPage {
 
     private static ItemStack iconFor(Optional<ResourceLocation> id) {
         return id.map(BuiltInRegistries.ITEM::get).map(ItemStack::new).orElse(ItemStack.EMPTY);
+    }
+
+    /** A bay shows the name the player gave it, or the machine's, or just its number. */
+    private static String nameOf(WorkbaySnapshot.Bay bay, int selected) {
+        if (!bay.name().isEmpty()) {
+            return bay.name();
+        }
+        return bay.hosted().map(BaysPage::displayName).map(Component::getString)
+            .orElseGet(() -> WorkbayScreen.gui("bay.n", selected + 1).getString());
     }
 
     private static Component displayName(ResourceLocation id) {

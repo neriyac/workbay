@@ -148,6 +148,11 @@ public class WorkbayMenu extends AbstractContainerMenu {
      * or a player whose menu has moved on must not be able to eject somebody's machine.
      */
     public void act(WorkbayAction action, long arg, Optional<UUID> linkId) {
+        act(action, arg, linkId, Optional.empty());
+    }
+
+    public void act(WorkbayAction action, long arg, Optional<UUID> linkId,
+        Optional<String> text) {
         if (workbay == null || !(player instanceof ServerPlayer serverPlayer)
             || player.isSpectator() || !stillValid(player)) {
             return;
@@ -176,6 +181,10 @@ public class WorkbayMenu extends AbstractContainerMenu {
             case LINK_TOGGLE_ENABLED -> editLink(linkId, link -> link.withEnabled(!link.enabled()));
             case LINK_REMOVE -> linkId.ifPresent(workbay::removeBus);
             case SET_FILTER -> editLink(linkId, link -> link.withFilter(filterItem(arg)));
+            case SET_BAY_NAME -> editBay(serverPlayer, record,
+                bay -> bay.withName(text.orElse("").strip()));
+            case CYCLE_REDSTONE -> editBay(serverPlayer, record,
+                bay -> bay.withRedstone(bay.redstone().next()));
         }
         refreshNow();
     }
@@ -300,9 +309,15 @@ public class WorkbayMenu extends AbstractContainerMenu {
     }
 
     private void setFaces(ServerPlayer serverPlayer, WorkbayRecord record, FaceConfig faces) {
+        editBay(serverPlayer, record, bay -> bay.withFaces(faces));
+    }
+
+    /** Every edit to one bay goes through here, so none of them can forget to drop its caches. */
+    private void editBay(ServerPlayer serverPlayer, WorkbayRecord record,
+        java.util.function.UnaryOperator<WorkbayRecord.Bay> edit) {
         RoomRegistry.get(serverPlayer.server)
-            .put(record.withBay(record.bay(selectedBay).withFaces(faces)));
-        // The link's cached endpoint was bound to a face that may no longer be allowed.
+            .put(record.withBay(edit.apply(record.bay(selectedBay))));
+        // The link's cached endpoint may have been bound to a face that is no longer allowed.
         workbay.forgetBay(selectedBay);
     }
 
@@ -385,11 +400,11 @@ public class WorkbayMenu extends AbstractContainerMenu {
         WorkbayRecord.Bay bay = record.bay(index);
         if (index >= record.bayCapacity()) {
             return new WorkbaySnapshot.Bay(index, Optional.empty(), 0, 0,
-                WorkbaySnapshot.State.LOCKED, bay.faces());
+                WorkbaySnapshot.State.LOCKED, bay.faces(), bay.name(), bay.redstone());
         }
         if (bay.hosted().isEmpty()) {
             return new WorkbaySnapshot.Bay(index, Optional.empty(), 0, 0,
-                WorkbaySnapshot.State.EMPTY, bay.faces());
+                WorkbaySnapshot.State.EMPTY, bay.faces(), bay.name(), bay.redstone());
         }
         int energy = 0;
         int capacity = 0;
@@ -418,7 +433,8 @@ public class WorkbayMenu extends AbstractContainerMenu {
                 : runningAnyLink(workbay, index) ? WorkbaySnapshot.State.RUNNING
                 : WorkbaySnapshot.State.IDLE;
         }
-        return new WorkbaySnapshot.Bay(index, bay.hosted(), energy, capacity, state, bay.faces());
+        return new WorkbaySnapshot.Bay(index, bay.hosted(), energy, capacity, state, bay.faces(),
+            bay.name(), bay.redstone());
     }
 
     private static boolean runningAnyLink(WorkbayBlockEntity workbay, int bay) {

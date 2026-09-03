@@ -161,6 +161,9 @@ public class WorkbayBlockEntity extends BlockEntity {
         // Before the links, and whether or not there are any: a hosted machine has to tick even
         // with nothing pointed at it.
         workbay.mirror(server);
+        // Every tick, not only on a wheel step: a rising edge between two steps still has to be
+        // seen, or a fast clock on PULSE would be silently ignored.
+        workbay.runner.power(server.hasNeighborSignal(pos));
         if (workbay.buses.isEmpty()) {
             return;
         }

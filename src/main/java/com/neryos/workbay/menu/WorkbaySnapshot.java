@@ -63,14 +63,16 @@ public record WorkbaySnapshot(
 
     public Bay bay(int index) {
         return bays.stream().filter(b -> b.index() == index).findFirst()
-            .orElseGet(() -> new Bay(index, Optional.empty(), 0, 0, State.EMPTY, FaceConfig.NONE));
+            .orElseGet(() -> new Bay(index, Optional.empty(), 0, 0, State.EMPTY, FaceConfig.NONE,
+                "", com.neryos.workbay.world.RedstoneMode.ALWAYS));
     }
 
     /** What a bay's status pip says, and what colour the machine block's status line draws. */
     public enum State { EMPTY, RUNNING, IDLE, INERT, LOCKED }
 
     public record Bay(int index, Optional<ResourceLocation> hosted, int energy, int energyCapacity,
-        State state, FaceConfig faces) {
+        State state, FaceConfig faces, String name,
+        com.neryos.workbay.world.RedstoneMode redstone) {
 
         public static final Codec<Bay> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.INT.fieldOf("Index").forGetter(Bay::index),
@@ -78,7 +80,10 @@ public record WorkbaySnapshot(
             Codec.INT.fieldOf("Energy").forGetter(Bay::energy),
             Codec.INT.fieldOf("EnergyCapacity").forGetter(Bay::energyCapacity),
             WBCodecs.ofEnum(State.class).fieldOf("State").forGetter(Bay::state),
-            FaceConfig.CODEC.fieldOf("Faces").forGetter(Bay::faces)
+            FaceConfig.CODEC.fieldOf("Faces").forGetter(Bay::faces),
+            Codec.STRING.fieldOf("Name").forGetter(Bay::name),
+            WBCodecs.ofEnum(com.neryos.workbay.world.RedstoneMode.class).fieldOf("Redstone")
+                .forGetter(Bay::redstone)
         ).apply(i, Bay::new));
     }
 

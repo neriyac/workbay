@@ -2,6 +2,7 @@ package com.neryos.workbay.bus;
 
 import com.neryos.workbay.init.WBBlocks;
 import com.neryos.workbay.world.BayGeometry;
+import com.neryos.workbay.world.RedstoneMode;
 import com.neryos.workbay.world.WorkbayDimensions;
 import com.neryos.workbay.world.WorkbayRecord;
 import net.minecraft.core.BlockPos;
@@ -45,6 +46,10 @@ public class BusRunner {
 
     private int delay = WHEEL;
 
+    /** SPEC.md §4's redstone gate. Edge detection lives here so the block entity stays a handle. */
+    private boolean powered;
+    private boolean pulseArmed;
+
     public BusRunner(BooleanSupplier alive) {
         this.alive = alive;
     }
@@ -53,6 +58,18 @@ public class BusRunner {
      * @param offset derived from the Workbay's BlockPos so that Workbays stagger instead of every
      *               one in a base firing on the same tick
      */
+    /**
+     * The redstone signal at the Workbay, and the rising edge {@link RedstoneMode#PULSE} spends.
+     * Called every tick whether or not any bus runs, or an edge that lands between two wheel steps
+     * is never seen.
+     */
+    public void power(boolean nowPowered) {
+        if (nowPowered && !powered) {
+            pulseArmed = true;
+        }
+        powered = nowPowered;
+    }
+
     public void tick(ServerLevel level, WorkbayRecord record, Iterable<BusConfig> buses, int offset) {
         if (--delay < 0) {
             delay = WHEEL - 1;
@@ -62,6 +79,7 @@ public class BusRunner {
             return;
         }
         int step = phase / STEP_TICKS;
+        boolean spentPulse = false;
 
         ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
         if (backshop == null) {
@@ -75,7 +93,17 @@ public class BusRunner {
             if (step % Math.max(1, bus.speed() / STEP_TICKS) != 0) {
                 continue;
             }
+            RedstoneMode gate = record.bay(bus.bay()).redstone();
+            if (!gate.allows(powered, pulseArmed)) {
+                statuses.put(bus.id(), BusStatus.HELD_BY_REDSTONE);
+                continue;
+            }
+            spentPulse |= gate == RedstoneMode.PULSE;
             statuses.put(bus.id(), run(level, backshop, record, bus));
+        }
+        // One operation per rising edge, spent only once something on PULSE actually got its turn.
+        if (spentPulse) {
+            pulseArmed = false;
         }
     }
 
@@ -255,7 +283,10 @@ public class BusRunner {
      * SPEC.md §4 requires the three failing ones to be visually distinct on the LINKS row.
      */
     public enum BusStatus {
-        RUNNING, IDLE, DISABLED, CONNECTOR_GONE, TARGET_MISSING, TARGET_NOT_LOADED, TARGET_NO_PORT,
+        RUNNING, IDLE, DISABLED,
+        /** Waiting on the bay's redstone mode. The player's own instruction, not a fault. */
+        HELD_BY_REDSTONE,
+        CONNECTOR_GONE, TARGET_MISSING, TARGET_NOT_LOADED, TARGET_NO_PORT,
         /** The hosted machine answers on none of the faces this link may use. */
         MACHINE_NO_PORT,
         /** Set to a resource this build does not move. Fluids, today. */
@@ -265,7 +296,7 @@ public class BusRunner {
 
         /** True for a status the player has to do something about. Drives the problem count. */
         public boolean isProblem() {
-            return this != RUNNING && this != IDLE && this != DISABLED;
+            return this != RUNNING && this != IDLE && this != DISABLED && this != HELD_BY_REDSTONE;
         }
     }
 }

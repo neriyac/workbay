@@ -5,6 +5,7 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.StringRepresentable;
 import net.minecraft.world.level.ChunkPos;
 
 import java.util.List;
@@ -84,23 +85,38 @@ public record WorkbayRecord(
      * <em>not</em> cleared when that block's mod disappears — that is the {@code was:} record
      * SPEC.md §14 requires, and what {@code /workbay orphans} reports.
      */
-    public record Bay(int index, Optional<ResourceLocation> hosted, FaceConfig faces) {
+    public record Bay(int index, Optional<ResourceLocation> hosted, FaceConfig faces,
+        String name, RedstoneMode redstone) {
+
+        // Both new fields are optional in the codec, so a Workbay written before they existed
+        // reads back as an unnamed bay that always runs -- which is what it was.
         public static final Codec<Bay> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.INT.fieldOf("Index").forGetter(Bay::index),
             ResourceLocation.CODEC.optionalFieldOf("Hosted").forGetter(Bay::hosted),
-            FaceConfig.CODEC.optionalFieldOf("Faces", FaceConfig.NONE).forGetter(Bay::faces)
+            FaceConfig.CODEC.optionalFieldOf("Faces", FaceConfig.NONE).forGetter(Bay::faces),
+            Codec.STRING.optionalFieldOf("Name", "").forGetter(Bay::name),
+            StringRepresentable.fromEnum(RedstoneMode::values)
+                .optionalFieldOf("Redstone", RedstoneMode.ALWAYS).forGetter(Bay::redstone)
         ).apply(i, Bay::new));
 
         public static Bay empty(int index) {
-            return new Bay(index, Optional.empty(), FaceConfig.NONE);
+            return new Bay(index, Optional.empty(), FaceConfig.NONE, "", RedstoneMode.ALWAYS);
         }
 
         public Bay withHosted(Optional<ResourceLocation> nowHosted) {
-            return new Bay(index, nowHosted, faces);
+            return new Bay(index, nowHosted, faces, name, redstone);
         }
 
         public Bay withFaces(FaceConfig nowFaces) {
-            return new Bay(index, hosted, nowFaces);
+            return new Bay(index, hosted, nowFaces, name, redstone);
+        }
+
+        public Bay withName(String nowName) {
+            return new Bay(index, hosted, faces, nowName, redstone);
+        }
+
+        public Bay withRedstone(RedstoneMode nowRedstone) {
+            return new Bay(index, hosted, faces, name, nowRedstone);
         }
     }
 

@@ -9,6 +9,7 @@ import com.neryos.workbay.init.WBBlocks;
 import com.neryos.workbay.world.BayGeometry;
 import com.neryos.workbay.world.BayHosting;
 import com.neryos.workbay.world.FaceConfig;
+import com.neryos.workbay.world.RedstoneMode;
 import com.neryos.workbay.world.RoomRegistry;
 import com.neryos.workbay.world.WorkbayDimensions;
 import com.neryos.workbay.world.WorkbayRecord;
@@ -508,6 +509,128 @@ public class BusTests {
                             + (backshop.isLoaded(machinePos) ? "loaded" : "NOT loaded"));
                     }
                 })
+                .thenExecute(() -> tearDown(helper, workbayPos))
+                .thenSucceed();
+        });
+    }
+
+    /**
+     * The four standard redstone modes, SPEC.md §4. Asserted as a pair per mode — held while the
+     * signal is wrong, moving when it is right — because a gate that never opens and a gate that
+     * never closes both pass a one-sided test.
+     */
+    @GameTest(timeoutTicks = 1200)
+    @TestHolder(description = "A bay set to run with a signal waits for one, then runs.")
+    public static void withASignalHoldsUntilThereIsOne(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos targetPos = helper.absolutePos(new BlockPos(4, 1, 4));
+            BlockPos leverPos = workbayPos.above();
+
+            level.setBlock(targetPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.CHEST));
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+            if (backshop.getBlockEntity(machinePos) instanceof Container hosted) {
+                hosted.setItem(0, new ItemStack(Items.IRON_INGOT, 16));
+            }
+
+            RoomRegistry.get(level.getServer()).put(record.withBay(
+                record.bay(0).withRedstone(RedstoneMode.WITH_SIGNAL)));
+
+            BusConfig link = connect(helper, workbay, targetPos.above(), Direction.DOWN, player);
+            workbay.addBus(link.withRate(8).withSpeed(10));
+
+            helper.startSequence()
+                .thenIdle(60)
+                .thenExecute(() -> {
+                    // Half of the test: with no signal it must not have moved anything at all.
+                    helper.assertValueEqual(countIn(level, targetPos, Items.IRON_INGOT), 0,
+                        "items moved by a bay waiting for a signal it has not got");
+                    helper.assertValueEqual(workbay.busStatus(link.id()),
+                        BusRunner.BusStatus.HELD_BY_REDSTONE, "the held link's status");
+                })
+                // A redstone block on top is the shortest way to a real neighbour signal.
+                .thenExecute(() -> level.setBlock(leverPos,
+                    Blocks.REDSTONE_BLOCK.defaultBlockState(), Block.UPDATE_ALL))
+                .thenWaitUntil(() -> {
+                    if (countIn(level, targetPos, Items.IRON_INGOT) < 16) {
+                        throw new GameTestAssertException("powered, the bus has moved "
+                            + countIn(level, targetPos, Items.IRON_INGOT) + " of 16; status is "
+                            + workbay.busStatus(link.id()));
+                    }
+                })
+                .thenExecute(() -> level.setBlock(leverPos, Blocks.AIR.defaultBlockState(),
+                    Block.UPDATE_ALL))
+                .thenExecute(() -> tearDown(helper, workbayPos))
+                .thenSucceed();
+        });
+    }
+
+    /**
+     * Pulse is the one mode with state, so it is the one that can leak: an edge that is never spent
+     * turns pulse into always, and an edge spent twice turns one click into two loads.
+     */
+    @GameTest(timeoutTicks = 1200)
+    @TestHolder(description = "Pulse moves one load per rising edge and then stops again.")
+    public static void pulseMovesOncePerRisingEdge(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos targetPos = helper.absolutePos(new BlockPos(4, 1, 4));
+            BlockPos leverPos = workbayPos.above();
+
+            level.setBlock(targetPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.CHEST));
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+            if (backshop.getBlockEntity(machinePos) instanceof Container hosted) {
+                hosted.setItem(0, new ItemStack(Items.IRON_INGOT, 64));
+            }
+
+            RoomRegistry.get(level.getServer()).put(record.withBay(
+                record.bay(0).withRedstone(RedstoneMode.PULSE)));
+
+            // Rate 4, so one operation is unmistakably four items and not "some".
+            BusConfig link = connect(helper, workbay, targetPos.above(), Direction.DOWN, player);
+            workbay.addBus(link.withRate(4).withSpeed(10));
+
+            helper.startSequence()
+                .thenIdle(60)
+                .thenExecute(() -> helper.assertValueEqual(
+                    countIn(level, targetPos, Items.IRON_INGOT), 0,
+                    "items moved before any edge"))
+                .thenExecute(() -> level.setBlock(leverPos,
+                    Blocks.REDSTONE_BLOCK.defaultBlockState(), Block.UPDATE_ALL))
+                .thenIdle(60)
+                .thenExecute(() -> helper.assertValueEqual(
+                    countIn(level, targetPos, Items.IRON_INGOT), 4,
+                    "items moved by one rising edge at a rate of 4"))
+                // Still held high. A level, not an edge, so nothing more may move.
+                .thenIdle(80)
+                .thenExecute(() -> helper.assertValueEqual(
+                    countIn(level, targetPos, Items.IRON_INGOT), 4,
+                    "items moved while the signal simply stayed on"))
+                .thenExecute(() -> level.setBlock(leverPos, Blocks.AIR.defaultBlockState(),
+                    Block.UPDATE_ALL))
+                .thenIdle(20)
+                .thenExecute(() -> level.setBlock(leverPos,
+                    Blocks.REDSTONE_BLOCK.defaultBlockState(), Block.UPDATE_ALL))
+                .thenIdle(60)
+                .thenExecute(() -> helper.assertValueEqual(
+                    countIn(level, targetPos, Items.IRON_INGOT), 8,
+                    "items moved after a second rising edge"))
+                .thenExecute(() -> level.setBlock(leverPos, Blocks.AIR.defaultBlockState(),
+                    Block.UPDATE_ALL))
                 .thenExecute(() -> tearDown(helper, workbayPos))
                 .thenSucceed();
         });
