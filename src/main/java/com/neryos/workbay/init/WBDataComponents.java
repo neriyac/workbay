@@ -1,6 +1,7 @@
 package com.neryos.workbay.init;
 
 import com.neryos.workbay.Workbay;
+import com.neryos.workbay.content.connector.ConnectorPairing;
 import com.neryos.workbay.content.workbay.WorkbayBinding;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.registries.Registries;
@@ -17,6 +18,13 @@ public class WBDataComponents {
         COMPONENTS.register("binding", () -> DataComponentType.<WorkbayBinding>builder()
             .persistent(WorkbayBinding.CODEC)
             .networkSynchronized(WorkbayBinding.STREAM_CODEC)
+            .build());
+
+    /** Which Workbay a Connector belongs to, carried before it is placed. {@link ConnectorPairing}. */
+    public static final DeferredHolder<DataComponentType<?>, DataComponentType<ConnectorPairing>> PAIRING =
+        COMPONENTS.register("pairing", () -> DataComponentType.<ConnectorPairing>builder()
+            .persistent(ConnectorPairing.CODEC)
+            .networkSynchronized(ConnectorPairing.STREAM_CODEC)
             .build());
 
     public static void register(IEventBus bus) {

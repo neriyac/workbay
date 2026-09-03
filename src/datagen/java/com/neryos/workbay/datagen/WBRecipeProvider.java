@@ -59,5 +59,35 @@ public class WBRecipeProvider extends RecipeProvider {
             .define('E', Items.ENDER_EYE)
             .unlockedBy("has_housing", has(WBItems.HOUSING.get()))
             .save(output);
+
+        // The Connector is deliberately cheap: a link the player will not make because it costs too
+        // much is a link they wire with pipes instead, and then the mod has not replaced anything.
+        ShapedRecipeBuilder.shaped(RecipeCategory.MISC, WBBlocks.CONNECTOR.get(), 4)
+            .pattern("SRS")
+            .define('S', WBItems.SHOPSTEEL.get())
+            .define('R', Items.REDSTONE)
+            .unlockedBy("has_shopsteel", has(WBItems.SHOPSTEEL.get()))
+            .save(output);
+
+        // The upgrade ladder. Each is Housing + Shopsteel + Levy, Levy rising along the line
+        // (SPEC.md §3). Levy only comes out of an Assay, which is not built yet, so these are
+        // shipped and uncraftable rather than quietly cheapened to something reachable.
+        upgrade(output, WBItems.EXPANSION_PLATE.get(), 2, Items.IRON_INGOT);
+        upgrade(output, WBItems.RESONATOR.get(), 4, Items.ENDER_EYE);
+        upgrade(output, WBItems.MULTICHANNEL.get(), 4, Items.AMETHYST_SHARD);
+    }
+
+    private void upgrade(RecipeOutput output, net.minecraft.world.item.Item result, int levy,
+        net.minecraft.world.item.Item core) {
+        ShapedRecipeBuilder.shaped(RecipeCategory.MISC, result)
+            .pattern("LSL")
+            .pattern("SCS")
+            .pattern("LHL")
+            .define('L', WBItems.LEVY.get())
+            .define('S', WBItems.SHOPSTEEL.get())
+            .define('H', WBItems.HOUSING.get())
+            .define('C', core)
+            .unlockedBy("has_levy", has(WBItems.LEVY.get()))
+            .save(output);
     }
 }

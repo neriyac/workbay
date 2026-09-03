@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "C": {
+      "item": "minecraft:iron_ingot"
+    },
+    "H": {
+      "item": "workbay:housing"
+    },
+    "L": {
+      "item": "workbay:levy"
+    },
+    "S": {
+      "item": "workbay:shopsteel"
+    }
+  },
+  "pattern": [
+    "LSL",
+    "SCS",
+    "LHL"
+  ],
+  "result": {
+    "count": 1,
+    "id": "workbay:expansion_plate"
+  }
+}

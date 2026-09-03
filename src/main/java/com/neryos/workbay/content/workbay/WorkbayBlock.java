@@ -2,13 +2,16 @@ package com.neryos.workbay.content.workbay;
 
 import com.mojang.serialization.MapCodec;
 import com.neryos.workbay.WorkbayLang;
+import com.neryos.workbay.content.connector.ConnectorPairing;
 import com.neryos.workbay.init.WBBlockEntities;
+import com.neryos.workbay.init.WBBlocks;
 import com.neryos.workbay.init.WBDataComponents;
 import com.neryos.workbay.world.RoomRegistry;
 import com.neryos.workbay.world.WorkbayRecord;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
@@ -125,6 +128,48 @@ public class WorkbayBlock extends BaseEntityBlock {
 
     private static net.minecraft.network.chat.Component Component_aqua(String text) {
         return net.minecraft.network.chat.Component.literal(text).withStyle(ChatFormatting.AQUA);
+    }
+
+    /**
+     * Right-clicking a Workbay with a Connector pairs that Connector to it. Pairing before placing
+     * is what lets {@code setPlacedBy} create the link in one step — a Connector that had to be
+     * paired after placement would sit in the world doing nothing, which reads as a broken mod.
+     *
+     * <p>The bay is the Workbay's first free one, so the common case — one machine, one Connector —
+     * needs no screen at all. Screen 1's `+ Pair` button pairs to the selected bay instead.
+     */
+    @Override
+    protected net.minecraft.world.ItemInteractionResult useItemOn(ItemStack stack, BlockState state,
+        Level level, BlockPos pos, Player player, net.minecraft.world.InteractionHand hand,
+        net.minecraft.world.phys.BlockHitResult hit) {
+        if (!stack.is(WBBlocks.CONNECTOR.get().asItem())) {
+            return net.minecraft.world.ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+        }
+        if (level.isClientSide) {
+            return net.minecraft.world.ItemInteractionResult.SUCCESS;
+        }
+        if (!(level.getBlockEntity(pos) instanceof WorkbayBlockEntity workbay)) {
+            return net.minecraft.world.ItemInteractionResult.FAIL;
+        }
+        WorkbayRecord record = workbay.record().orElse(null);
+        if (record == null) {
+            return net.minecraft.world.ItemInteractionResult.FAIL;
+        }
+        pair(stack, record, GlobalPos.of(level.dimension(), pos), firstOccupiedBay(record));
+        player.displayClientMessage(WorkbayLang.message("connector_paired",
+            Component_aqua(record.code())), true);
+        return net.minecraft.world.ItemInteractionResult.CONSUME;
+    }
+
+    /** Stamps a Connector item with the Workbay and bay its link will land on. */
+    public static void pair(ItemStack stack, WorkbayRecord record, GlobalPos workbayPos, int bay) {
+        stack.set(WBDataComponents.PAIRING.get(),
+            new ConnectorPairing(record.id(), workbayPos, record.code(), bay));
+    }
+
+    private static int firstOccupiedBay(WorkbayRecord record) {
+        return record.bays().stream().filter(bay -> bay.hosted().isPresent())
+            .mapToInt(WorkbayRecord.Bay::index).min().orElse(0);
     }
 
     /**

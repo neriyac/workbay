@@ -1,5 +1,6 @@
 package com.neryos.workbay.bus;
 
+import com.neryos.workbay.init.WBBlocks;
 import com.neryos.workbay.world.BayGeometry;
 import com.neryos.workbay.world.WorkbayDimensions;
 import com.neryos.workbay.world.WorkbayRecord;
@@ -63,8 +64,8 @@ public class BusRunner {
             return;
         }
         for (BusConfig bus : buses) {
-            if (!bus.enabled() || !bus.linked()) {
-                statuses.put(bus.id(), BusStatus.UNLINKED);
+            if (!bus.enabled()) {
+                statuses.put(bus.id(), BusStatus.DISABLED);
                 continue;
             }
             if (step % Math.max(1, bus.speed() / STEP_TICKS) != 0) {
@@ -74,8 +75,26 @@ public class BusRunner {
         }
     }
 
+    /**
+     * Links whose Connector has gone, discovered while ticking. Reported rather than acted on here,
+     * because a runner must not mutate the list it is iterating; the block entity sweeps them.
+     */
+    public java.util.Set<UUID> orphaned() {
+        return statuses.entrySet().stream()
+            .filter(e -> e.getValue() == BusStatus.CONNECTOR_GONE)
+            .map(Map.Entry::getKey)
+            .collect(java.util.stream.Collectors.toSet());
+    }
+
     public BusStatus status(UUID busId) {
         return statuses.getOrDefault(busId, BusStatus.IDLE);
+    }
+
+    /** Forgets one link's caches and status, so a removed link stops holding a level reference. */
+    public void forget(UUID busId) {
+        targetItems.remove(busId);
+        targetEnergy.remove(busId);
+        statuses.remove(busId);
     }
 
     /** Drops every cache. Called when the Workbay is removed, so nothing keeps a level alive. */
@@ -87,10 +106,18 @@ public class BusRunner {
     }
 
     private BusStatus run(ServerLevel level, ServerLevel backshop, WorkbayRecord record, BusConfig bus) {
-        GlobalPos target = bus.target().orElseThrow();
+        GlobalPos target = bus.target();
         ServerLevel targetLevel = level.getServer().getLevel(target.dimension());
         if (targetLevel == null) {
             return BusStatus.TARGET_MISSING;
+        }
+        // A link is its Connector. If that chunk is loaded and the block is not there any more, the
+        // Connector was broken while this Workbay was unloaded and could not be told. Only ever
+        // asked of a chunk already loaded: getBlockState on an unloaded one loads it synchronously.
+        ServerLevel connectorLevel = level.getServer().getLevel(bus.connector().dimension());
+        if (connectorLevel != null && connectorLevel.isLoaded(bus.connector().pos())
+            && !connectorLevel.getBlockState(bus.connector().pos()).is(WBBlocks.CONNECTOR.get())) {
+            return BusStatus.CONNECTOR_GONE;
         }
         BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), bus.bay());
 
@@ -176,8 +203,17 @@ public class BusRunner {
         return false;
     }
 
-    /** Kept strictly separate. Collapsing any two turns ordinary behaviour into a bug report. */
+    /**
+     * Kept strictly separate. Collapsing any two turns ordinary behaviour into a bug report, and
+     * SPEC.md §4 requires the three failing ones to be visually distinct on the LINKS row.
+     */
     public enum BusStatus {
-        RUNNING, IDLE, UNLINKED, TARGET_MISSING, TARGET_NOT_LOADED, TARGET_NO_PORT
+        RUNNING, IDLE, DISABLED, CONNECTOR_GONE, TARGET_MISSING, TARGET_NOT_LOADED, TARGET_NO_PORT;
+
+        /** True for a status the player has to do something about. Drives the problem count. */
+        public boolean isProblem() {
+            return this == CONNECTOR_GONE || this == TARGET_MISSING || this == TARGET_NOT_LOADED
+                || this == TARGET_NO_PORT;
+        }
     }
 }

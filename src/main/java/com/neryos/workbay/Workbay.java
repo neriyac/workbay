@@ -5,6 +5,7 @@ import com.neryos.workbay.host.HostChecks;
 import com.neryos.workbay.host.HostResult;
 import com.neryos.workbay.init.WBBlockEntities;
 import com.neryos.workbay.init.WBBlocks;
+import com.neryos.workbay.init.WBCapabilities;
 import com.neryos.workbay.init.WBCreativeTabs;
 import com.neryos.workbay.init.WBDataComponents;
 import com.neryos.workbay.init.WBItems;
@@ -33,6 +34,7 @@ public class Workbay {
         WBDataComponents.register(modEventBus);
         WBCreativeTabs.register(modEventBus);
         WorkbayTickets.register(modEventBus);
+        modEventBus.addListener(WBCapabilities::register);
 
         // A Workbay in a Workbay is rejected here rather than by the denylist, so the player is
         // told what they actually did instead of that the pack forbade it. SPEC.md §14.

@@ -16,6 +16,7 @@ import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.neoforged.neoforge.energy.EnergyStorage;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
 
@@ -35,12 +36,23 @@ import java.util.UUID;
 public class WorkbayBlockEntity extends BlockEntity {
     private static final String ID_KEY = "WorkbayId";
     private static final String BUSES_KEY = "Buses";
+    private static final String ENERGY_KEY = "Energy";
 
     @Nullable
     private UUID workbayId;
 
     private final List<BusConfig> buses = new ArrayList<>();
     private final BusRunner runner = new BusRunner(() -> !isRemoved());
+
+    /**
+     * SPEC.md §9's buffer, accepted on any face and never handing energy back out of the block.
+     * The three-layer spend model and round-robin sharing to bays are not built yet, so this is a
+     * real buffer the screen reads rather than a number invented for a progress bar.
+     */
+    private final EnergyStorage energy = new EnergyStorage(BUFFER_FE, MAX_FE_PER_TICK, 0);
+
+    public static final int BUFFER_FE = 100_000;
+    public static final int MAX_FE_PER_TICK = 10_000;
 
     public WorkbayBlockEntity(BlockPos pos, BlockState state) {
         super(WBBlockEntities.WORKBAY.get(), pos, state);
@@ -94,8 +106,33 @@ public class WorkbayBlockEntity extends BlockEntity {
 
     public void removeBus(UUID busId) {
         if (buses.removeIf(bus -> bus.id().equals(busId))) {
+            runner.forget(busId);
             setChanged();
         }
+    }
+
+    public Optional<BusConfig> bus(UUID busId) {
+        return buses.stream().filter(bus -> bus.id().equals(busId)).findFirst();
+    }
+
+    /** Every link anchored by the Connector at one position. Base is one; Multichannel allows three. */
+    public List<BusConfig> linksAt(GlobalPos connector) {
+        return buses.stream().filter(bus -> bus.connector().equals(connector)).toList();
+    }
+
+    /** Breaking a Connector takes its links with it. SPEC.md §0: the block <em>is</em> the link. */
+    public void removeLinksAt(GlobalPos connector) {
+        List<BusConfig> going = linksAt(connector);
+        if (going.isEmpty()) {
+            return;
+        }
+        going.forEach(bus -> runner.forget(bus.id()));
+        buses.removeAll(going);
+        setChanged();
+    }
+
+    public EnergyStorage energy() {
+        return energy;
     }
 
     public BusRunner.BusStatus busStatus(UUID busId) {
@@ -113,6 +150,13 @@ public class WorkbayBlockEntity extends BlockEntity {
         }
         workbay.record().ifPresent(record ->
             workbay.runner.tick(server, record, workbay.buses, Math.floorMod(pos.hashCode(), BusRunner.WHEEL)));
+
+        // A Connector broken while this Workbay was unloaded could not tell it, so the runner spots
+        // the gap instead and the link is swept here, outside the iteration that found it.
+        var orphaned = workbay.runner.orphaned();
+        if (!orphaned.isEmpty()) {
+            orphaned.forEach(workbay::removeBus);
+        }
     }
 
     @Override
@@ -137,6 +181,7 @@ public class WorkbayBlockEntity extends BlockEntity {
             tag.put(BUSES_KEY, BusConfig.CODEC.listOf().encodeStart(NbtOps.INSTANCE, List.copyOf(buses))
                 .getOrThrow(e -> new IllegalStateException("could not write a Workbay's buses: " + e)));
         }
+        tag.putInt(ENERGY_KEY, energy.getEnergyStored());
     }
 
     @Override
@@ -160,6 +205,7 @@ public class WorkbayBlockEntity extends BlockEntity {
             buses.addAll(BusConfig.CODEC.listOf().parse(NbtOps.INSTANCE, stored)
                 .result().orElse(List.of()));
         }
+        energy.receiveEnergy(tag.getInt(ENERGY_KEY), false);
     }
 
     // ------------------------------------------------------- item round trip

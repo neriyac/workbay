@@ -100,16 +100,38 @@ public record WorkbayRecord(
      * no removal path (SPEC.md §1). {@code roomTier} and {@code annexPlates} are v2's, written and
      * carried in v1 so that v2 adds behaviour rather than a migration.
      */
-    public record Upgrades(int expansionPlates, int resonators, int anchors, int annexPlates, int roomTier) {
-        public static final Upgrades NONE = new Upgrades(0, 0, 0, 0, 0);
+    public record Upgrades(int expansionPlates, int resonators, int anchors, int annexPlates,
+        int roomTier, int multichannel) {
+        public static final Upgrades NONE = new Upgrades(0, 0, 0, 0, 0, 0);
 
         public static final Codec<Upgrades> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.INT.optionalFieldOf("ExpansionPlates", 0).forGetter(Upgrades::expansionPlates),
             Codec.INT.optionalFieldOf("Resonators", 0).forGetter(Upgrades::resonators),
             Codec.INT.optionalFieldOf("Anchors", 0).forGetter(Upgrades::anchors),
             Codec.INT.optionalFieldOf("AnnexPlates", 0).forGetter(Upgrades::annexPlates),
-            Codec.INT.optionalFieldOf("RoomTier", 0).forGetter(Upgrades::roomTier)
+            Codec.INT.optionalFieldOf("RoomTier", 0).forGetter(Upgrades::roomTier),
+            Codec.INT.optionalFieldOf("Multichannel", 0).forGetter(Upgrades::multichannel)
         ).apply(i, Upgrades::new));
+
+        /** One more of the named upgrade. Upgrades are consumed on install (SPEC.md §1). */
+        public Upgrades plus(com.neryos.workbay.content.workbay.WorkbayUpgrade upgrade) {
+            return switch (upgrade) {
+                case EXPANSION_PLATE -> new Upgrades(expansionPlates + 1, resonators, anchors,
+                    annexPlates, roomTier, multichannel);
+                case RESONATOR -> new Upgrades(expansionPlates, resonators + 1, anchors,
+                    annexPlates, roomTier, multichannel);
+                case MULTICHANNEL -> new Upgrades(expansionPlates, resonators, anchors,
+                    annexPlates, roomTier, multichannel + 1);
+            };
+        }
+
+        public int installed(com.neryos.workbay.content.workbay.WorkbayUpgrade upgrade) {
+            return switch (upgrade) {
+                case EXPANSION_PLATE -> expansionPlates;
+                case RESONATOR -> resonators;
+                case MULTICHANNEL -> multichannel;
+            };
+        }
 
         public boolean anchored() {
             return anchors > 0;

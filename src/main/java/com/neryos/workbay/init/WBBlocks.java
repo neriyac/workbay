@@ -1,6 +1,8 @@
 package com.neryos.workbay.init;
 
 import com.neryos.workbay.Workbay;
+import com.neryos.workbay.content.connector.ConnectorBlock;
+import com.neryos.workbay.content.connector.ConnectorItem;
 import com.neryos.workbay.content.port.PortBlock;
 import com.neryos.workbay.content.workbay.WorkbayBlock;
 import net.minecraft.world.level.block.Block;
@@ -31,6 +33,12 @@ public class WBBlocks {
      * picked or given, and -1 hardness so it cannot be broken. SPEC.md §2: a bay with a missing wall
      * is an unrecoverable state.
      */
+    /**
+     * The world end of a link (SPEC.md §0). A thin plate on any block, paired to a Workbay before
+     * it is placed. Its BlockItem is custom only so the tooltip can name what it is paired to.
+     */
+    public static final DeferredBlock<ConnectorBlock> CONNECTOR = registerConnector();
+
     public static final DeferredBlock<PortBlock> PORT = BLOCKS.register("port", () ->
         new PortBlock(BlockBehaviour.Properties.of()
             .mapColor(MapColor.COLOR_BLACK)
@@ -39,6 +47,17 @@ public class WBBlocks {
             .noLootTable()
             .pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK)
             .isValidSpawn((state, level, pos, type) -> false)));
+
+    private static DeferredBlock<ConnectorBlock> registerConnector() {
+        var holder = BLOCKS.registerBlock("connector", ConnectorBlock::new,
+            BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK)
+                .mapColor(MapColor.COLOR_BLACK)
+                .sound(SoundType.METAL)
+                .strength(1.5F)
+                .noOcclusion());
+        ITEMS.register("connector", () -> new ConnectorItem(holder.get(), new net.minecraft.world.item.Item.Properties()));
+        return holder;
+    }
 
     static <B extends Block> DeferredBlock<B> registerWithItem(String name,
         Function<BlockBehaviour.Properties, ? extends B> func, BlockBehaviour.Properties props) {

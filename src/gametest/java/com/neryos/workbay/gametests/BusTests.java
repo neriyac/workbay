@@ -1,6 +1,8 @@
 package com.neryos.workbay.gametests;
 
 import com.neryos.workbay.bus.BusConfig;
+import com.neryos.workbay.content.connector.ConnectorBlock;
+import com.neryos.workbay.content.workbay.WorkbayBlock;
 import com.neryos.workbay.content.workbay.WorkbayBlockEntity;
 import com.neryos.workbay.init.WBBlocks;
 import com.neryos.workbay.world.BayGeometry;
@@ -21,6 +23,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.testframework.DynamicTest;
 import net.neoforged.testframework.annotation.ForEachTest;
 import net.neoforged.testframework.annotation.TestHolder;
@@ -28,18 +31,16 @@ import net.neoforged.testframework.gametest.ExtendedGameTestHelper;
 import net.neoforged.testframework.gametest.GameTestPlayer;
 import net.neoforged.testframework.gametest.StructureTemplateBuilder;
 
-import java.util.UUID;
-
 /**
  * The mod's central promise, end to end: a machine standing in another dimension, reached from a
  * block in this one, with no cable in between. SPEC.md §9.
+ *
+ * <p>Every link here is made the way a player makes one — a Connector paired to the Workbay and
+ * stuck on the target block. There is no other way to make one, which is the point: if the
+ * Connector path breaks, none of these pass.
  */
 @ForEachTest(groups = "bus")
 public class BusTests {
-
-    private static final UUID INSERT_BUS = UUID.fromString("00000000-0000-0000-0000-00000000c001");
-    private static final UUID EXTRACT_BUS = UUID.fromString("00000000-0000-0000-0000-00000000c002");
-    private static final UUID RATE_BUS = UUID.fromString("00000000-0000-0000-0000-00000000c003");
 
     /** Places a Workbay, gives it a bay with a chest in it, and returns the block entity. */
     private static WorkbayBlockEntity setUp(ExtendedGameTestHelper helper, BlockPos workbayPos,
@@ -56,6 +57,31 @@ public class BusTests {
         WorkbayTickets.force(backshop, record.id(), record.bayColumn());
         BayHosting.rack(backshop, record.bayColumn(), 0, inTheBay, player, Direction.NORTH);
         return workbay;
+    }
+
+    /**
+     * Pairs a Connector to the Workbay, sticks it on the block below {@code at}, and returns the
+     * link that placing it created. Mirrors the player's two actions exactly: right-click the
+     * Workbay with the Connector, then place it against the thing you want linked.
+     */
+    private static BusConfig connect(ExtendedGameTestHelper helper, WorkbayBlockEntity workbay,
+        BlockPos at, Direction facing, GameTestPlayer player) {
+        ServerLevel level = helper.getLevel();
+        ItemStack connector = new ItemStack(WBBlocks.CONNECTOR.get());
+        WorkbayBlock.pair(connector, workbay.record().orElseThrow(),
+            GlobalPos.of(level.dimension(), workbay.getBlockPos()), 0);
+
+        BlockState state = WBBlocks.CONNECTOR.get().defaultBlockState()
+            .setValue(ConnectorBlock.FACING, facing);
+        level.setBlock(at, state, Block.UPDATE_ALL);
+        WBBlocks.CONNECTOR.get().setPlacedBy(level, at, state, player, connector);
+
+        var links = workbay.buses();
+        if (links.isEmpty()) {
+            helper.fail("placing a paired Connector did not create a link");
+            throw new IllegalStateException("no link");
+        }
+        return links.get(links.size() - 1);
     }
 
     private static void tearDown(ExtendedGameTestHelper helper, BlockPos workbayPos) {
@@ -111,9 +137,8 @@ public class BusTests {
             }
             hosted.setItem(0, new ItemStack(Items.IRON_INGOT, 64));
 
-            workbay.addBus(BusConfig.create(INSERT_BUS, 0, BusConfig.Resource.ITEM,
-                BusConfig.Mode.INSERT, GlobalPos.of(level.dimension(), targetPos))
-                .withRate(8).withSpeed(10));
+            BusConfig link = connect(helper, workbay, targetPos.above(), Direction.DOWN, player);
+            workbay.addBus(link.withRate(8).withSpeed(10));
 
             helper.startSequence()
                 .thenWaitUntil(() -> {
@@ -157,9 +182,8 @@ public class BusTests {
             ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
             BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
 
-            workbay.addBus(BusConfig.create(EXTRACT_BUS, 0, BusConfig.Resource.ITEM,
-                BusConfig.Mode.EXTRACT, GlobalPos.of(level.dimension(), targetPos))
-                .withRate(16).withSpeed(10));
+            BusConfig link = connect(helper, workbay, targetPos.above(), Direction.DOWN, player);
+            workbay.addBus(link.withMode(BusConfig.Mode.EXTRACT).withRate(16).withSpeed(10));
 
             helper.startSequence()
                 .thenWaitUntil(() -> {
@@ -204,9 +228,8 @@ public class BusTests {
             }
 
             // The slowest legal speed, so the test can look between operations.
-            workbay.addBus(BusConfig.create(RATE_BUS, 0, BusConfig.Resource.ITEM,
-                BusConfig.Mode.INSERT, GlobalPos.of(level.dimension(), targetPos))
-                .withRate(4).withSpeed(200));
+            BusConfig link = connect(helper, workbay, targetPos.above(), Direction.DOWN, player);
+            workbay.addBus(link.withRate(4).withSpeed(200));
 
             helper.startSequence()
                 .thenWaitUntil(() -> {

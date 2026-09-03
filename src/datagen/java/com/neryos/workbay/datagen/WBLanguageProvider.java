@@ -25,6 +25,11 @@ public class WBLanguageProvider extends LanguageProvider {
         addBlock(WBBlocks.PORT, "Port");
         addItem(WBItems.SHOPSTEEL, "Shopsteel");
         addItem(WBItems.HOUSING, "Housing");
+        addBlock(WBBlocks.CONNECTOR, "Connector");
+        addItem(WBItems.LEVY, "Levy");
+        addItem(WBItems.EXPANSION_PLATE, "Expansion Plate");
+        addItem(WBItems.RESONATOR, "Resonator");
+        addItem(WBItems.MULTICHANNEL, "Multichannel Upgrade");
 
         // Chat, one-shot. SPEC.md §6.
         add(WorkbayLang.messageKey("room_created"), "Workbay %s created. Write this code down \u2014 "
@@ -57,9 +62,24 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.messageKey("reject.assay_needs_bay"), "The Assay only works racked in a bay. "
             + "It has no faces to connect to out here.");
 
+        // The Connector, which is where every link comes from. SPEC.md §0.
+        add(WorkbayLang.messageKey("connector_paired"), "Connector paired to Workbay %s. Place it "
+            + "against the block you want to link.");
+        add(WorkbayLang.messageKey("connector_unpaired"), "This Connector isn't paired yet. "
+            + "Right-click a Workbay with it first.");
+        add(WorkbayLang.messageKey("connector_linked"), "Linked to %s. Workbay %s now has a row for "
+            + "it.");
+        add(WorkbayLang.messageKey("connector_full"), "This Connector already carries everything it "
+            + "can. Install a Multichannel Upgrade to carry items, fluids and energy on one.");
+        add(WorkbayLang.messageKey("connector_no_workbay"), "The Workbay this Connector is paired "
+            + "to isn't loaded. Go back to it and place this again.");
+
         // Tooltips. SPEC.md §6: at most four lines unshifted.
         add(WorkbayLang.tooltipKey("hosting"), "Hosting: %s / %s machines");
         add(WorkbayLang.tooltipKey("buses"), "Buses: %s configured");
         add(WorkbayLang.tooltipKey("code"), "Code %s");
+        add(WorkbayLang.tooltipKey("connector_unpaired"), "Not paired. Right-click a Workbay with "
+            + "this to pair it.");
+        add(WorkbayLang.tooltipKey("connector_paired"), "Paired to %s, bay %s");
     }
 }

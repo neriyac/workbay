@@ -1,10 +1,20 @@
 {
+  "block.workbay.connector": "Connector",
   "block.workbay.port": "Port",
   "block.workbay.workbay": "Workbay",
+  "item.workbay.expansion_plate": "Expansion Plate",
   "item.workbay.housing": "Housing",
+  "item.workbay.levy": "Levy",
+  "item.workbay.multichannel": "Multichannel Upgrade",
+  "item.workbay.resonator": "Resonator",
   "item.workbay.shopsteel": "Shopsteel",
   "itemGroup.workbay": "Workbay",
   "message.workbay.break_warning": "Breaking this Workbay leaves its bays behind. The machines keep running; you'll need code %s to get back in.",
+  "message.workbay.connector_full": "This Connector already carries everything it can. Install a Multichannel Upgrade to carry items, fluids and energy on one.",
+  "message.workbay.connector_linked": "Linked to %s. Workbay %s now has a row for it.",
+  "message.workbay.connector_no_workbay": "The Workbay this Connector is paired to isn't loaded. Go back to it and place this again.",
+  "message.workbay.connector_paired": "Connector paired to Workbay %s. Place it against the block you want to link.",
+  "message.workbay.connector_unpaired": "This Connector isn't paired yet. Right-click a Workbay with it first.",
   "message.workbay.locked": "This Workbay is locked.",
   "message.workbay.reject.assay_needs_bay": "The Assay only works racked in a bay. It has no faces to connect to out here.",
   "message.workbay.reject.immovable": "%s can't be safely relocated.",
@@ -22,5 +32,7 @@
   "message.workbay.room_created": "Workbay %s created. Write this code down — if you lose the block, an operator can get you back in with it.",
   "tooltip.workbay.buses": "Buses: %s configured",
   "tooltip.workbay.code": "Code %s",
+  "tooltip.workbay.connector_paired": "Paired to %s, bay %s",
+  "tooltip.workbay.connector_unpaired": "Not paired. Right-click a Workbay with this to pair it.",
   "tooltip.workbay.hosting": "Hosting: %s / %s machines"
 }

@@ -32,6 +32,15 @@ public class WBLootTableProvider extends BlockLootSubProvider {
             .add(applyExplosionCondition(workbay, LootItem.lootTableItem(workbay)
                 .apply(CopyComponentsFunction.copyComponents(CopyComponentsFunction.Source.BLOCK_ENTITY)
                     .include(WBDataComponents.BINDING.get()))))));
+
+        // A Connector keeps its pairing when broken, so re-placing it restores the link rather
+        // than leaving the player to re-pair a block they never unpaired.
+        Block connector = WBBlocks.CONNECTOR.get();
+        add(connector, LootTable.lootTable().withPool(LootPool.lootPool()
+            .setRolls(ConstantValue.exactly(1.0F))
+            .add(applyExplosionCondition(connector, LootItem.lootTableItem(connector)
+                .apply(CopyComponentsFunction.copyComponents(CopyComponentsFunction.Source.BLOCK_ENTITY)
+                    .include(WBDataComponents.PAIRING.get()))))));
     }
 
     @Override
