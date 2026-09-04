@@ -100,6 +100,16 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("power.machine.tip"), "Energy stored in this machine.");
         add(WorkbayLang.guiKey("power.none"), "No power");
 
+        // The header's three counters. Keys rather than strings built in the Java: they sit on the
+        // same line as power.none, which has always been a key, and a count with no plural rule is
+        // how "1 links" got shipped.
+        add(WorkbayLang.guiKey("count.bays"), "%s / %s bays");
+        add(WorkbayLang.guiKey("count.links"), "%s links");
+        add(WorkbayLang.guiKey("count.links.one"), "1 link");
+        add(WorkbayLang.guiKey("count.problems"), "%s problems");
+        add(WorkbayLang.guiKey("count.problems.one"), "1 problem");
+        add(WorkbayLang.guiKey("count.problems.none"), "no problems");
+
         add(WorkbayLang.guiKey("button.upgrades"), "Upgrades");
         add(WorkbayLang.guiKey("button.upgrades.tip"), "Install Expansion Plates, a Resonator or a "
             + "Multichannel Upgrade.");
@@ -349,11 +359,20 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("bayview.title"), "Bay View · Bay %s");
         add(WorkbayLang.guiKey("bayview.limits"), "Recipe modes, side configuration and upgrade "
             + "slots stay on the machine. Eject it to change those.");
+        // The gauges under the grid. The figures on the line have no unit - it does not fit - so
+        // the tooltip is where "mB" and "FE" are actually said.
+        add(WorkbayLang.guiKey("bayview.tank"), "%s / %s mB");
+        add(WorkbayLang.guiKey("bayview.tank.empty"), "Empty tank");
+        add(WorkbayLang.guiKey("bayview.tank.tip"), "Click with a bucket or tank on the cursor to "
+            + "fill it, or with an empty one to draw from it.");
+        add(WorkbayLang.guiKey("bayview.energy"), "Stored energy");
+        add(WorkbayLang.guiKey("bayview.energy.tip"), "The machine's own buffer. The Workbay shares "
+            + "power to it automatically - there is nothing to click here.");
         add(WorkbayLang.guiKey("button.bayview"), "Bay View");
-        add(WorkbayLang.guiKey("button.bayview.tip"), "Opens this machine's item slots so you can "
-            + "put things in and take them out by hand, without a link.");
+        add(WorkbayLang.guiKey("button.bayview.tip"), "Opens this machine's item slots, tanks and "
+            + "power so you can top it up by hand, without a link.");
         add(WorkbayLang.messageKey("bayview_unreachable"), "Nothing in this bay answers by hand. "
-            + "A machine with no item slots is reached by a link or not at all.");
+            + "A machine with no slots, tanks or power is reached by a link or not at all.");
         // Entering the bay. SPEC.md §5: the machine's own screen is reachable only by standing in
         // front of it, so this is the one control that answers "how do I upgrade the thing".
         add(WorkbayLang.guiKey("button.enter"), "Enter bay");

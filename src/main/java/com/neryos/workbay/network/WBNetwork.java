@@ -5,7 +5,10 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 
-/** Two payloads: the whole screen state out, one button press back. SPEC.md §4. */
+/**
+ * Three payloads: the whole screen state out, Bay View's tanks and energy out, one button press
+ * back. SPEC.md §4 and §5.
+ */
 @EventBusSubscriber(modid = Workbay.MOD_ID, bus = EventBusSubscriber.Bus.MOD)
 public final class WBNetwork {
     private WBNetwork() {}
@@ -14,6 +17,7 @@ public final class WBNetwork {
     static void register(RegisterPayloadHandlersEvent event) {
         var registrar = event.registrar("1");
         registrar.playToClient(SnapshotPacket.TYPE, SnapshotPacket.STREAM_CODEC, SnapshotPacket::handle);
+        registrar.playToClient(BayViewPacket.TYPE, BayViewPacket.STREAM_CODEC, BayViewPacket::handle);
         registrar.playToServer(ActionPacket.TYPE, ActionPacket.STREAM_CODEC, ActionPacket::handle);
     }
 }

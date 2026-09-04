@@ -81,6 +81,10 @@ class BaysPage extends WorkbayPage {
     private static final int CUBE_CY = 106;
     private static final int CUBE_SIZE = 30;
 
+    /** The header's power readout: right-aligned here, and where the counters beside it must stop. */
+    private static final int POWER_X = 246;
+    private static final int POWER_W = 58;
+
     /** The Levy readout's column: from the machine row's left edge to the faces panel. */
     private static final int LEVY_W = FACES_X - 4 - 50;
     /** The skim readout, between the sort button and the Add button. */
@@ -191,23 +195,34 @@ class BaysPage extends WorkbayPage {
         int used = (int) snap.bays().stream()
             .filter(bay -> bay.hosted().isPresent()).count();
 
+        // Three counters, packed left to right against where the power readout starts, rather than
+        // sitting on hardcoded pitches with guessed widths. Guessed widths were wrong twice on one
+        // line: "no problems" arrived as "no proble..." in a 60-wide box, and "128 links" does not
+        // fit 46 either. Packed, each one has exactly what it needs and the last one has the rest,
+        // which is the only version of this that cannot be wrong for a count nobody tried.
         int textX = x(8);
-        text(g, snap.bays().isEmpty() ? "" : used + " / " + snap.bayCapacity() + " bays",
-            textX, y(31), 58, Draw.TEXT_DIM);
-        text(g, snap.links().size() + " links", textX + 62, y(31), 46, Draw.TEXT_DIM);
+        int limit = x(POWER_X - POWER_W);
+        int cursor = textX;
+        if (!snap.bays().isEmpty()) {
+            cursor = counter(g, WorkbayScreen.gui("count.bays", used, snap.bayCapacity()),
+                cursor, limit, Draw.TEXT_DIM);
+        }
+        int links = snap.links().size();
+        cursor = counter(g, WorkbayScreen.gui(links == 1 ? "count.links.one" : "count.links", links),
+            cursor, limit, Draw.TEXT_DIM);
 
         // The count and the list have to agree, and the list is filtered to one bay by default — so
         // the count is a control, not a label: clicking it shows exactly the rows it is counting.
         // Without that the header can honestly say "1 problem" while every visible row looks fine.
         int problems = snap.problems();
-        String problemText = problems == 0 ? "no problems"
-            : problems + " problem" + (problems == 1 ? "" : "s");
+        String problemText = WorkbayScreen.gui(problems == 0 ? "count.problems.none"
+            : problems == 1 ? "count.problems.one" : "count.problems", problems).getString();
         boolean problemHover = problems > 0
-            && screen.hovered(textX + 112, y(29), font.width(problemText) + 2, 12, mouseX, mouseY);
-        text(g, problemText, textX + 112, y(31), 68,
+            && screen.hovered(cursor, y(29), font.width(problemText) + 2, 12, mouseX, mouseY);
+        text(g, problemText, cursor, y(31), limit - cursor,
             problems == 0 ? Draw.TEXT_FAINT : problemHover ? Draw.TEXT : Draw.RED);
         if (problems > 0) {
-            screen.hit(textX + 112, y(29), font.width(problemText) + 2, 12, () -> {
+            screen.hit(cursor, y(29), font.width(problemText) + 2, 12, () -> {
                 filter = Filter.PROBLEMS;
                 adding = false;
                 scroll = 0;
@@ -223,7 +238,7 @@ class BaysPage extends WorkbayPage {
             : WorkbayScreen.gui("power.none").getString();
         // 58, not 48: at 48 "0 / 100.0k" arrived as "0 / 100..." on the very first screen a
         // player sees. The room between the problem count and the bar was there all along.
-        textRight(g, power, x(246), y(31), 58, powered ? Draw.TEXT_DIM : Draw.TEXT_FAINT);
+        textRight(g, power, x(POWER_X), y(31), POWER_W, powered ? Draw.TEXT_DIM : Draw.TEXT_FAINT);
         if (powered) {
             Draw.bar(g, x(250), y(29), 44, 9, snap.energy(), snap.energyCapacity(), Draw.AMBER);
             screen.hit(x(250), y(29), 44, 9, () -> { },
@@ -237,6 +252,19 @@ class BaysPage extends WorkbayPage {
         // type in, or lose.
         // The separator between the header band and the working area.
         g.fill(x(6), y(44), x(WIDTH - 6), y(45), Draw.EDGE_DARK);
+    }
+
+    /**
+     * One header counter, given exactly the width it needs, and clamped so it can never run into
+     * the readout to its right.
+     *
+     * @return where the next counter starts
+     */
+    private int counter(GuiGraphics g, Component label, int px, int limit, int colour) {
+        String s = label.getString();
+        int room = Math.min(screen.font().width(s), limit - px);
+        text(g, s, px, y(31), room, colour);
+        return px + room + 6;
     }
 
     // ------------------------------------------------------------- bay rack

@@ -128,6 +128,42 @@ public class DuplicationTests {
         return total;
     }
 
+    /**
+     * Millibuckets of one fluid standing in a block's tanks, through the same capability Bay View
+     * reads. A fluid census has to count these <em>and</em> the buckets carrying it, because a
+     * bucket that empties into a tank without emptying is exactly the item-dupe bug wearing a
+     * different hat.
+     */
+    private static int inTanks(ServerLevel level, BlockPos pos, net.minecraft.world.level.material.Fluid fluid) {
+        var handler = level.getCapability(
+            net.neoforged.neoforge.capabilities.Capabilities.FluidHandler.BLOCK, pos, null);
+        if (handler == null) {
+            return 0;
+        }
+        int total = 0;
+        for (int tank = 0; tank < handler.getTanks(); tank++) {
+            var contents = handler.getFluidInTank(tank);
+            if (contents.getFluid() == fluid) {
+                total += contents.getAmount();
+            }
+        }
+        return total;
+    }
+
+    /** Energy stored in a block, on whichever side answers. Never the null side twice over. */
+    private static int inEnergy(ServerLevel level, BlockPos pos) {
+        for (Direction side : Direction.values()) {
+            var store = level.getCapability(
+                net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK, pos, side);
+            if (store != null) {
+                return store.getEnergyStored();
+            }
+        }
+        var store = level.getCapability(
+            net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK, pos, null);
+        return store == null ? 0 : store.getEnergyStored();
+    }
+
     private static int inContainer(ServerLevel level, BlockPos pos, Item item) {
         if (!(level.getBlockEntity(pos) instanceof Container container)) {
             return 0;
@@ -194,7 +230,7 @@ public class DuplicationTests {
                 + "Bay View would not open on it");
         }
         return new BayViewMenu(containerId, player.getInventory(), workbay, bay,
-            opening.machineId(), opening.slots(), opening.handler());
+            opening.machineId(), opening.slots(), opening.handler(), opening.state());
     }
 
     private static ServerLevel backshop(ExtendedGameTestHelper helper) {
@@ -673,6 +709,124 @@ public class DuplicationTests {
         });
     }
 
+    /**
+     * The fluid half of Bay View, against a real Mekanism tank. One bucket of water goes in and
+     * comes back out, and at every step the census is the same: <b>a thousand millibuckets exist,
+     * in exactly one place</b> — either in the bucket or in the tank, never in both, never in
+     * neither.
+     *
+     * <p>Mekanism is the machine that makes this worth testing rather than a formality. Its
+     * null-side handler reports the tank's contents perfectly and then silently refuses every
+     * write, so a screen that reads and writes through the same resolved handler shows a tank, eats
+     * a bucket of water and moves nothing. {@link BayViewMenu.Live#reach} is why this passes: the
+     * read takes the null side, the write simulates and takes a face.
+     */
+    @GameTest
+    @TestHolder(description = "A bucket of water into a hosted Mekanism tank and back out is never copied or lost.")
+    public static void bayViewMovesFluidBothWaysWithoutLosingAny(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = backshop(helper);
+            WorkbayTickets.force(backshop, record.id(), record.bayColumn());
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+
+            Block tank = net.minecraft.core.registries.BuiltInRegistries.BLOCK
+                .get(net.minecraft.resources.ResourceLocation.parse("mekanism:basic_fluid_tank"));
+            if (tank == Blocks.AIR) {
+                helper.fail("mekanism:basic_fluid_tank is not registered. This test is about a real "
+                    + "mod's fluid handler, so a missing partner mod is a failure, never a skip. "
+                    + "Check the gametestRuntimeOnly Mekanism dependency in build.gradle.");
+            }
+
+            player.getInventory().clearContent();
+            rack(menuFor(workbay, player), player, 0, new ItemStack(tank, 1));
+
+            BayViewMenu view = bayView(2, player, workbay, 0);
+            // The read half, first: without a tank on the screen the rest of this proves nothing.
+            if (view.state().tanks().isEmpty()) {
+                helper.fail("Bay View sees no tanks on a hosted " + tank
+                    + ", so there is nothing for a bucket to be clicked onto");
+            }
+
+            var water = net.minecraft.world.level.material.Fluids.WATER;
+            // Millibuckets in existence: the bucket carries a thousand, the tank holds what it holds.
+            java.util.function.IntSupplier census = () ->
+                (onPlayer(player, Items.WATER_BUCKET) + count(view.getCarried(), Items.WATER_BUCKET)
+                    + loose(helper, Items.WATER_BUCKET)) * 1000
+                    + inTanks(backshop, machinePos, water);
+            java.util.function.IntSupplier buckets = () ->
+                onPlayer(player, Items.WATER_BUCKET) + onPlayer(player, Items.BUCKET)
+                    + count(view.getCarried(), Items.WATER_BUCKET)
+                    + count(view.getCarried(), Items.BUCKET)
+                    + loose(helper, Items.WATER_BUCKET) + loose(helper, Items.BUCKET);
+
+            view.setCarried(new ItemStack(Items.WATER_BUCKET));
+            helper.assertValueEqual(census.getAsInt(), 1000, "millibuckets of water before the click");
+
+            view.clickMenuButton(player, BayViewMenu.FLUID_BUTTON);
+            helper.assertValueEqual(census.getAsInt(), 1000, "millibuckets of water after filling "
+                + "the hosted tank from the cursor");
+            helper.assertValueEqual(buckets.getAsInt(), 1, "buckets in existence after the fill");
+            if (inTanks(backshop, machinePos, water) <= 0) {
+                helper.fail("the click emptied the bucket somewhere that is not the tank. This is "
+                    + "the Mekanism read-only null-side handler: the write must resolve a face by "
+                    + "simulating, not take whichever handler answers first.");
+            }
+
+            // And back out, which is the direction that can hand the player a full bucket while
+            // leaving the tank full as well.
+            view.clickMenuButton(player, BayViewMenu.FLUID_BUTTON);
+            helper.assertValueEqual(census.getAsInt(), 1000, "millibuckets of water after drawing "
+                + "it back out of the hosted tank");
+            helper.assertValueEqual(buckets.getAsInt(), 1, "buckets in existence after the draw");
+            helper.succeed();
+        });
+    }
+
+    /**
+     * A machine that is gone must refuse a fluid click the same way it refuses an item one. The
+     * failure this catches is the quiet one: a handler resolved before the eject, still accepting
+     * the bucket, into a block entity nobody owns any more.
+     */
+    @GameTest
+    @TestHolder(description = "Clicking a bucket into an ejected bay's tanks moves nothing.")
+    public static void bayViewOverAnEjectedMachineRefusesFluidToo(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = backshop(helper);
+            WorkbayTickets.force(backshop, record.id(), record.bayColumn());
+
+            Block tank = net.minecraft.core.registries.BuiltInRegistries.BLOCK
+                .get(net.minecraft.resources.ResourceLocation.parse("mekanism:basic_fluid_tank"));
+            if (tank == Blocks.AIR) {
+                helper.fail("mekanism:basic_fluid_tank is not registered.");
+            }
+
+            player.getInventory().clearContent();
+            WorkbayMenu bays = menuFor(workbay, player);
+            rack(bays, player, 0, new ItemStack(tank, 1));
+
+            BayViewMenu view = bayView(2, player, workbay, 0);
+            view.setCarried(new ItemStack(Items.WATER_BUCKET));
+            bays.act(WorkbayAction.EJECT, 0, Optional.empty());
+
+            view.clickMenuButton(player, BayViewMenu.FLUID_BUTTON);
+            helper.assertValueEqual(count(view.getCarried(), Items.WATER_BUCKET), 1,
+                "water buckets still on the cursor after clicking into a bay with no machine in it");
+            helper.succeed();
+        });
+    }
+
     // ------------------------------------------------------------------ links
 
     /**
@@ -833,6 +987,109 @@ public class DuplicationTests {
                     }
                     helper.assertValueEqual(arrived + held + banked, 128,
                         "ingots that arrived plus ingots the Assay is holding or has banked");
+                })
+                .thenSucceed();
+        });
+    }
+
+    /**
+     * The energy half, end to end, with a real Mekanism machine at both ends: a charged Basic
+     * Energy Cube standing in the world, a link pulling from it, and an empty Basic Energy Cube
+     * racked in a bay. <b>Nothing had ever pushed FE through a link into a hosted machine</b> — the
+     * energy path was proven only at the read end, where the bays screen showed a cube's stored
+     * figure — so this is the half that was taken on trust.
+     *
+     * <p>Counted rather than asserted, like every other test here: energy is a resource, and a
+     * transfer that hands the destination more than the source lost is the same bug as a duplicated
+     * item. The tolerance is not slack — Mekanism stores joules and converts on every FE call, so a
+     * few units round away — but it only ever forgives a <em>loss</em>. A gain of one FE fails.
+     */
+    @GameTest(timeoutTicks = 600)
+    @TestHolder(description = "FE pushed through a link into a racked Mekanism Energy Cube arrives, and none is created.")
+    public static void energyPushedIntoARackedEnergyCubeIsNeverCreated(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos sourcePos = helper.absolutePos(new BlockPos(4, 1, 4));
+
+            Block cube = net.minecraft.core.registries.BuiltInRegistries.BLOCK
+                .get(net.minecraft.resources.ResourceLocation.parse("mekanism:basic_energy_cube"));
+            if (cube == Blocks.AIR) {
+                helper.fail("mekanism:basic_energy_cube is not registered. This test is about a real "
+                    + "mod's energy handler, so a missing partner mod is a failure, never a skip.");
+            }
+
+            // The source, in the world, placed the way a player would and then charged by hand.
+            BlockState cubeState = cube.defaultBlockState();
+            level.setBlock(sourcePos, cubeState, Block.UPDATE_ALL);
+            net.minecraft.world.item.BlockItem.updateCustomBlockEntityTag(level, player, sourcePos,
+                new ItemStack(cube));
+            if (level.getBlockEntity(sourcePos) != null) {
+                level.getBlockEntity(sourcePos).applyComponentsFromItemStack(new ItemStack(cube));
+            }
+            cube.setPlacedBy(level, sourcePos, cubeState, player, new ItemStack(cube));
+            level.invalidateCapabilities(sourcePos);
+
+            int charged = 0;
+            for (Direction side : Direction.values()) {
+                var store = level.getCapability(
+                    net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK,
+                    sourcePos, side);
+                if (store != null) {
+                    charged = store.receiveEnergy(200_000, false);
+                    if (charged > 0) {
+                        break;
+                    }
+                }
+            }
+            if (charged <= 0) {
+                helper.fail("could not charge the source Energy Cube through any face, so there is "
+                    + "nothing for the link to carry");
+            }
+
+            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = backshop(helper);
+            WorkbayTickets.force(backshop, record.id(), record.bayColumn());
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+
+            player.getInventory().clearContent();
+            rack(menuFor(workbay, player), player, 0, new ItemStack(cube, 1));
+
+            // EXTRACT: the target is the source and the hosted machine is the destination, which is
+            // the direction a player uses to charge something they have put away.
+            BusConfig link = connect(helper, workbay, 0, sourcePos.above(), player);
+            workbay.addBus(link.withResource(BusConfig.Resource.ENERGY)
+                .withMode(BusConfig.Mode.EXTRACT).withRate(20_000).withSpeed(10));
+
+            int before = inEnergy(level, sourcePos) + inEnergy(backshop, machinePos);
+            helper.startSequence()
+                .thenWaitUntil(() -> {
+                    if (inEnergy(backshop, machinePos) <= 0) {
+                        throw new GameTestAssertException("no FE has reached the racked Energy Cube "
+                            + "yet; the source holds " + inEnergy(level, sourcePos)
+                            + " and the link reads " + workbay.busStatus(link.id()));
+                    }
+                })
+                .thenIdle(40)
+                .thenExecute(() -> {
+                    int arrived = inEnergy(backshop, machinePos);
+                    int left = inEnergy(level, sourcePos);
+                    test.framework().logger().info("{} FE arrived, {} left at the source, {} before",
+                        arrived, left, before);
+                    if (arrived + left > before) {
+                        helper.fail("the link created energy: " + before + " FE existed, "
+                            + (arrived + left) + " FE exists now");
+                    }
+                    // A generous floor, because the conversion is Mekanism's and rounds per call.
+                    // It is here to catch energy vanishing wholesale, not to police the last unit.
+                    if (arrived + left < before - before / 100) {
+                        helper.fail("the link lost energy: " + before + " FE existed, "
+                            + (arrived + left) + " FE exists now");
+                    }
                 })
                 .thenSucceed();
         });

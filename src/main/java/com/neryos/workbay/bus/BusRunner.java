@@ -308,17 +308,32 @@ public class BusRunner {
         java.util.Set<Direction> sourceFaces = insert ? faces : EVERY_FACE;
         java.util.Set<Direction> sinkFaces = insert ? EVERY_FACE : faces;
 
-        IEnergyStorage to = sink.resolve(IEnergyStorage::canReceive, sinkFaces);
+        // Simulated, not asked. `canExtract` and `canReceive` are what a handler *says*, and
+        // Mekanism's FE wrapper returns a hardcoded `true` from both
+        // (`ForgeEnergyIntegration#canExtract`), on every face, whatever that face's side config
+        // says. So a bus that binds on them takes the first face it meets — an input-only one about
+        // five times in six — and then moves nothing, forever, reading IDLE the whole time.
+        //
+        // This is the same fault as trusting `isItemValid` in Bay View, at the other end of the
+        // mod, and it is why SPEC.md §9 says to simulate on bind. Measured: pushing FE through a
+        // link into a racked Basic Energy Cube moved zero until this line changed.
+        int budget = Math.max(1, bus.rate());
+        IEnergyStorage to = sink.resolve(store -> store.receiveEnergy(budget, true) > 0, sinkFaces);
         if (to == null) {
-            return insert ? BusStatus.TARGET_NO_PORT : BusStatus.MACHINE_NO_PORT;
+            // A destination that is merely full is resting, not unreachable, so the two are still
+            // told apart the way the item path tells them apart.
+            boolean anyHandler = sink.resolve(store -> true, sinkFaces) != null;
+            return anyHandler ? BusStatus.IDLE
+                : insert ? BusStatus.TARGET_NO_PORT : BusStatus.MACHINE_NO_PORT;
         }
-        IEnergyStorage from = source.resolve(IEnergyStorage::canExtract, sourceFaces);
+        IEnergyStorage from = source.resolve(store -> store.extractEnergy(budget, true) > 0,
+            sourceFaces);
         if (from == null) {
             boolean anyHandler = source.resolve(store -> true, sourceFaces) != null;
             return anyHandler ? BusStatus.IDLE
                 : insert ? BusStatus.MACHINE_NO_PORT : BusStatus.TARGET_NO_PORT;
         }
-        return BusTransfer.moveEnergy(from, to, bus.rate()) > 0 ? BusStatus.RUNNING : BusStatus.IDLE;
+        return BusTransfer.moveEnergy(from, to, budget) > 0 ? BusStatus.RUNNING : BusStatus.IDLE;
     }
 
     /**

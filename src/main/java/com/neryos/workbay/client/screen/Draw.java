@@ -131,6 +131,40 @@ public final class Draw {
         g.fill(x + 1, y + 1, x + 1 + filled, y + h - 1, argb);
     }
 
+    /**
+     * A tank gauge: the same bar, filled with the fluid's own still texture.
+     *
+     * <p>Not {@link #bar} tinted with {@code getTintColor}. Water's tint is white — the blue is in
+     * the texture — so a tinted bar draws every ordinary fluid as a white smear and says nothing
+     * about which one it is. The texture is what a player recognises.
+     *
+     * <p>Tiled at its native width rather than stretched: one {@code blit} across ninety pixels
+     * turns a 16px still frame into a smear, which is the same failure as the tint by another route.
+     */
+    public static void fluidBar(GuiGraphics g, int x, int y, int w, int h,
+        net.neoforged.neoforge.fluids.FluidStack fluid, int capacity) {
+        slot(g, x, y, w, h);
+        if (fluid.isEmpty() || capacity <= 0) {
+            return;
+        }
+        int filled = Math.max(1,
+            (int) ((long) (w - 2) * Math.min(fluid.getAmount(), capacity) / capacity));
+        var extensions = net.neoforged.neoforge.client.extensions.common.IClientFluidTypeExtensions
+            .of(fluid.getFluid());
+        var sprite = Minecraft.getInstance()
+            .getTextureAtlas(net.minecraft.world.inventory.InventoryMenu.BLOCK_ATLAS)
+            .apply(extensions.getStillTexture(fluid));
+        int tint = extensions.getTintColor(fluid);
+        g.setColor((tint >> 16 & 0xFF) / 255.0F, (tint >> 8 & 0xFF) / 255.0F,
+            (tint & 0xFF) / 255.0F, 1.0F);
+        g.enableScissor(x + 1, y + 1, x + 1 + filled, y + h - 1);
+        for (int px = 0; px < filled; px += 16) {
+            g.blit(x + 1 + px, y + 1, 0, 16, h - 2, sprite);
+        }
+        g.disableScissor();
+        g.setColor(1.0F, 1.0F, 1.0F, 1.0F);
+    }
+
     // ------------------------------------------------------------------ text
 
     /**
@@ -205,6 +239,31 @@ public final class Draw {
             box(g, px, py + i * 10, room, font.lineHeight, true);
         }
     }
+
+    /**
+     * A tooltip, wrapped and with its first line bolded.
+     *
+     * <p>This mod's tooltips are written as full sentences (SPEC.md §4: "tooltips are where this
+     * mod's text budget is spent"), and {@code renderComponentTooltip} does not wrap — one of them
+     * unbroken is half the screen wide. Every tooltip is (title, explanation), the convention
+     * vanilla's own item tooltips use, so the bold is here rather than at each call site.
+     *
+     * <p>Here rather than on one screen because there are two screens that draw tooltips, and a
+     * rule that lives on one of them is a rule the other gets wrong.
+     */
+    public static List<net.minecraft.util.FormattedCharSequence> tooltip(Font font,
+        List<Component> lines) {
+        List<net.minecraft.util.FormattedCharSequence> wrapped = new java.util.ArrayList<>();
+        for (int i = 0; i < lines.size(); i++) {
+            Component line = i == 0
+                ? lines.get(0).copy().withStyle(style -> style.withBold(true))
+                : lines.get(i);
+            wrapped.addAll(font.split(line, TOOLTIP_WIDTH));
+        }
+        return wrapped;
+    }
+
+    private static final int TOOLTIP_WIDTH = 200;
 
     private static final String ELLIPSIS = "…";
 

@@ -2,12 +2,15 @@ package com.neryos.workbay.menu;
 
 import com.neryos.workbay.content.workbay.WorkbayBlockEntity;
 import com.neryos.workbay.init.WBMenus;
+import com.neryos.workbay.network.BayViewPacket;
 import com.neryos.workbay.world.BayGeometry;
 import com.neryos.workbay.world.WorkbayDimensions;
 import com.neryos.workbay.world.WorkbayRecord;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -16,15 +19,25 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
+import net.neoforged.neoforge.capabilities.BlockCapability;
 import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.energy.IEnergyStorage;
+import net.neoforged.neoforge.fluids.FluidStack;
+import net.neoforged.neoforge.fluids.FluidUtil;
+import net.neoforged.neoforge.fluids.capability.IFluidHandler;
 import net.neoforged.neoforge.items.IItemHandler;
 import net.neoforged.neoforge.items.IItemHandlerModifiable;
 import net.neoforged.neoforge.items.ItemHandlerHelper;
 import net.neoforged.neoforge.items.ItemStackHandler;
 import net.neoforged.neoforge.items.SlotItemHandler;
+import net.neoforged.neoforge.items.wrapper.PlayerMainInvWrapper;
+import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 /**
  * Bay View. SPEC.md §5: our own screen over a hosted machine's item slots, read entirely through
@@ -36,6 +49,10 @@ import java.util.Optional;
  * while a player is holding one of its stacks on the cursor — none of which can happen to the chest
  * a vanilla screen is bound to. The rule this class is written against is the one in ROADMAP §2:
  * <em>the item exists in exactly one place at the end of every tick</em>.
+ *
+ * <p>It shows <b>items, fluid tanks and energy</b> — the three things a standard capability will
+ * tell us about without a line of per-mod code. Progress is deliberately still absent: there is no
+ * generic contract for it, so a bar over it would be invented rather than read (SPEC.md §5).
  *
  * <p>Three decisions carry that:
  *
@@ -58,12 +75,31 @@ public class BayViewMenu extends AbstractContainerMenu {
     /** Six rows of nine. More than any machine has, and the most a screen fits. */
     public static final int MAX_SLOTS = 54;
 
+    /**
+     * The most tank gauges drawn. Same argument as {@link #MAX_SLOTS}: a foreign handler decides how
+     * many tanks it reports and the panel does not grow without limit. Nothing shipping has more
+     * than three.
+     */
+    public static final int MAX_TANKS = 6;
+
     private static final int SLOT_SIZE = 18;
     public static final int COLUMNS = 9;
+
+    /** One gauge row: a bar and the figures beside it, on a pitch that leaves them a hairline apart. */
+    public static final int GAUGE_H = 10;
+    public static final int GAUGE_PITCH = 12;
 
     /** Where the machine grid starts, and where the player's own inventory starts under it. */
     public static final int GRID_X = 8;
     public static final int GRID_Y = 40;
+
+    /**
+     * The one menu button this screen has: "do the obvious thing with what is on the cursor and
+     * this machine's tanks". Vanilla's button channel rather than a payload of our own — the click
+     * carries no argument, and {@code clickMenuButton} is already validated, container-id checked
+     * and spectator-guarded by {@code ServerGamePacketListenerImpl}.
+     */
+    public static final int FLUID_BUTTON = 0;
 
     @Nullable
     private final WorkbayBlockEntity workbay;
@@ -77,21 +113,41 @@ public class BayViewMenu extends AbstractContainerMenu {
 
     private final IItemHandler machine;
 
+    private final Player viewer;
+
+    /**
+     * How many gauge rows the panel was laid out for, fixed when the screen opened.
+     *
+     * <p>Fixed, not read from {@link #state} each frame, because the layout below it — the limits
+     * sentence, the player's own inventory, the panel's height — is decided once in this
+     * constructor. A machine whose fluid handler fails to resolve for a tick must leave a gap, not
+     * move every slot on the screen out from under the cursor.
+     */
+    private final int gauges;
+
+    /** Tanks and energy, as last read on the server. Never a source of truth on the client. */
+    private State state;
+
+    private State sent = State.EMPTY;
+
     /** Client side: everything the screen needs rides the menu-open buffer, like SPEC.md §4's. */
     public BayViewMenu(int containerId, Inventory inventory, RegistryFriendlyByteBuf buffer) {
         this(containerId, inventory, null, buffer.readVarInt(),
             buffer.readOptional(net.minecraft.network.FriendlyByteBuf::readResourceLocation),
-            buffer.readVarInt(), null);
+            buffer.readVarInt(), null, State.STREAM_CODEC.decode(buffer));
     }
 
     public BayViewMenu(int containerId, Inventory inventory, @Nullable WorkbayBlockEntity workbay,
         int bay, Optional<ResourceLocation> machineId, int machineSlots,
-        @Nullable IItemHandler machine) {
+        @Nullable IItemHandler machine, State state) {
         super(WBMenus.BAY_VIEW.get(), containerId);
         this.workbay = workbay;
         this.bay = bay;
+        this.viewer = inventory.player;
         this.machineId = machineId;
         this.machineSlots = Math.clamp(machineSlots, 0, MAX_SLOTS);
+        this.state = state;
+        this.gauges = state.gauges();
         // The client has no capability to reach, so it mirrors into a plain handler and lets the
         // ordinary slot sync fill it. Nothing on the client is ever the source of truth.
         this.machine = machine != null ? machine : new ItemStackHandler(this.machineSlots);
@@ -102,7 +158,7 @@ public class BayViewMenu extends AbstractContainerMenu {
                 GRID_Y + (index / COLUMNS) * SLOT_SIZE));
         }
 
-        int inventoryY = inventoryY(machineSlots());
+        int inventoryY = inventoryY(machineSlots(), gauges);
         for (int row = 0; row < 3; row++) {
             for (int column = 0; column < 9; column++) {
                 addSlot(new Slot(inventory, 9 + row * 9 + column,
@@ -122,22 +178,58 @@ public class BayViewMenu extends AbstractContainerMenu {
         return Math.max(1, (slots + COLUMNS - 1) / COLUMNS);
     }
 
-    /**
-     * Where the player's own inventory starts. The sixty pixels above it are not padding: SPEC.md
-     * §5 requires a permanent line naming what this screen cannot reach, and a screen that mimics a
-     * machine's and silently lacks half its controls reads as a broken mod rather than a limit.
-     *
-     * <p>Sixty and not forty because that sentence wraps to <b>four</b> lines at this panel's
-     * width, not the two it looks like in the source. At forty it ran straight through the
-     * Inventory label and the first row of the player's own slots - seen in {@code runClient}, and
-     * the exact same class of fault as the skim chip that overran the link name last session.
-     */
-    public static int inventoryY(int slots) {
-        return GRID_Y + rows(slots) * SLOT_SIZE + 60;
+    /** Where the tank and energy gauges start: straight under the item grid. */
+    public static int gaugesY(int slots) {
+        return GRID_Y + rows(slots) * SLOT_SIZE + 6;
     }
 
-    public static int height(int slots) {
-        return inventoryY(slots) + 58 + SLOT_SIZE + 7;
+    /** And the limits sentence under those, so gauges push it down rather than sit on top of it. */
+    public static int limitsY(int slots, int gauges) {
+        return gaugesY(slots) + gauges * GAUGE_PITCH;
+    }
+
+    /**
+     * Where the player's own inventory starts. The fifty-four pixels under the limits line are not
+     * padding: SPEC.md §5 requires a permanent line naming what this screen cannot reach, and a
+     * screen that mimics a machine's and silently lacks half its controls reads as a broken mod
+     * rather than a limit.
+     *
+     * <p>Fifty-four and not twenty because that sentence wraps to <b>four</b> lines at this panel's
+     * width, not the two it looks like in the source. Short, it ran straight through the Inventory
+     * label and the first row of the player's own slots - seen in {@code runClient}, and the exact
+     * same class of fault as the skim chip that overran the link name last session.
+     */
+    public static int inventoryY(int slots, int gauges) {
+        return limitsY(slots, gauges) + 54;
+    }
+
+    public static int height(int slots, int gauges) {
+        return inventoryY(slots, gauges) + 58 + SLOT_SIZE + 7;
+    }
+
+    public int gauges() {
+        return gauges;
+    }
+
+    public int inventoryY() {
+        return inventoryY(machineSlots, gauges);
+    }
+
+    public int limitsY() {
+        return limitsY(machineSlots, gauges);
+    }
+
+    public int height() {
+        return height(machineSlots, gauges);
+    }
+
+    public State state() {
+        return state;
+    }
+
+    /** Server to client, and the client's only source for what is in the tanks. */
+    public void applyState(State updated) {
+        this.state = updated;
     }
 
     public int machineSlots() {
@@ -161,7 +253,69 @@ public class BayViewMenu extends AbstractContainerMenu {
      * is a test-only constructor, and a test that assembles the thing differently from the game
      * is a test of the assembly, not of the mod.
      */
-    public record Opening(Optional<ResourceLocation> machineId, int slots, IItemHandler handler) {}
+    public record Opening(Optional<ResourceLocation> machineId, int slots, Live handler,
+        State state) {}
+
+    /**
+     * One tank, as the screen draws it. The capacity rides along because {@code getTankCapacity} is
+     * a server-side call and the client has no handler to ask.
+     */
+    public record Tank(FluidStack contents, int capacity) {
+
+        public static final StreamCodec<RegistryFriendlyByteBuf, Tank> STREAM_CODEC =
+            StreamCodec.composite(
+                FluidStack.OPTIONAL_STREAM_CODEC, Tank::contents,
+                ByteBufCodecs.VAR_INT, Tank::capacity,
+                Tank::new);
+    }
+
+    /**
+     * Everything on this screen that is not an item slot: the tanks and the energy buffer.
+     *
+     * <p>Its own packet rather than {@code DataSlot}s because vanilla's data-slot channel is
+     * <b>sixteen bits wide</b> — a tank holding 10,000 mB or a Mekanism cube holding 1,600,000 FE
+     * does not fit in one, and splitting every figure into a hi and a lo slot is the kind of thing
+     * that is wrong once and then wrong forever. A whole record that either matches or does not
+     * cannot drift, which is the same argument {@link WorkbaySnapshot} is written on.
+     */
+    public record State(List<Tank> tanks, int energy, int energyCapacity) {
+
+        public static final State EMPTY = new State(List.of(), 0, 0);
+
+        public static final StreamCodec<RegistryFriendlyByteBuf, State> STREAM_CODEC =
+            StreamCodec.composite(
+                Tank.STREAM_CODEC.apply(ByteBufCodecs.list(MAX_TANKS)), State::tanks,
+                ByteBufCodecs.VAR_INT, State::energy,
+                ByteBufCodecs.VAR_INT, State::energyCapacity,
+                State::new);
+
+        /** How many rows the panel has to find room for. */
+        public int gauges() {
+            return tanks.size() + (energyCapacity > 0 ? 1 : 0);
+        }
+
+        /**
+         * <b>Not {@code equals}.</b> {@link FluidStack} has no value equality — like
+         * {@code ItemStack} it is compared with a static helper — so a record's generated
+         * {@code equals} would say "different" every single tick and resend an idle machine's state
+         * forever.
+         */
+        public boolean sameAs(State other) {
+            if (energy != other.energy || energyCapacity != other.energyCapacity
+                || tanks.size() != other.tanks.size()) {
+                return false;
+            }
+            for (int i = 0; i < tanks.size(); i++) {
+                Tank mine = tanks.get(i);
+                Tank theirs = other.tanks.get(i);
+                if (mine.capacity() != theirs.capacity()
+                    || !FluidStack.matches(mine.contents(), theirs.contents())) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
 
     /**
      * What is reachable in one bay, or null if nothing is. Never loads a chunk to find out: a
@@ -179,10 +333,14 @@ public class BayViewMenu extends AbstractContainerMenu {
         }
         Live live = new Live(backshop, machinePos);
         IItemHandler now = live.now();
-        if (now == null || now.getSlots() <= 0) {
+        State state = live.read();
+        // Slots or gauges: a tank with no item ports is still worth opening on, which is the whole
+        // point of drawing fluids at all. "Nothing answers by hand" now means nothing at all does.
+        if ((now == null || now.getSlots() <= 0) && state.gauges() == 0) {
             return null;
         }
-        return new Opening(record.bay(bay).hosted(), Math.min(now.getSlots(), MAX_SLOTS), live);
+        int slots = now == null ? 0 : Math.min(now.getSlots(), MAX_SLOTS);
+        return new Opening(record.bay(bay).hosted(), slots, live, state);
     }
 
     /**
@@ -198,14 +356,83 @@ public class BayViewMenu extends AbstractContainerMenu {
         }
         viewer.openMenu(new net.minecraft.world.SimpleMenuProvider(
             (containerId, inventory, who) -> new BayViewMenu(containerId, inventory, workbay, bay,
-                opening.machineId(), opening.slots(), opening.handler()),
+                opening.machineId(), opening.slots(), opening.handler(), opening.state()),
             com.neryos.workbay.WorkbayLang.gui("bayview.title", bay + 1)),
             buffer -> {
                 buffer.writeVarInt(bay);
                 buffer.writeOptional(opening.machineId(),
                     (buf, value) -> buf.writeResourceLocation(value));
                 buffer.writeVarInt(opening.slots());
+                State.STREAM_CODEC.encode(buffer, opening.state());
             });
+        return true;
+    }
+
+    /**
+     * Tanks and energy, resent only when they differ from what this player was last told — the same
+     * shape as {@link WorkbayMenu}'s snapshot, and for the same reason: an idle machine costs one
+     * comparison a tick and no bandwidth at all.
+     *
+     * <p>No cooldown. A tank is the one thing on this screen that moves while the player watches,
+     * and the state is three ints and a fluid; the comparison is what makes it free, not a timer.
+     */
+    @Override
+    public void broadcastChanges() {
+        super.broadcastChanges();
+        if (!(viewer instanceof ServerPlayer serverPlayer) || !(machine instanceof Live live)) {
+            return;
+        }
+        state = live.read();
+        if (!state.sameAs(sent)) {
+            sent = state;
+            PacketDistributor.sendToPlayer(serverPlayer, new BayViewPacket(containerId, state));
+        }
+    }
+
+    /**
+     * A bucket (or any fluid container) clicked onto the gauges, in whichever direction makes sense.
+     *
+     * <p>The cursor rather than the hand: this is a container screen, and the stack the player is
+     * holding is the one on the cursor. Which way it goes is not a mode the player has to set — a
+     * container with fluid in it fills the machine, an empty one takes from it, which is the same
+     * rule as right-clicking a tank in the world.
+     *
+     * <p><b>The face is chosen by simulating, never by asking.</b> Every Mekanism machine's null
+     * side hands out a read-only handler that reports its tanks correctly and then swallows the
+     * fill ({@code ProxyHandler: readOnly = side == null}), so a screen that binds to the first
+     * handler it finds shows the tank, accepts the click and moves nothing. Reading is fine on that
+     * side and writing is not, so the two resolve differently.
+     */
+    @Override
+    public boolean clickMenuButton(Player who, int id) {
+        if (id != FLUID_BUTTON || !(machine instanceof Live live) || !stillValid(who)) {
+            return false;
+        }
+        ItemStack cursor = getCarried();
+        if (cursor.isEmpty()) {
+            return false;
+        }
+        FluidStack offered = FluidUtil.getFluidContained(cursor).orElse(FluidStack.EMPTY);
+        IFluidHandler tanks = offered.isEmpty()
+            ? live.reach(Capabilities.FluidHandler.BLOCK,
+                handler -> !handler.drain(Integer.MAX_VALUE, IFluidHandler.FluidAction.SIMULATE)
+                    .isEmpty())
+            : live.reach(Capabilities.FluidHandler.BLOCK,
+                handler -> handler.fill(offered, IFluidHandler.FluidAction.SIMULATE) > 0);
+        if (tanks == null) {
+            return false;
+        }
+        // FluidUtil owns the awkward half of this — a stack of three buckets, a container that
+        // becomes a different item when emptied, a player with no room for the result — and it
+        // simulates before it commits. Reimplementing it is how a bucket gets duplicated.
+        var inventory = new PlayerMainInvWrapper(who.getInventory());
+        var result = offered.isEmpty()
+            ? FluidUtil.tryFillContainerAndStow(cursor, tanks, inventory, Integer.MAX_VALUE, who, true)
+            : FluidUtil.tryEmptyContainerAndStow(cursor, tanks, inventory, Integer.MAX_VALUE, who, true);
+        if (!result.isSuccess()) {
+            return false;
+        }
+        setCarried(result.getResult());
         return true;
     }
 
@@ -324,7 +551,8 @@ public class BayViewMenu extends AbstractContainerMenu {
      * <p>SPEC.md §9's rule against passing a null side to a foreign handler is a <em>bus</em> rule:
      * a read-only null handler makes a bus report RUNNING while moving nothing, which is the silent
      * failure that rule exists to prevent. Here the handler simply refuses the click and the player
-     * sees it refuse. OPEN_ISSUES #29 tracks proving that against real Mekanism.
+     * sees it refuse. Writes are different, and resolve by simulating — see
+     * {@link #clickMenuButton} and {@link Live#reach}.
      */
     static final class Live implements IItemHandlerModifiable {
         private final ServerLevel level;
@@ -344,21 +572,56 @@ public class BayViewMenu extends AbstractContainerMenu {
 
         @Nullable
         IItemHandler now() {
+            return reach(Capabilities.ItemHandler.BLOCK, handler -> true);
+        }
+
+        /**
+         * Any capability on the hosted machine: the null side first, then the six faces, and the
+         * first one {@code accepts} agrees to.
+         *
+         * <p>The predicate is the whole difference between a read and a write. A read passes
+         * {@code handler -> true} and gets the null side, which is what shows a chest all its slots
+         * and a machine all its tanks. A write passes a <em>simulation</em> of the write it is
+         * about to make, so a handler that reports everything correctly and then silently declines
+         * — every Mekanism machine's null side — is skipped in favour of a face that does not.
+         */
+        @Nullable
+        <T> T reach(BlockCapability<T, @Nullable Direction> capability, Predicate<T> accepts) {
             if (!level.isLoaded(pos)) {
                 return null;
             }
-            IItemHandler handler =
-                level.getCapability(Capabilities.ItemHandler.BLOCK, pos, null);
-            if (handler != null) {
+            T handler = level.getCapability(capability, pos, null);
+            if (handler != null && accepts.test(handler)) {
                 return handler;
             }
             for (Direction side : Direction.values()) {
-                handler = level.getCapability(Capabilities.ItemHandler.BLOCK, pos, side);
-                if (handler != null) {
+                handler = level.getCapability(capability, pos, side);
+                if (handler != null && accepts.test(handler)) {
                     return handler;
                 }
             }
             return null;
+        }
+
+        /**
+         * The tanks and the energy buffer, read fresh. A machine that is gone reads as nothing at
+         * all rather than as the last thing it said, which is what makes an ejected machine's
+         * gauges go empty instead of lying.
+         */
+        State read() {
+            List<Tank> tanks = new ArrayList<>();
+            IFluidHandler fluids =
+                reach(Capabilities.FluidHandler.BLOCK, handler -> handler.getTanks() > 0);
+            if (fluids != null) {
+                for (int tank = 0; tank < Math.min(fluids.getTanks(), MAX_TANKS); tank++) {
+                    tanks.add(new Tank(fluids.getFluidInTank(tank).copy(),
+                        fluids.getTankCapacity(tank)));
+                }
+            }
+            IEnergyStorage energy =
+                reach(Capabilities.EnergyStorage.BLOCK, handler -> handler.getMaxEnergyStored() > 0);
+            return new State(List.copyOf(tanks), energy == null ? 0 : energy.getEnergyStored(),
+                energy == null ? 0 : energy.getMaxEnergyStored());
         }
 
         /** The live handler only if it still has this slot; null is "there is nothing to write to". */
