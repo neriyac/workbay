@@ -28,6 +28,8 @@ import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.items.IItemHandler;
 import java.util.Optional;
 import net.neoforged.testframework.DynamicTest;
 import net.neoforged.testframework.annotation.ForEachTest;
@@ -879,6 +881,78 @@ public class BusTests {
 
             tearDown(helper, workbayPos);
             helper.succeed();
+        });
+    }
+
+    /**
+     * OPEN_ISSUES #30, and the same fault as the energy bus: <b>a face that reports slots and
+     * refuses every insert wins the bind</b>, and the link then moves nothing forever while reading
+     * IDLE.
+     *
+     * <p>The target is a plain furnace, which has exactly that face. {@code getSlotsForFace(DOWN)}
+     * is the output slot, so the down face's handler has one slot and {@code canPlaceItem} says no
+     * to all of it — and {@code DOWN} is the first entry in {@code Direction#values}, so a bind on
+     * {@code getSlots() &gt; 0} takes it and stops looking. Every other item test in this file
+     * points at a chest or a barrel, whose six faces all accept, which is exactly the blind spot
+     * that let the energy bug live a whole phase.
+     *
+     * <p>No Mekanism needed to say it: an output-only face is an output-only face. The two
+     * assertions before the sequence are the positive control — if a future furnace accepts through
+     * its bottom, this test says so instead of passing vacuously.
+     */
+    @GameTest(timeoutTicks = 900)
+    @TestHolder(description = "A link skips a face that reports slots and refuses every insert.")
+    public static void aLinkSkipsAnOutputOnlyFaceInsteadOfBindingToIt(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos targetPos = helper.absolutePos(new BlockPos(4, 1, 4));
+
+            level.setBlock(targetPos, Blocks.FURNACE.defaultBlockState(), Block.UPDATE_ALL);
+
+            // The positive control. Both of these have to hold or the test is not testing anything:
+            // the down face must offer a handler with slots (so the old predicate binds it) and it
+            // must refuse the very item the link is about to carry.
+            IItemHandler down = level.getCapability(Capabilities.ItemHandler.BLOCK, targetPos,
+                Direction.DOWN);
+            if (down == null || down.getSlots() <= 0) {
+                helper.fail("the furnace's down face has no item handler with slots, so it is no "
+                    + "longer the decoy this test is about");
+            }
+            for (int slot = 0; slot < down.getSlots(); slot++) {
+                if (down.insertItem(slot, new ItemStack(Items.IRON_INGOT, 1), true).isEmpty()) {
+                    helper.fail("the furnace's down face accepted iron in slot " + slot
+                        + ", so it is not an output-only face and this test proves nothing");
+                }
+            }
+
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.CHEST));
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+            if (!(backshop.getBlockEntity(machinePos) instanceof Container hosted)) {
+                helper.fail("the bay does not hold a container after racking a chest");
+                return;
+            }
+            hosted.setItem(0, new ItemStack(Items.IRON_INGOT, 16));
+
+            BusConfig link = connect(helper, workbay, targetPos.above(), Direction.DOWN, player);
+            workbay.addBus(link.withRate(8).withSpeed(10));
+
+            helper.startSequence()
+                .thenWaitUntil(() -> {
+                    if (countIn(level, targetPos, Items.IRON_INGOT) < 16) {
+                        throw new GameTestAssertException("the link has moved "
+                            + countIn(level, targetPos, Items.IRON_INGOT) + " of 16 iron into the "
+                            + "furnace and reads " + workbay.busStatus(link.id())
+                            + "; it bound the output-only down face and is moving nothing");
+                    }
+                })
+                .thenExecute(() -> tearDown(helper, workbayPos))
+                .thenSucceed();
         });
     }
 

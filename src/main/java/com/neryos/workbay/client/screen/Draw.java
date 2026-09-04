@@ -132,23 +132,44 @@ public final class Draw {
     }
 
     /**
-     * A tank gauge: the same bar, filled with the fluid's own still texture.
+     * A vertical gauge: a tall, narrow well filled from the bottom.
      *
-     * <p>Not {@link #bar} tinted with {@code getTintColor}. Water's tint is white — the blue is in
-     * the texture — so a tinted bar draws every ordinary fluid as a white smear and says nothing
-     * about which one it is. The texture is what a player recognises.
-     *
-     * <p>Tiled at its native width rather than stretched: one {@code blit} across ninety pixels
-     * turns a 16px still frame into a smear, which is the same failure as the tint by another route.
+     * <p>Vertical because that is what a buffer looks like everywhere else in the genre, and a
+     * player reads "half full" off a tall column without reading anything. A ten-pixel horizontal
+     * strip with a number beside it reads as a progress bar at best and as nothing at worst - which
+     * is what ours did.
      */
-    public static void fluidBar(GuiGraphics g, int x, int y, int w, int h,
+    public static void gauge(GuiGraphics g, int x, int y, int w, int h, int value, int max,
+        int argb) {
+        slot(g, x, y, w, h);
+        g.fill(x + 1, y + 1, x + w - 1, y + h - 1, (argb & 0x00FFFFFF) | 0x33000000);
+        if (max <= 0 || value <= 0) {
+            return;
+        }
+        int filled = Math.max(1, (int) ((long) (h - 2) * Math.min(value, max) / max));
+        g.fill(x + 1, y + h - 1 - filled, x + w - 1, y + h - 1, argb);
+    }
+
+    /**
+     * The same gauge, filled with the fluid's own still texture. EnderIO's
+     * {@code FluidStackWidget}, which is public domain and does exactly this.
+     *
+     * <p>Not {@link #gauge} tinted with {@code getTintColor}. Water's tint is white - the blue is
+     * in the texture - so a tinted column draws every ordinary fluid as a white smear and says
+     * nothing about which one it is. The texture is what a player recognises.
+     *
+     * <p>Tiled upwards at the sprite's native 16 pixels rather than stretched to fit, and clipped
+     * to the fill line, so a gauge that is a third full shows a third of a real fluid rather than a
+     * whole one squashed.
+     */
+    public static void fluidGauge(GuiGraphics g, int x, int y, int w, int h,
         net.neoforged.neoforge.fluids.FluidStack fluid, int capacity) {
         slot(g, x, y, w, h);
         if (fluid.isEmpty() || capacity <= 0) {
             return;
         }
         int filled = Math.max(1,
-            (int) ((long) (w - 2) * Math.min(fluid.getAmount(), capacity) / capacity));
+            (int) ((long) (h - 2) * Math.min(fluid.getAmount(), capacity) / capacity));
         var extensions = net.neoforged.neoforge.client.extensions.common.IClientFluidTypeExtensions
             .of(fluid.getFluid());
         var sprite = Minecraft.getInstance()
@@ -157,9 +178,10 @@ public final class Draw {
         int tint = extensions.getTintColor(fluid);
         g.setColor((tint >> 16 & 0xFF) / 255.0F, (tint >> 8 & 0xFF) / 255.0F,
             (tint & 0xFF) / 255.0F, 1.0F);
-        g.enableScissor(x + 1, y + 1, x + 1 + filled, y + h - 1);
-        for (int px = 0; px < filled; px += 16) {
-            g.blit(x + 1 + px, y + 1, 0, 16, h - 2, sprite);
+        int bottom = y + h - 1;
+        g.enableScissor(x + 1, bottom - filled, x + w - 1, bottom);
+        for (int up = 0; up < filled; up += 16) {
+            g.blit(x + 1, bottom - up - 16, 0, 16, 16, sprite);
         }
         g.disableScissor();
         g.setColor(1.0F, 1.0F, 1.0F, 1.0F);

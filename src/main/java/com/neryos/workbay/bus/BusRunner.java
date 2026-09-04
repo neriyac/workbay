@@ -229,10 +229,18 @@ public class BusRunner {
         java.util.Set<Direction> sourceFaces = insert ? faces : EVERY_FACE;
         java.util.Set<Direction> sinkFaces = insert ? EVERY_FACE : faces;
 
-        IItemHandler to = sink.resolve(h -> h.getSlots() > 0, sinkFaces);
-        if (to == null) {
-            return insert ? BusStatus.TARGET_NO_PORT : BusStatus.MACHINE_NO_PORT;
-        }
+        // The source first, and the destination bound on inserting what the source actually
+        // offered, simulated. Not the other way round, and not on `getSlots() > 0`: a face that
+        // reports slots and refuses every insert - a furnace's bottom, a Mekanism machine's
+        // output-only side - wins that bind, and BusEndpoint then keeps it, because the same
+        // predicate is what re-confirms the bound face on every later step. The link moves nothing
+        // forever and reads IDLE while doing it. Measured, at rate 8 into a furnace: zero of
+        // sixteen iron.
+        //
+        // Ordering is the whole fix. There is nothing to simulate an insert *of* until the source
+        // has been asked what it is offering, which is why the energy bus's one-line predicate swap
+        // did not port over. SPEC.md §9, and the third time this fault has been found -
+        // aLinkSkipsAnOutputOnlyFaceInsteadOfBindingToIt is the guard.
         java.util.function.Predicate<net.minecraft.world.item.ItemStack> allowed = allowed(bus);
         IItemHandler from = source.resolve(h -> hasAnything(h, allowed), sourceFaces);
         if (from == null) {
@@ -242,10 +250,20 @@ public class BusRunner {
             return anyHandler ? BusStatus.IDLE
                 : insert ? BusStatus.MACHINE_NO_PORT : BusStatus.TARGET_NO_PORT;
         }
+        int budget = bus.rate();
+        IItemHandler to = sink.resolve(h -> BusTransfer.moveItems(from, h, budget, allowed, true) > 0,
+            sinkFaces);
+        if (to == null) {
+            // A destination that is merely full is resting, not unreachable - the same distinction
+            // the energy path draws, drawn here for the same reason.
+            boolean anyHandler = sink.resolve(h -> h.getSlots() > 0, sinkFaces) != null;
+            return anyHandler ? BusStatus.IDLE
+                : insert ? BusStatus.TARGET_NO_PORT : BusStatus.MACHINE_NO_PORT;
+        }
         // The Assay's cut comes out of the source and out of this step's budget, so the link moves
         // less rather than the destination being short-changed after the fact. SPEC.md §3.
         int taxed = skim(record, from, bus, allowed);
-        int moved = BusTransfer.moveItems(from, to, bus.rate() - taxed, allowed);
+        int moved = BusTransfer.moveItems(from, to, budget - taxed, allowed);
         return moved + taxed > 0 ? BusStatus.RUNNING : BusStatus.IDLE;
     }
 

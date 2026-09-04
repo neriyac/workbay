@@ -28,18 +28,9 @@ public class BayViewScreen extends AbstractContainerScreen<BayViewMenu> {
 
     private static final int WIDTH = 176;
 
-    /**
-     * The bar, and the figures right-aligned in what is left of the panel's width.
-     *
-     * <p>Ninety for the figures, and the bar takes what is left rather than the other way round.
-     * The widest thing this line can ever say is a full Mekanism cube — {@code 9999.9k / 9999.9k},
-     * ninety pixels — and a bar that is a few pixels shorter is a bar, while a figure that is a few
-     * pixels short is {@code 1600.0k / 16...}. The units live in the tooltip for the same reason:
-     * they cost fourteen more pixels than the line has, and the amber fill and the fluid's own
-     * texture already say which of the two a row is.
-     */
-    private static final int FIGURES_W = 90;
-    private static final int GAUGE_W = WIDTH - 16 - FIGURES_W - 4;
+    /** Where the two lines of text beside a gauge start, and how much room they get. */
+    private static final int LABEL_X = 8 + BayViewMenu.GAUGE_W + 6;
+    private static final int LABEL_W = WIDTH - LABEL_X - 8;
 
     public BayViewScreen(BayViewMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
@@ -87,28 +78,45 @@ public class BayViewScreen extends AbstractContainerScreen<BayViewMenu> {
             topPos + menu.limitsY(), imageWidth - 16, Draw.TEXT_FAINT);
     }
 
-    /** The tanks, then energy. One row each, in the order the layout reserved room for. */
+    /**
+     * The tanks, then energy. One row each: the gauge, then what it holds and how much.
+     *
+     * <p><b>The name is drawn, not left to the tooltip.</b> A blue column is "some liquid" until
+     * something says whether it is water or the thing that ruins the recipe, and the player who
+     * needs to know that is the one who has not thought to hover anything - the same argument
+     * SPEC.md §5 makes for the limits line.
+     */
     private void gauges(GuiGraphics g) {
         BayViewMenu.State state = menu.state();
         int row = 0;
         for (BayViewMenu.Tank tank : state.tanks()) {
             int y = gaugeY(row++);
-            Draw.fluidBar(g, leftPos + 8, y, GAUGE_W, BayViewMenu.GAUGE_H, tank.contents(),
-                tank.capacity());
-            Draw.textRight(g, font, figures(tank.contents().getAmount(), tank.capacity()),
-                leftPos + imageWidth - 8, y + 1, FIGURES_W, Draw.TEXT_DIM);
+            Draw.fluidGauge(g, leftPos + 8, y, BayViewMenu.GAUGE_W, BayViewMenu.GAUGE_H,
+                tank.contents(), tank.capacity());
+            label(g, y, tankName(tank).getString(),
+                WorkbayScreen.gui("bayview.tank", Draw.compact(tank.contents().getAmount()),
+                    Draw.compact(tank.capacity())).getString());
         }
         if (state.energyCapacity() > 0) {
             int y = gaugeY(row);
-            Draw.bar(g, leftPos + 8, y, GAUGE_W, BayViewMenu.GAUGE_H, state.energy(),
+            Draw.gauge(g, leftPos + 8, y, BayViewMenu.GAUGE_W, BayViewMenu.GAUGE_H, state.energy(),
                 state.energyCapacity(), Draw.AMBER);
-            Draw.textRight(g, font, figures(state.energy(), state.energyCapacity()),
-                leftPos + imageWidth - 8, y + 1, FIGURES_W, Draw.TEXT_DIM);
+            label(g, y, WorkbayScreen.gui("bayview.energy").getString(),
+                WorkbayScreen.gui("power", Draw.compact(state.energy()),
+                    Draw.compact(state.energyCapacity())).getString());
         }
     }
 
-    private static String figures(int value, int capacity) {
-        return Draw.compact(value) + " / " + Draw.compact(capacity);
+    /** What a gauge is, then how full it is. The exact figures stay in the tooltip. */
+    private void label(GuiGraphics g, int y, String what, String figures) {
+        Draw.text(g, font, what, leftPos + LABEL_X, y + 3, LABEL_W, Draw.TEXT);
+        Draw.text(g, font, figures, leftPos + LABEL_X, y + 14, LABEL_W, Draw.TEXT_DIM);
+    }
+
+    private static Component tankName(BayViewMenu.Tank tank) {
+        return tank.contents().isEmpty()
+            ? WorkbayScreen.gui("bayview.tank.empty")
+            : tank.contents().getHoverName();
     }
 
     private int gaugeY(int row) {
@@ -178,10 +186,7 @@ public class BayViewScreen extends AbstractContainerScreen<BayViewMenu> {
                 WorkbayScreen.gui("bayview.energy.tip"));
         }
         BayViewMenu.Tank tank = state.tanks().get(row);
-        Component name = tank.contents().isEmpty()
-            ? WorkbayScreen.gui("bayview.tank.empty")
-            : tank.contents().getHoverName();
-        return List.of(name,
+        return List.of(tankName(tank),
             WorkbayScreen.gui("bayview.tank", Draw.exact(tank.contents().getAmount()),
                 Draw.exact(tank.capacity())),
             WorkbayScreen.gui("bayview.tank.tip"));

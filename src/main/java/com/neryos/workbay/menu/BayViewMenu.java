@@ -85,9 +85,14 @@ public class BayViewMenu extends AbstractContainerMenu {
     private static final int SLOT_SIZE = 18;
     public static final int COLUMNS = 9;
 
-    /** One gauge row: a bar and the figures beside it, on a pitch that leaves them a hairline apart. */
-    public static final int GAUGE_H = 10;
-    public static final int GAUGE_PITCH = 12;
+    /**
+     * One gauge row: a tall narrow gauge on the left, and two lines of text beside it - what the
+     * tank holds, and how much. Tall because that is what a tank looks like in every machine mod
+     * there is; twenty-six pixels because two lines of text is what the row has to carry.
+     */
+    public static final int GAUGE_W = 14;
+    public static final int GAUGE_H = 26;
+    public static final int GAUGE_PITCH = 28;
 
     /** Where the machine grid starts, and where the player's own inventory starts under it. */
     public static final int GRID_X = 8;

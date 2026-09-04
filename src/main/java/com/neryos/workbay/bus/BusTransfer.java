@@ -34,6 +34,17 @@ public final class BusTransfer {
      */
     public static int moveItems(IItemHandler from, IItemHandler to, int budget,
         java.util.function.Predicate<ItemStack> allowed) {
+        return moveItems(from, to, budget, allowed, false);
+    }
+
+    /**
+     * @param simulate ask what this move would carry and commit nothing. This is what a bus binds
+     *                 its destination on: a handler's slot count and its own {@code isItemValid}
+     *                 are both things it <em>says</em>, and both are wrong on shipping mods
+     *                 (SPEC.md §9). The same call the commit will make cannot lie.
+     */
+    public static int moveItems(IItemHandler from, IItemHandler to, int budget,
+        java.util.function.Predicate<ItemStack> allowed, boolean simulate) {
         if (budget <= 0) {
             return 0;
         }
@@ -52,6 +63,9 @@ public final class BusTransfer {
             int accepted = wanted - refused.getCount();
             if (accepted <= 0) {
                 continue;
+            }
+            if (simulate) {
+                return accepted;
             }
 
             ItemStack taken = from.extractItem(slot, accepted, false);
@@ -98,7 +112,10 @@ public final class BusTransfer {
      * is the same shape: ask what would move, then move exactly that.
      */
     public static int moveEnergy(IEnergyStorage from, IEnergyStorage to, int budget) {
-        if (budget <= 0 || !from.canExtract() || !to.canReceive()) {
+        // No canExtract/canReceive gate. They are what a handler *says*, Mekanism's FE wrapper
+        // hardcodes both to true on every face, and the simulation two lines down is the same call
+        // the commit makes - so the flags could only ever turn a working move away. SPEC.md §9.
+        if (budget <= 0) {
             return 0;
         }
         int available = from.extractEnergy(budget, true);
