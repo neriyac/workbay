@@ -399,9 +399,10 @@ class BaysPage extends WorkbayPage {
         // Enter bay. The other half of §5, and the half a player asks for first: Bay View can only
         // show what a capability exposes, and a machine's recipe mode, side config and upgrade
         // slots are exposed by nothing. Standing next to the block is the only way to its own
-        // screen - opening that screen remotely disconnects the client. Enabled on an empty bay
-        // too, because looking at one is a reasonable thing to want.
-        actionButton(g, mouseX, mouseY, x(194), WBIcons.ENTER, true, false,
+        // screen - opening that screen remotely disconnects the client - so this opens that screen
+        // by way of the bay. Disabled on an empty bay: nobody stays in the Backshop without a
+        // screen open, and an empty bay has none to open.
+        actionButton(g, mouseX, mouseY, x(194), WBIcons.ENTER, !empty, false,
             () -> screen.send(WorkbayAction.ENTER_BAY),
             WorkbayScreen.gui("button.enter"), WorkbayScreen.gui("button.enter.tip"));
     }

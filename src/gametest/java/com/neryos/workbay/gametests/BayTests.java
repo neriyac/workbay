@@ -60,7 +60,8 @@ public class BayTests {
                 }
             }
 
-            // The shell has to be closed, or a machine's output leaves the bay.
+            // The shell has to be closed, or a machine's output leaves the bay - and bedrock, so
+            // that nothing a survival player carries can open it from the inside.
             BlockPos origin = BayGeometry.shellOrigin(SHAPE_COLUMN, 0);
             int walls = 0;
             for (int x = 0; x < BayGeometry.SHELL; x++) {
@@ -73,8 +74,9 @@ public class BayTests {
                             continue;
                         }
                         BlockPos pos = origin.offset(x, y, z);
-                        if (backshop.getBlockState(pos).isAir()) {
-                            helper.fail("the bay shell has a hole at " + pos);
+                        if (!backshop.getBlockState(pos).is(Blocks.BEDROCK)) {
+                            helper.fail("the bay shell at " + pos + " is "
+                                + backshop.getBlockState(pos).getBlock() + ", not bedrock");
                             return;
                         }
                         walls++;

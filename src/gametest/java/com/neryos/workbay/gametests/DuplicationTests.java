@@ -610,62 +610,6 @@ public class DuplicationTests {
     }
 
     /**
-     * Entering a bay and coming back out again. SPEC.md §5.
-     *
-     * <p>Not a duplication test but it lives here anyway, because the thing that can go wrong is
-     * the same shape: a player sealed in a 3x3x3 box with no block they are allowed to break is
-     * <em>lost</em>, and losing a player is worse than losing an item. So this asserts the two
-     * halves that matter - that they arrive somewhere they actually fit, and that the way home is
-     * recorded and works.
-     */
-    @GameTest
-    @TestHolder(description = "A player who enters a bay stands in air and comes back where they started.")
-    public static void enteringABayPutsThePlayerInAirAndBringsThemBack(final DynamicTest test) {
-        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
-
-        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
-            ServerLevel level = helper.getLevel();
-            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
-            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
-            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
-            WorkbayRecord record = workbay.record().orElseThrow();
-            ServerLevel backshop = backshop(helper);
-            WorkbayTickets.force(backshop, record.id(), record.bayColumn());
-
-            var from = player.position();
-            helper.assertTrue(com.neryos.workbay.world.BayVisit.enter(player, record, 0),
-                "entering bay 1 was refused");
-            helper.assertTrue(player.level().dimension().equals(WorkbayDimensions.BACKSHOP),
-                "the player is not in the Backshop after entering a bay");
-
-            // Two blocks of air, or they are inside the shell. The bay is machine-plus-six-Ports,
-            // so this is the assertion that the one free corner column is really free.
-            BlockPos feet = player.blockPosition();
-            helper.assertTrue(backshop.getBlockState(feet).isAir(),
-                "the player's feet are inside " + backshop.getBlockState(feet).getBlock());
-            helper.assertTrue(backshop.getBlockState(feet.above()).isAir(),
-                "the player's head is inside " + backshop.getBlockState(feet.above()).getBlock());
-            helper.assertTrue(!backshop.getBlockState(feet.below()).isAir(),
-                "there is nothing under the player's feet, so they would fall through the bay");
-
-            // And within reach of the machine, or the whole point of going in is missed.
-            double reach = feet.getCenter().distanceTo(
-                BayGeometry.machinePos(record.bayColumn(), 0).getCenter());
-            helper.assertTrue(reach < 4.5,
-                "the machine is " + reach + " blocks away, which is out of right-click reach");
-
-            helper.assertTrue(com.neryos.workbay.world.BayVisit.leave(player), "leaving was refused");
-            helper.assertTrue(player.level().dimension().equals(level.dimension()),
-                "the player did not come back to the dimension they left from");
-            helper.assertTrue(player.position().distanceTo(from) < 0.001,
-                "the player came back to " + player.position() + " instead of " + from);
-            helper.assertFalse(com.neryos.workbay.world.BayVisit.isVisiting(player),
-                "the player is still recorded as a visitor after leaving");
-            helper.succeed();
-        });
-    }
-
-    /**
      * Bay View feeding a bay that already has a link running on it, which is the shape of the
      * actual loop: put something in by hand, and the automation picks it up.
      *

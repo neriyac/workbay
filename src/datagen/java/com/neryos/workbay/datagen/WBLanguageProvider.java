@@ -354,13 +354,13 @@ public class WBLanguageProvider extends LanguageProvider {
         // Entering the bay. SPEC.md §5: the machine's own screen is reachable only by standing in
         // front of it, so this is the one control that answers "how do I upgrade the thing".
         add(WorkbayLang.guiKey("button.enter"), "Enter bay");
-        add(WorkbayLang.guiKey("button.enter.tip"), "Steps you into the bay. Right-click a Port "
-            + "there and the machine's own screen opens - recipe modes, side configuration and "
-            + "upgrade slots, drawn by the mod that made it. Hold sneak to come back.");
-        add(WorkbayLang.messageKey("bay_entered"),
-            "Right-click a Port for the machine's own screen. Hold sneak to come back.");
-        add(WorkbayLang.messageKey("bay_leaving"), "Leaving the bay...");
+        add(WorkbayLang.guiKey("button.enter.tip"), "Opens the machine's own screen - recipe "
+            + "modes, side configuration and upgrade slots, drawn by the mod that made it. "
+            + "Close it and you are back here.");
         add(WorkbayLang.messageKey("bay_enter_failed"), "That bay cannot be entered.");
+        add(WorkbayLang.messageKey("bay_no_screen"), "%s has no screen of its own.");
+        add(WorkbayLang.messageKey("bay_load_timeout"),
+            "The bay did not reach your client in time. Try again.");
         add(WorkbayLang.guiKey("levy"), "Levy %s");
         add(WorkbayLang.guiKey("levy.name"), "Levy banked: %s");
         add(WorkbayLang.guiKey("levy.batch"), "%s / %s to the next");

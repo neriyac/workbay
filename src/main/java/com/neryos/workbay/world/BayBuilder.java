@@ -21,11 +21,13 @@ public final class BayBuilder {
     private BayBuilder() {}
 
     /**
-     * Obsidian, because nobody ever sees it and it has to be the most boring block in the game:
-     * no gravity, no burning, no piston interaction, blast-proof, no block entity. SPEC.md §2 lists
-     * exactly three blocks for this mod and a wall material is not one of them, so it is vanilla.
+     * Bedrock: nothing a survival player carries gets through it, and it has no gravity, no
+     * burning, no piston interaction and no block entity. It is the layer <em>under</em> the
+     * rule that keeps a visitor in a bay ({@link BayVisit}: no screen open, no visit), not the
+     * rule itself. SPEC.md §2 lists exactly three blocks for this mod and a wall material is not
+     * one of them, so it is vanilla.
      */
-    private static final BlockState WALL = Blocks.OBSIDIAN.defaultBlockState();
+    private static final BlockState WALL = Blocks.BEDROCK.defaultBlockState();
 
     /**
      * Builds the bay if it is not there already, and returns where the machine goes.
