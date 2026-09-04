@@ -39,10 +39,44 @@ public final class BayBuilder {
         BlockPos machine = BayGeometry.machinePos(column, bay);
         if (backshop.getBlockState(BayGeometry.portPos(column, bay, Direction.UP))
             .is(WBBlocks.PORT.get())) {
+            reshell(backshop, column, bay);
             return machine;
         }
         build(backshop, column, bay);
         return machine;
+    }
+
+    /**
+     * Brings an older bay's walls up to the current material without touching anything inside it.
+     *
+     * <p>{@link #ensure} returns early once the Ports are there, which is right — a rebuild would
+     * replace the machine standing in the middle with air. But it also meant every bay built before
+     * the walls became bedrock kept its obsidian, in every save already played: a shell a survival
+     * player can break out of, backing a rule that says nobody is in the Backshop without a screen
+     * open. The shell is not the rule, but it is not decoration either.
+     *
+     * <p>Only the shell's 98 outer positions, and only the ones that are not already {@link #WALL},
+     * so nothing in the interior can be reached from here whatever it holds. One block state read
+     * in the common case: the walls are checked only when a corner is not bedrock.
+     */
+    private static void reshell(ServerLevel backshop, ChunkPos column, int bay) {
+        BlockPos origin = BayGeometry.shellOrigin(column, bay);
+        if (backshop.getBlockState(origin).is(WALL.getBlock())) {
+            return;
+        }
+        for (int x = 0; x < BayGeometry.SHELL; x++) {
+            for (int y = 0; y < BayGeometry.SHELL; y++) {
+                for (int z = 0; z < BayGeometry.SHELL; z++) {
+                    boolean interior = x > 0 && x < BayGeometry.SHELL - 1
+                        && y > 0 && y < BayGeometry.SHELL - 1
+                        && z > 0 && z < BayGeometry.SHELL - 1;
+                    if (interior) {
+                        continue;
+                    }
+                    backshop.setBlock(origin.offset(x, y, z), WALL, Block.UPDATE_CLIENTS);
+                }
+            }
+        }
     }
 
     private static void build(ServerLevel backshop, ChunkPos column, int bay) {

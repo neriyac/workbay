@@ -5,4 +5,5 @@ cd "$(dirname "$0")/.."
 git config core.hooksPath .githooks
 echo "core.hooksPath = .githooks"
 echo "pre-commit -> tools/check-docs.sh   (doc size caps)"
+echo "           -> tools/check-text.sh   (no string drawn without a width)"
 echo "pre-push   -> tools/verify.sh       (build + gametests + doc caps)"

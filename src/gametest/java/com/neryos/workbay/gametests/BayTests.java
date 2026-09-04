@@ -126,6 +126,89 @@ public class BayTests {
         });
     }
 
+    /**
+     * A bay built before the walls became bedrock still has obsidian in every save already played,
+     * because {@code ensure} returns early once the Ports are there. The upgrade has to happen
+     * without disturbing the machine standing in the middle -- which is the same constraint that
+     * made {@code ensure} return early in the first place, so both halves are asserted here.
+     */
+    @GameTest(timeoutTicks = 600)
+    @TestHolder(description = "A bay built with the old obsidian walls comes back unbreakable.")
+    public static void anOldBaysWallsAreBroughtUpToBedrock(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(1, 1, 1));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel backshop = helper.getLevel().getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            helper.assertNotNull(backshop, "getLevel(workbay:backshop) returned null");
+            ChunkPos column = new ChunkPos(3072, 128);
+            UUID owner = UUID.fromString("00000000-0000-0000-0000-00000000ba93");
+            WorkbayTickets.force(backshop, owner, column);
+
+            BlockPos machine = BayBuilder.ensure(backshop, column, 2);
+            backshop.setBlock(machine, Blocks.FURNACE.defaultBlockState(),
+                net.minecraft.world.level.block.Block.UPDATE_ALL);
+
+            // Put the bay back the way a pre-bedrock world holds it: obsidian shell, Ports intact.
+            BlockPos origin = BayGeometry.shellOrigin(column, 2);
+            for (int x = 0; x < BayGeometry.SHELL; x++) {
+                for (int y = 0; y < BayGeometry.SHELL; y++) {
+                    for (int z = 0; z < BayGeometry.SHELL; z++) {
+                        boolean interior = x > 0 && x < BayGeometry.SHELL - 1
+                            && y > 0 && y < BayGeometry.SHELL - 1
+                            && z > 0 && z < BayGeometry.SHELL - 1;
+                        if (!interior) {
+                            backshop.setBlock(origin.offset(x, y, z),
+                                Blocks.OBSIDIAN.defaultBlockState(),
+                                net.minecraft.world.level.block.Block.UPDATE_CLIENTS);
+                        }
+                    }
+                }
+            }
+            // The test must actually stage the old world, or it proves nothing.
+            helper.assertTrue(backshop.getBlockState(origin).is(Blocks.OBSIDIAN),
+                "the staged old bay is not obsidian, so this test cannot fail");
+
+            BayBuilder.ensure(backshop, column, 2);
+
+            for (int x = 0; x < BayGeometry.SHELL; x++) {
+                for (int y = 0; y < BayGeometry.SHELL; y++) {
+                    for (int z = 0; z < BayGeometry.SHELL; z++) {
+                        boolean interior = x > 0 && x < BayGeometry.SHELL - 1
+                            && y > 0 && y < BayGeometry.SHELL - 1
+                            && z > 0 && z < BayGeometry.SHELL - 1;
+                        if (interior) {
+                            continue;
+                        }
+                        BlockPos pos = origin.offset(x, y, z);
+                        if (!backshop.getBlockState(pos).is(Blocks.BEDROCK)) {
+                            helper.fail("the old bay's shell at " + pos + " is still "
+                                + backshop.getBlockState(pos).getBlock());
+                            return;
+                        }
+                    }
+                }
+            }
+            // And the machine standing in it is untouched: the whole reason ensure returns early.
+            if (!backshop.getBlockState(machine).is(Blocks.FURNACE)) {
+                helper.fail("bringing the walls up to bedrock replaced the hosted machine with "
+                    + backshop.getBlockState(machine));
+                return;
+            }
+            for (Direction face : Direction.values()) {
+                if (!backshop.getBlockState(BayGeometry.portPos(column, 2, face))
+                    .is(WBBlocks.PORT.get())) {
+                    helper.fail("the " + face + " Port did not survive the wall upgrade");
+                    return;
+                }
+            }
+
+            backshop.setBlock(machine, Blocks.AIR.defaultBlockState(),
+                net.minecraft.world.level.block.Block.UPDATE_ALL);
+            WorkbayTickets.release(backshop, owner, column);
+            helper.succeed();
+        });
+    }
+
     @GameTest
     @TestHolder(description = "Eight bays fit the dimension without their shells touching.")
     public static void eightBaysFitWithoutTouching(final DynamicTest test) {

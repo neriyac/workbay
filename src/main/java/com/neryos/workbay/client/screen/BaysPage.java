@@ -62,14 +62,29 @@ class BaysPage extends WorkbayPage {
     private final int rowY;
     private final int rows;
 
-    private static final int CUBE_CX = 266;
+    /**
+     * The faces column. 80 wide rather than 68, and everything in it derived from that: at 68 the
+     * empty-bay hint wrapped to four lines in a column three words wide, the three type buttons
+     * stopped two pixels short of the well above them, and the turn hint and the in/out key sat on
+     * hardcoded x's that matched neither. The column read unfinished next to the rest of the screen
+     * because it was the one part of it laid out by hand.
+     */
+    private static final int FACES_X = 232;
+    private static final int WELL_X = FACES_X;
+    private static final int WELL_W = 80;
+    private static final int WELL_Y = 76;
+    private static final int WELL_H = 62;
+    /** Three type buttons, filling the column exactly: 3 x 24 on a 28 pitch is the well's width. */
+    private static final int TYPE_W = 24;
+    private static final int TYPE_PITCH = 28;
+    private static final int CUBE_CX = WELL_X + WELL_W / 2;
     private static final int CUBE_CY = 106;
     private static final int CUBE_SIZE = 30;
-    private static final int FACES_X = 232;
-    private static final int WELL_X = 232;
-    private static final int WELL_Y = 76;
-    private static final int WELL_W = 68;
-    private static final int WELL_H = 62;
+
+    /** The Levy readout's column: from the machine row's left edge to the faces panel. */
+    private static final int LEVY_W = FACES_X - 4 - 50;
+    /** The skim readout, between the sort button and the Add button. */
+    private static final int SKIM_W = LIST_W - 46 - 40 - 124;
 
     /** Client-side view state: the list's filter, sort, scroll and which row's gear is open. */
     private enum Filter { THIS_BAY, ALL_BAYS, PROBLEMS }
@@ -177,9 +192,9 @@ class BaysPage extends WorkbayPage {
             .filter(bay -> bay.hosted().isPresent()).count();
 
         int textX = x(8);
-        g.drawString(font, snap.bays().isEmpty() ? "" : used + " / " + snap.bayCapacity() + " bays",
-            textX, y(31), Draw.TEXT_DIM, false);
-        g.drawString(font, snap.links().size() + " links", textX + 62, y(31), Draw.TEXT_DIM, false);
+        text(g, snap.bays().isEmpty() ? "" : used + " / " + snap.bayCapacity() + " bays",
+            textX, y(31), 58, Draw.TEXT_DIM);
+        text(g, snap.links().size() + " links", textX + 62, y(31), 46, Draw.TEXT_DIM);
 
         // The count and the list have to agree, and the list is filtered to one bay by default — so
         // the count is a control, not a label: clicking it shows exactly the rows it is counting.
@@ -189,8 +204,8 @@ class BaysPage extends WorkbayPage {
             : problems + " problem" + (problems == 1 ? "" : "s");
         boolean problemHover = problems > 0
             && screen.hovered(textX + 112, y(29), font.width(problemText) + 2, 12, mouseX, mouseY);
-        g.drawString(font, problemText, textX + 112, y(31),
-            problems == 0 ? Draw.TEXT_FAINT : problemHover ? Draw.TEXT : Draw.RED, false);
+        text(g, problemText, textX + 112, y(31), 68,
+            problems == 0 ? Draw.TEXT_FAINT : problemHover ? Draw.TEXT : Draw.RED);
         if (problems > 0) {
             screen.hit(textX + 112, y(29), font.width(problemText) + 2, 12, () -> {
                 filter = Filter.PROBLEMS;
@@ -206,8 +221,9 @@ class BaysPage extends WorkbayPage {
         String power = powered
             ? Draw.compact(snap.energy()) + " / " + Draw.compact(snap.energyCapacity())
             : WorkbayScreen.gui("power.none").getString();
-        g.drawString(font, power, x(246 - font.width(power)), y(31),
-            powered ? Draw.TEXT_DIM : Draw.TEXT_FAINT, false);
+        // 58, not 48: at 48 "0 / 100.0k" arrived as "0 / 100..." on the very first screen a
+        // player sees. The room between the problem count and the bar was there all along.
+        textRight(g, power, x(246), y(31), 58, powered ? Draw.TEXT_DIM : Draw.TEXT_FAINT);
         if (powered) {
             Draw.bar(g, x(250), y(29), 44, 9, snap.energy(), snap.energyCapacity(), Draw.AMBER);
             screen.hit(x(250), y(29), 44, 9, () -> { },
@@ -321,7 +337,7 @@ class BaysPage extends WorkbayPage {
         int room = FACES_X - 4 - 98;
         String shown = nameOf(bay, snap.selectedBay());
         if (!screen.renaming()) {
-            clip(g, shown, x(98), y(56), room, Draw.TEXT);
+            text(g, shown, x(98), y(56), room, Draw.TEXT);
         }
 
         if (bay.energyCapacity() > 0) {
@@ -331,7 +347,7 @@ class BaysPage extends WorkbayPage {
             String power = Draw.compact(bay.energy()) + " / " + Draw.compact(bay.energyCapacity());
             int barW = Math.max(20, FACES_X - 4 - font.width(power) - 6 - 98);
             Draw.bar(g, x(98), y(68), barW, 9, bay.energy(), bay.energyCapacity(), Draw.AMBER);
-            g.drawString(font, power, x(FACES_X - 4 - font.width(power)), y(69), Draw.TEXT_DIM, false);
+            textRight(g, power, x(FACES_X - 4), y(69), room - barW - 6, Draw.TEXT_DIM);
             screen.hit(x(98), y(68), barW, 9, () -> { },
                 WorkbayScreen.gui("power", Draw.exact(bay.energy()),
                     Draw.exact(bay.energyCapacity())),
@@ -339,8 +355,7 @@ class BaysPage extends WorkbayPage {
         } else if (!empty) {
             // A machine with no energy handler. The old placeholder was a bare dash floating
             // beside an empty bar, which read as a rendering fault rather than as a fact.
-            g.drawString(font, WorkbayScreen.gui("power.none").getString(), x(98), y(69),
-                Draw.TEXT_FAINT, false);
+            text(g, WorkbayScreen.gui("power.none"), x(98), y(69), room, Draw.TEXT_FAINT);
         }
 
         // The redstone mode shares this line with the status, right-aligned, and it is the short
@@ -348,11 +363,12 @@ class BaysPage extends WorkbayPage {
         // through the status text. The long form is the button's tooltip title.
         String mode = bay.redstone() == com.neryos.workbay.world.RedstoneMode.ALWAYS ? ""
             : WorkbayScreen.gui("redstone.short." + bay.redstone().getSerializedName()).getString();
+        int modeRoom = mode.isEmpty() ? 0 : Math.min(font.width(mode), room / 2);
         if (!mode.isEmpty()) {
-            g.drawString(font, mode, x(FACES_X - 4 - font.width(mode)), y(82), Draw.TEXT_DIM, false);
+            textRight(g, mode, x(FACES_X - 4), y(82), modeRoom, Draw.TEXT_DIM);
         }
-        int statusRoom = room - (mode.isEmpty() ? 0 : font.width(mode) + 6);
-        clip(g, statusLine(bay), x(98), y(82), statusRoom, statusColour(bay.state()));
+        int statusRoom = room - (mode.isEmpty() ? 0 : modeRoom + 6);
+        text(g, statusLine(bay), x(98), y(82), statusRoom, statusColour(bay.state()));
 
         // The button row at y=98, 20x20 on a 24px pitch. Bay View is the last of the six and is
         // real now: SPEC.md §4's rule is that a control whose screen is not built is hidden rather
@@ -423,16 +439,15 @@ class BaysPage extends WorkbayPage {
         boolean earning = skimming(snap);
 
         String value = WorkbayScreen.gui("levy", snap.levy()).getString();
-        g.drawString(font, value, x(50), y(124), earning ? Draw.AMBER : Draw.TEXT_DIM, false);
+        text(g, value, x(50), y(124), LEVY_W, earning ? Draw.AMBER : Draw.TEXT_DIM);
 
         Component state = !assay ? WorkbayScreen.gui("levy.no_assay")
             : snap.skimRate() == 0 ? WorkbayScreen.gui("levy.dial_off")
             : WorkbayScreen.gui("levy.batch", snap.skimmed(),
                 com.neryos.workbay.content.assay.AssayBlock.ITEMS_PER_LEVY);
-        g.drawString(font, state.getString(), x(50), y(136),
-            earning ? Draw.TEXT_DIM : Draw.TEXT_FAINT, false);
+        text(g, state, x(50), y(136), LEVY_W, earning ? Draw.TEXT_DIM : Draw.TEXT_FAINT);
 
-        int w = Math.max(font.width(value), font.width(state.getString())) + 4;
+        int w = Math.min(LEVY_W, Math.max(font.width(value), font.width(state.getString()))) + 4;
         screen.hit(x(48), y(122), w, 26, () -> { },
             WorkbayScreen.gui("levy.name", snap.levy()),
             WorkbayScreen.gui(earning ? "levy.tip" : assay ? "levy.dial_off.tip" : "levy.no_assay.tip"));
@@ -498,13 +513,13 @@ class BaysPage extends WorkbayPage {
         // face can take items in and send energy out without the picture contradicting itself.
         for (int i = 0; i < 3; i++) {
             BusConfig.Resource resource = BusConfig.Resource.values()[i];
-            int px = x(232 + i * 23);
+            int px = x(WELL_X + i * TYPE_PITCH);
             int py = y(52);
             boolean active = faceType == resource;
-            boolean hover = screen.hovered(px, py, 20, 18, mouseX, mouseY);
-            Draw.button(g, px, py, 20, 18, hover, active);
-            resourceIcon(g, resource, px + 4, py + 3, 0.75F);
-            screen.hit(px, py, 20, 18, () -> faceType = resource,
+            boolean hover = screen.hovered(px, py, TYPE_W, 18, mouseX, mouseY);
+            Draw.button(g, px, py, TYPE_W, 18, hover, active);
+            resourceIcon(g, resource, px + (TYPE_W - 12) / 2, py + 3, 0.75F);
+            screen.hit(px, py, TYPE_W, 18, () -> faceType = resource,
                 WorkbayScreen.gui("faces." + resource.getSerializedName()),
                 WorkbayScreen.gui("faces.tip"));
         }
@@ -520,12 +535,10 @@ class BaysPage extends WorkbayPage {
             PREVIEW.reset();
         }
         if (state == null) {
-            // Wrapped, because the well is 68 wide and this sentence is not.
-            var lines = screen.font().split(WorkbayScreen.gui("faces.empty"), WELL_W - 8);
-            for (int i = 0; i < lines.size(); i++) {
-                g.drawString(screen.font(), lines.get(i), x(WELL_X + 4), y(WELL_Y + 8 + i * 10),
-                    Draw.TEXT_FAINT, false);
-            }
+            // Wrapped, and started low enough that two lines sit in the middle of the well
+            // rather than pinned to its top edge with an empty half underneath.
+            wrapped(g, WorkbayScreen.gui("faces.empty"), x(WELL_X + 4), y(WELL_Y + 20),
+                WELL_W - 8, Draw.TEXT_FAINT);
         } else {
             // A face marker projects to wherever its face's centre lands on screen, which at a
             // steep enough drag angle is genuinely outside the well - the marker is correct, the
@@ -539,13 +552,17 @@ class BaysPage extends WorkbayPage {
             g.disableScissor();
         }
 
-        var font = screen.font();
-        g.drawString(font, WorkbayScreen.gui("faces.drag").getString(), x(WELL_X), y(WELL_Y + WELL_H + 2),
-            Draw.TEXT_FAINT, false);
-        g.fill(x(232), y(150), x(238), y(156), Draw.GREEN);
-        g.drawString(font, "in", x(240), y(150), Draw.TEXT_DIM, false);
-        g.fill(x(266), y(150), x(272), y(156), Draw.BLUE);
-        g.drawString(font, "out", x(274), y(150), Draw.TEXT_DIM, false);
+        // Under the well: the turn hint, then the in/out key, both inside the well's own width and
+        // both starting from its own edges. They used to sit on hardcoded x's that were neither.
+        textCentre(g, WorkbayScreen.gui("faces.drag").getString(), x(WELL_X + WELL_W / 2),
+            y(WELL_Y + WELL_H + 4), WELL_W, Draw.TEXT_FAINT);
+
+        int keyY = y(WELL_Y + WELL_H + 18);
+        int half = WELL_W / 2;
+        g.fill(x(WELL_X), keyY + 1, x(WELL_X + 6), keyY + 7, Draw.GREEN);
+        text(g, "in", x(WELL_X + 10), keyY, half - 12, Draw.TEXT_DIM);
+        g.fill(x(WELL_X + half), keyY + 1, x(WELL_X + half + 6), keyY + 7, Draw.BLUE);
+        text(g, "out", x(WELL_X + half + 10), keyY, half - 12, Draw.TEXT_DIM);
     }
 
     private boolean inWell(double mx, double my) {
@@ -606,8 +623,8 @@ class BaysPage extends WorkbayPage {
         int addX = pairX - 40;
 
         if (adding) {
-            g.drawString(font, WorkbayScreen.gui("links.adding", snap.selectedBay() + 1).getString(),
-                x(LIST_X + 4), y(linksY + 4), Draw.TEXT, false);
+            text(g, WorkbayScreen.gui("links.adding", snap.selectedBay() + 1),
+                x(LIST_X + 4), y(linksY + 4), 48, Draw.TEXT);
             // Laid out left to right with the widths written down, because the first version put
             // the Bays tab and Back on top of each other: heading to LIST_X+52, two 44-wide tabs,
             // then Back, then the confirm where Pair sits on the normal list.
@@ -619,8 +636,8 @@ class BaysPage extends WorkbayPage {
             int picked = pickedLinks.size() + pickedBays.size();
             boolean confirmHover = screen.hovered(pairX, y(linksY), 46, 18, mouseX, mouseY);
             Draw.button(g, pairX, y(linksY), 46, 18, confirmHover, false);
-            g.drawString(font, picked == 0 ? "Add" : "Add " + picked, pairX + 8, y(linksY + 5),
-                picked == 0 ? Draw.TEXT_FAINT : Draw.TEXT, false);
+            textCentre(g, picked == 0 ? "Add" : "Add " + picked, pairX + 23, y(linksY + 5), 42,
+                picked == 0 ? Draw.TEXT_FAINT : Draw.TEXT);
             screen.hit(pairX, y(linksY), 46, 18, this::applyPicked,
                 WorkbayScreen.gui("links.add.apply", picked),
                 WorkbayScreen.gui("links.add.apply.tip"));
@@ -630,8 +647,7 @@ class BaysPage extends WorkbayPage {
             int backX = x(LIST_X + 160);
             boolean backHover = screen.hovered(backX, y(linksY), 40, 18, mouseX, mouseY);
             Draw.button(g, backX, y(linksY), 40, 18, backHover, false);
-            g.drawString(font, "Back", backX + 20 - font.width("Back") / 2, y(linksY + 5),
-                Draw.TEXT, false);
+            textCentre(g, "Back", backX + 20, y(linksY + 5), 36, Draw.TEXT);
             screen.hit(backX, y(linksY), 40, 18, this::closePicker,
                 WorkbayScreen.gui("links.add.close"), WorkbayScreen.gui("links.add.tip"));
 
@@ -641,18 +657,17 @@ class BaysPage extends WorkbayPage {
 
         // Whose links these are. The list is per bay, so a heading that does not say which bay is
         // the one thing that can make the whole screen lie to you.
-        g.drawString(font,
-            filter == Filter.THIS_BAY ? "LINKS · BAY " + (snap.selectedBay() + 1) : "LINKS",
-            x(LIST_X + 4), y(linksY + 4), Draw.TEXT, false);
+        text(g, filter == Filter.THIS_BAY ? "LINKS · BAY " + (snap.selectedBay() + 1) : "LINKS",
+            x(LIST_X + 4), y(linksY + 4), 70, Draw.TEXT);
 
         // Clear of the heading, which is no longer the fixed-width word "LINKS": it now carries the
         // bay number, and at LIST_X+44 the funnel sat on top of it.
-        iconButton(g, mouseX, mouseY, x(LIST_X + 86), y(linksY), WBIcons.FILTER, true,
+        iconButton(g, mouseX, mouseY, x(LIST_X + 76), y(linksY), WBIcons.FILTER, true,
             () -> filter = Filter.values()[Math.floorMod(
                 filter.ordinal() + (screen.back() ? -1 : 1), Filter.values().length)],
             WorkbayScreen.gui("links.filter." + filter.name().toLowerCase(java.util.Locale.ROOT)),
             WorkbayScreen.gui("links.filter.tip"));
-        iconButton(g, mouseX, mouseY, x(LIST_X + 108), y(linksY), WBIcons.SORT, true,
+        iconButton(g, mouseX, mouseY, x(LIST_X + 98), y(linksY), WBIcons.SORT, true,
             () -> sort = Sort.values()[Math.floorMod(
                 sort.ordinal() + (screen.back() ? -1 : 1), Sort.values().length)],
             WorkbayScreen.gui("links.sort." + sort.name().toLowerCase(java.util.Locale.ROOT)),
@@ -662,12 +677,14 @@ class BaysPage extends WorkbayPage {
         // must be explained where the loss is noticed, and the loss is noticed on these rows. It is
         // read-only here — the dial itself lives on the upgrades screen, beside the Levy it buys.
         boolean assay = hasAssay(snap);
+        // The short form on the line, the sentence in the tooltip: "No Assay racked" is 76 pixels
+        // in a slot 62 wide however the header is packed, so it arrived as "No Ass...".
         String rate = assay || snap.skimRate() == 0
             ? WorkbayScreen.gui("skim", snap.skimRate()).getString()
-            : WorkbayScreen.gui("skim.no_assay").getString();
-        g.drawString(font, rate, x(LIST_X + 132), y(linksY + 5),
-            skimming(snap) ? Draw.AMBER : Draw.TEXT_FAINT, false);
-        screen.hit(x(LIST_X + 130), y(linksY + 2), font.width(rate) + 4, 14, () -> { },
+            : WorkbayScreen.gui("skim.no_assay.short").getString();
+        text(g, rate, x(LIST_X + 120), y(linksY + 5), SKIM_W,
+            skimming(snap) ? Draw.AMBER : Draw.TEXT_FAINT);
+        screen.hit(x(LIST_X + 118), y(linksY + 2), Math.min(SKIM_W, font.width(rate)) + 4, 14, () -> { },
             assay || snap.skimRate() == 0
                 ? WorkbayScreen.gui("skim.name", snap.skimRate())
                 : WorkbayScreen.gui("skim.no_assay"),
@@ -680,14 +697,14 @@ class BaysPage extends WorkbayPage {
         // one and a plus sign does not say that.
         g.renderItem(new ItemStack(com.neryos.workbay.init.WBBlocks.CONNECTOR.get()),
             pairX + 1, y(linksY + 1));
-        g.drawString(font, "Pair", pairX + 20, y(linksY + 5), Draw.TEXT, false);
+        text(g, "Pair", pairX + 20, y(linksY + 5), 22, Draw.TEXT);
         screen.hit(pairX, y(linksY), 46, 18, () -> screen.send(WorkbayAction.PAIR),
             WorkbayScreen.gui("links.pair"), WorkbayScreen.gui("links.pair.tip"));
 
         boolean addHover = screen.hovered(addX, y(linksY), 36, 18, mouseX, mouseY);
         Draw.button(g, addX, y(linksY), 36, 18, addHover, false);
         WBIcons.draw(g, WBIcons.PLUS, addX + 3, y(linksY + 3), Draw.TEXT);
-        g.drawString(font, "Add", addX + 15, y(linksY + 5), Draw.TEXT, false);
+        text(g, "Add", addX + 15, y(linksY + 5), 18, Draw.TEXT);
         screen.hit(addX, y(linksY), 36, 18, () -> {
             adding = true;
             scroll = 0;
@@ -709,7 +726,10 @@ class BaysPage extends WorkbayPage {
             Component empty = filter == Filter.THIS_BAY && elsewhere > 0
                 ? WorkbayScreen.gui("links.none.here", elsewhere)
                 : WorkbayScreen.gui("links.none");
-            g.drawString(font, empty.getString(), x(LIST_X + 8), y(rowY + 8), Draw.TEXT_FAINT, false);
+            // Wrapped, not cut: this is the one line on the screen whose whole job is to explain
+            // an empty list, and half of that sentence explains nothing. It is the sentence that
+            // ran off the right-hand edge of the list and out over the world behind the window.
+            wrapped(g, empty, x(LIST_X + 8), y(rowY + 6), LIST_W - 20, Draw.TEXT_FAINT);
             return;
         }
         scroll = Math.clamp(scroll, 0, Math.max(0, visible.size() - rows));
@@ -778,7 +798,7 @@ class BaysPage extends WorkbayPage {
 
         // Which bay, because the list shows every bay's links by default now.
         String badge = "B" + (config.bay() + 1);
-        g.drawString(font, badge, px + 62, py + 5, Draw.TEXT_DIM, false);
+        text(g, badge, px + 62, py + 5, 16, Draw.TEXT_DIM);
         screen.hit(px + 62, py + 3, 16, 12, () -> { },
             WorkbayScreen.gui("links.bay", config.bay() + 1), WorkbayScreen.gui("links.bay.tip"));
 
@@ -801,13 +821,14 @@ class BaysPage extends WorkbayPage {
         boolean taxed = skimming(snapshot()) && config.resource() == BusConfig.Resource.ITEM;
         String cut = taxed
             ? WorkbayScreen.gui("skim.row", snapshot().skimRate()).getString() : "";
+        int cutW = taxed ? Math.min(font.width(cut), 22) : 0;
         if (taxed) {
-            g.drawString(font, cut, px + 132 - font.width(cut), py + 5, Draw.AMBER, false);
-            screen.hit(px + 132 - font.width(cut), py + 3, font.width(cut), 12, () -> { },
+            textRight(g, cut, px + 132, py + 5, cutW, Draw.AMBER);
+            screen.hit(px + 132 - cutW, py + 3, cutW, 12, () -> { },
                 WorkbayScreen.gui("skim.name", snapshot().skimRate()),
                 WorkbayScreen.gui("skim.row.tip"));
         }
-        clip(g, label, px + 80, py + 5, taxed ? 48 - font.width(cut) : 50,
+        text(g, label, px + 80, py + 5, taxed ? 48 - cutW : 50,
             on ? Draw.TEXT : Draw.TEXT_FAINT);
 
         // The right-hand column is the status word whenever there is one, for every kind of link.
@@ -821,7 +842,7 @@ class BaysPage extends WorkbayPage {
             String bayTarget = broken ? statusShort(link.status()).getString()
                 : link.targetBay().map(b -> "→ Bay " + (b + 1))
                     .orElse(WorkbayScreen.gui("links.unknown").getString());
-            clip(g, bayTarget, px + 136, py + 5, 60,
+            text(g, bayTarget, px + 136, py + 5, 60,
                 broken ? statusColour(link.status()) : Draw.BLUE);
             screen.hit(px + 136, py + 2, 60, ROW_PITCH - 4,
                 () -> screen.send(WorkbayAction.LINK_CYCLE_TARGET_BAY, config.id()),
@@ -832,7 +853,7 @@ class BaysPage extends WorkbayPage {
             Component target = broken
                 ? statusShort(link.status())
                 : link.targetBlock().map(BaysPage::displayName).orElse(WorkbayScreen.gui("links.unknown"));
-            clip(g, target, px + 136, py + 5, 60,
+            text(g, target, px + 136, py + 5, 60,
                 broken ? statusColour(link.status()) : Draw.TEXT_DIM);
         }
 
@@ -859,15 +880,14 @@ class BaysPage extends WorkbayPage {
      */
     private void faceButton(GuiGraphics g, int mouseX, int mouseY, int px, int py,
         BusConfig config) {
-        var font = screen.font();
         Optional<net.minecraft.core.Direction> face = config.targetFace();
         String letter = face
             .map(d -> String.valueOf(Character.toUpperCase(d.getName().charAt(0))))
             .orElse("-");
         boolean hover = screen.hovered(px, py, 12, 12, mouseX, mouseY);
         Draw.slot(g, px, py, 12, 12);
-        g.drawString(font, letter, px + 6 - font.width(letter) / 2, py + 2,
-            face.isPresent() ? (hover ? Draw.TEXT : Draw.AMBER) : Draw.TEXT_FAINT, false);
+        textCentre(g, letter, px + 6, py + 2, 10,
+            face.isPresent() ? (hover ? Draw.TEXT : Draw.AMBER) : Draw.TEXT_FAINT);
         screen.hit(px, py, 12, 12,
             () -> screen.send(WorkbayAction.LINK_CYCLE_TARGET_FACE, config.id()),
             face.map(d -> WorkbayScreen.gui("links.face." + d.getSerializedName()))
@@ -923,12 +943,10 @@ class BaysPage extends WorkbayPage {
 
     /** One of the picker's two tabs, drawn as a button that stays pressed while it is the one shown. */
     private void tab(GuiGraphics g, int mouseX, int mouseY, int px, AddTab which, String label) {
-        var font = screen.font();
         boolean active = addTab == which;
         boolean hover = screen.hovered(px, y(linksY), 44, 18, mouseX, mouseY);
         Draw.button(g, px, y(linksY), 44, 18, hover, active);
-        g.drawString(font, label, px + 22 - font.width(label) / 2, y(linksY + 5),
-            active ? Draw.TEXT : Draw.TEXT_DIM, false);
+        textCentre(g, label, px + 22, y(linksY + 5), 40, active ? Draw.TEXT : Draw.TEXT_DIM);
         screen.hit(px, y(linksY), 44, 18, () -> {
             addTab = which;
             scroll = 0;
@@ -967,7 +985,6 @@ class BaysPage extends WorkbayPage {
      * belonging to the wrong bay, and the fix is to hand it over, not to make a second one.
      */
     private void candidates(GuiGraphics g, int mouseX, int mouseY, WorkbaySnapshot snap) {
-        var font = screen.font();
         int selected = snap.selectedBay();
 
         List<WorkbaySnapshot.Link> loose = snap.links().stream()
@@ -983,9 +1000,9 @@ class BaysPage extends WorkbayPage {
         Draw.well(g, x(LIST_X), y(rowY - 4), LIST_W, rows * ROW_PITCH + 8);
         int total = addTab == AddTab.CONNECTORS ? loose.size() : bays.size();
         if (total == 0) {
-            g.drawString(font, WorkbayScreen.gui(addTab == AddTab.CONNECTORS
-                    ? "links.add.none.links" : "links.add.none.bays").getString(),
-                x(LIST_X + 8), y(rowY + 8), Draw.TEXT_FAINT, false);
+            wrapped(g, WorkbayScreen.gui(addTab == AddTab.CONNECTORS
+                    ? "links.add.none.links" : "links.add.none.bays"),
+                x(LIST_X + 8), y(rowY + 6), LIST_W - 20, Draw.TEXT_FAINT);
             return;
         }
         scroll = Math.clamp(scroll, 0, Math.max(0, total - rows));
@@ -1012,7 +1029,7 @@ class BaysPage extends WorkbayPage {
                 String label = link.label()
                     .orElseGet(() -> link.targetBlock().map(BaysPage::displayName)
                         .orElse(WorkbayScreen.gui("links.unknown")).getString());
-                clip(g, label, px + 34, py + 5, 70, ticked ? Draw.TEXT : Draw.TEXT_DIM);
+                text(g, label, px + 34, py + 5, 70, ticked ? Draw.TEXT : Draw.TEXT_DIM);
                 // An internal link's target is a machine in the Backshop, which this client has
                 // never loaded, so asking for the block there gets air. Name the bay instead --
                 // the same branch the row itself makes.
@@ -1021,9 +1038,9 @@ class BaysPage extends WorkbayPage {
                         .orElse(WorkbayScreen.gui("links.unknown").getString())
                     : link.targetBlock().map(BaysPage::displayName)
                         .orElse(WorkbayScreen.gui("links.unknown")).getString();
-                clip(g, from, px + 110, py + 5, 90,
+                text(g, from, px + 110, py + 5, 90,
                     config.internal() ? Draw.BLUE : Draw.TEXT_DIM);
-                g.drawString(font, "B" + (config.bay() + 1), px + 206, py + 5, Draw.TEXT_FAINT, false);
+                text(g, "B" + (config.bay() + 1), px + 206, py + 5, 20, Draw.TEXT_FAINT);
                 screen.hit(px, py, LIST_W - 14, ROW_PITCH - 2, () -> {
                     if (!pickedLinks.remove(config.id())) {
                         pickedLinks.add(config.id());
@@ -1038,9 +1055,9 @@ class BaysPage extends WorkbayPage {
                 WBIcons.draw(g, WBIcons.ARROW_RIGHT, px + 18, py + 3, Draw.BLUE);
                 String label = "Bay " + (bay + 1)
                     + (other == null || other.name().isEmpty() ? "" : " \u00b7 " + other.name());
-                clip(g, label, px + 34, py + 5, 120, ticked ? Draw.TEXT : Draw.TEXT_DIM);
-                g.drawString(font, WorkbayScreen.gui("links.add.nowire").getString(),
-                    px + 160, py + 5, Draw.TEXT_FAINT, false);
+                text(g, label, px + 34, py + 5, 120, ticked ? Draw.TEXT : Draw.TEXT_DIM);
+                text(g, WorkbayScreen.gui("links.add.nowire"), px + 160, py + 5, 90,
+                    Draw.TEXT_FAINT);
                 screen.hit(px, py, LIST_W - 14, ROW_PITCH - 2, () -> {
                     if (!pickedBays.remove(Integer.valueOf(bay))) {
                         pickedBays.add(bay);

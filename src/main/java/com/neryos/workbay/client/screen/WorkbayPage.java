@@ -60,11 +60,12 @@ abstract class WorkbayPage {
      * terminal's own power bar. SPEC.md §4 puts the problem count here too, on the bays page.
      */
     protected void header(GuiGraphics g, int mouseX, int mouseY, String title) {
-        var font = screen.font();
         g.pose().pushPose();
         g.pose().translate(x(8), y(6), 0);
         g.pose().scale(1.6F, 1.6F, 1.0F);
-        g.drawString(font, title, 0, 0, Draw.TEXT, false);
+        // Room is in the scaled frame, so it is the gap to the first header button divided by the
+        // scale — otherwise a title box drawn at 1.6x claims 1.6x the pixels it was told it had.
+        Draw.text(g, screen.font(), title, 0, 0, (int) ((width() - 74 - 8) / 1.6F), Draw.TEXT);
         g.pose().popPose();
 
         WorkbaySnapshot snap = snapshot();
@@ -93,33 +94,44 @@ abstract class WorkbayPage {
     }
 
     /**
-     * The mod's one and only way to draw a string that might not fit.
+     * Every string a page draws, with the width it has. {@link Draw#text} does the cutting and the
+     * debug outline; this adds the one thing a page can do and {@code Draw} cannot — hand the whole
+     * of a cut string back through a tooltip, so the player can still find out what it said.
      *
-     * <p>{@code Font#plainSubstrByWidth} on its own cuts mid-word and says nothing: "Reaches other
-     * di" reads as a rendering fault, and the player has no way to find out what the row actually
-     * said. Every truncation in the three screens goes through here instead, so a string either
-     * fits or it ends in an ellipsis and carries the whole of itself in a tooltip. There is no
-     * third outcome, and no call site that can quietly get it wrong.
-     *
-     * <p>Nothing outside this method calls {@code plainSubstrByWidth}, the same way nothing outside
-     * {@link Draw} fills a bare rectangle.
+     * <p>Nothing in this mod calls {@code drawString}. {@code tools/check-text.sh} enforces it.
      */
-    protected void clip(GuiGraphics g, String text, int px, int py, int room, int colour) {
-        var font = screen.font();
-        if (font.width(text) <= room) {
-            g.drawString(font, text, px, py, colour, false);
-            return;
+    protected void text(GuiGraphics g, String s, int px, int py, int room, int colour) {
+        if (!Draw.text(g, screen.font(), s, px, py, room, colour)) {
+            cut(px, py, room, s);
         }
-        String head = font.plainSubstrByWidth(text, Math.max(0, room - font.width(ELLIPSIS)));
-        g.drawString(font, head + ELLIPSIS, px, py, colour, false);
-        screen.overflow(px, py - 1, room, font.lineHeight + 1, Component.literal(text));
     }
 
-    protected void clip(GuiGraphics g, Component text, int px, int py, int room, int colour) {
-        clip(g, text.getString(), px, py, room, colour);
+    protected void text(GuiGraphics g, Component s, int px, int py, int room, int colour) {
+        text(g, s.getString(), px, py, room, colour);
     }
 
-    private static final String ELLIPSIS = "…";
+    /** Right-aligned against {@code rightX}. Figures that must not reach back into the text. */
+    protected void textRight(GuiGraphics g, String s, int rightX, int py, int room, int colour) {
+        if (!Draw.textRight(g, screen.font(), s, rightX, py, room, colour)) {
+            cut(rightX - room, py, room, s);
+        }
+    }
+
+    /** Centred on {@code centreX}. Button labels, and nothing else so far. */
+    protected void textCentre(GuiGraphics g, String s, int centreX, int py, int room, int colour) {
+        if (!Draw.textCentre(g, screen.font(), s, centreX, py, room, colour)) {
+            cut(centreX - room / 2, py, room, s);
+        }
+    }
+
+    protected void wrapped(GuiGraphics g, Component s, int px, int py, int room, int colour) {
+        Draw.wrapped(g, screen.font(), s, px, py, room, colour);
+    }
+
+    private void cut(int px, int py, int room, String full) {
+        screen.overflow(px, py - 1, room, screen.font().lineHeight + 1, Component.literal(full));
+    }
+
 
     /** Draws an 18x18 icon button and registers its click and tooltip in one place. */
     protected void iconButton(GuiGraphics g, int mouseX, int mouseY, int px, int py, String[] icon,

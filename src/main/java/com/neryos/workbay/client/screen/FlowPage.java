@@ -26,10 +26,15 @@ class FlowPage extends WorkbayPage {
     private static final int WIDTH = 320;
     private static final int HEIGHT = 232;
 
-    private static final int LEFT_X = 14;
-    private static final int MID_X = 128;
-    private static final int RIGHT_X = 236;
-    private static final int NODE_W = 70;
+    /**
+     * Three node columns and two arrow gaps, filling the panel between 12px margins. A node was 70
+     * wide, which gives a name 62 pixels — less than "Enrichment Chamber" needs, and this screen is
+     * nothing but machine names. 84 is what the empty space between the columns was worth.
+     */
+    private static final int LEFT_X = 12;
+    private static final int MID_X = 118;
+    private static final int RIGHT_X = 224;
+    private static final int NODE_W = 84;
     private static final int NODE_H = 18;
     private static final int TOP_Y = 60;
     private static final int PITCH = 22;
@@ -51,12 +56,12 @@ class FlowPage extends WorkbayPage {
     @Override
     void render(GuiGraphics g, int mouseX, int mouseY) {
         header(g, mouseX, mouseY, "FLOW");
-        var font = screen.font();
         WorkbaySnapshot snap = snapshot();
 
-        g.drawString(font, "pulled from", x(LEFT_X), y(48), Draw.TEXT_FAINT, false);
-        g.drawString(font, "bays", x(MID_X + 24), y(48), Draw.TEXT_FAINT, false);
-        g.drawString(font, "sent to", x(RIGHT_X), y(48), Draw.TEXT_FAINT, false);
+        // Each heading gets its own column's width, so a translation cannot reach into the next.
+        text(g, "pulled from", x(LEFT_X), y(48), NODE_W, Draw.TEXT_FAINT);
+        text(g, "bays", x(MID_X + 30), y(48), NODE_W - 30, Draw.TEXT_FAINT);
+        text(g, "sent to", x(RIGHT_X), y(48), NODE_W, Draw.TEXT_FAINT);
 
         // The bays first: they are the spine, and both outside columns hang off them.
         Map<Integer, Integer> bayRow = new LinkedHashMap<>();
@@ -73,8 +78,8 @@ class FlowPage extends WorkbayPage {
             node(g, x(MID_X), rowY, name(bay.hosted().orElse(null)), Draw.PANEL_LIGHT);
         }
         if (occupied.isEmpty()) {
-            g.drawString(font, WorkbayScreen.gui("flow.empty").getString(), x(MID_X - 20), y(TOP_Y + 4),
-                Draw.TEXT_FAINT, false);
+            text(g, WorkbayScreen.gui("flow.empty"), x(MID_X - 20), y(TOP_Y + 4),
+                NODE_W + 40, Draw.TEXT_FAINT);
         }
 
         int inRow = 0;
@@ -119,7 +124,7 @@ class FlowPage extends WorkbayPage {
     private void node(GuiGraphics g, int px, int py, Component label, int fill) {
         Draw.well(g, px, py, NODE_W, NODE_H);
         g.fill(px + 1, py + 1, px + NODE_W - 1, py + NODE_H - 1, fill);
-        clip(g, label, px + 4, py + 5, NODE_W - 8, Draw.TEXT_DIM);
+        text(g, label, px + 4, py + 5, NODE_W - 8, Draw.TEXT_DIM);
     }
 
     /** A straight line with a two-pixel head. Enough to read a direction at this size. */
@@ -150,22 +155,26 @@ class FlowPage extends WorkbayPage {
         }
     }
 
+    /** Two columns of key, each entry a 16px rule and a label with the rest of its column. */
     private void legend(GuiGraphics g) {
-        var font = screen.font();
         int py = y(HEIGHT - 34);
-        g.fill(x(14), py + 3, x(30), py + 4, Draw.GREEN);
-        g.drawString(font, WorkbayScreen.gui("flow.legend.out").getString(), x(34), py, Draw.TEXT_DIM, false);
+        int right = MID_X + 56;
+        int leftRoom = right - LEFT_X - 20 - 8;
+        int rightRoom = WIDTH - right - 20 - 12;
+
+        g.fill(x(LEFT_X), py + 3, x(LEFT_X + 16), py + 4, Draw.GREEN);
+        text(g, WorkbayScreen.gui("flow.legend.out"), x(LEFT_X + 20), py, leftRoom, Draw.TEXT_DIM);
 
         int py2 = py + 12;
         for (int i = 0; i < 16; i += 6) {
-            g.fill(x(14 + i), py2 + 3, x(14 + i + 3), py2 + 4, Draw.BLUE);
+            g.fill(x(LEFT_X + i), py2 + 3, x(LEFT_X + i + 3), py2 + 4, Draw.BLUE);
         }
-        g.drawString(font, WorkbayScreen.gui("flow.legend.internal").getString(), x(34), py2,
-            Draw.TEXT_DIM, false);
+        text(g, WorkbayScreen.gui("flow.legend.internal"), x(LEFT_X + 20), py2, leftRoom,
+            Draw.TEXT_DIM);
 
-        g.fill(x(174), py + 3, x(190), py + 4, Draw.AMBER);
-        g.drawString(font, WorkbayScreen.gui("flow.legend.stalled").getString(), x(194), py,
-            Draw.TEXT_DIM, false);
+        g.fill(x(right), py + 3, x(right + 16), py + 4, Draw.AMBER);
+        text(g, WorkbayScreen.gui("flow.legend.stalled"), x(right + 20), py, rightRoom,
+            Draw.TEXT_DIM);
     }
 
     private static int colourFor(BusRunner.BusStatus status) {

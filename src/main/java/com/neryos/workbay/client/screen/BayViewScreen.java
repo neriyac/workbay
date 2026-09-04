@@ -62,16 +62,18 @@ public class BayViewScreen extends AbstractContainerScreen<BayViewMenu> {
 
         // SPEC.md §5's permanent line, in the gap the layout reserves for it.
         int limitsY = topPos + BayViewMenu.GRID_Y + menu.rows() * 18 + 6;
-        var lines = font.split(WorkbayScreen.gui("bayview.limits"), imageWidth - 16);
-        for (int i = 0; i < lines.size(); i++) {
-            g.drawString(font, lines.get(i), leftPos + 8, limitsY + i * 10, Draw.TEXT_FAINT, false);
-        }
+        Draw.wrapped(g, font, WorkbayScreen.gui("bayview.limits"), leftPos + 8, limitsY,
+            imageWidth - 16, Draw.TEXT_FAINT);
     }
 
     @Override
     protected void renderLabels(GuiGraphics g, int mouseX, int mouseY) {
-        g.drawString(font, title, titleLabelX, titleLabelY, Draw.TEXT, false);
-        g.drawString(font, playerInventoryTitle, 8, inventoryLabelY, Draw.TEXT_DIM, false);
+        // renderLabels draws in panel-local coordinates, so the room is the panel's own width less
+        // the margin and, for the title, the machine's item sprite in the top right corner.
+        Draw.text(g, font, title.getString(), titleLabelX, titleLabelY, imageWidth - 8 - 28,
+            Draw.TEXT);
+        Draw.text(g, font, playerInventoryTitle.getString(), 8, inventoryLabelY, imageWidth - 16,
+            Draw.TEXT_DIM);
     }
 
     @Override

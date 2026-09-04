@@ -1,7 +1,12 @@
 package com.neryos.workbay.client.screen;
 
 import com.neryos.workbay.world.FaceConfig;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.network.chat.Component;
+
+import java.util.List;
 
 /**
  * Every shape the three screens are made of. SPEC.md §4 and §7.
@@ -11,9 +16,10 @@ import net.minecraft.client.gui.GuiGraphics;
  * every later nudge a round trip through an image editor. It also means the status colours are one
  * palette in one file instead of pixels somebody has to match by eye.
  *
- * <p><b>Nothing outside this class draws a bare rectangle.</b> SPEC.md §7's screen-chrome rules
- * come down to one thing — everything has a light top-left edge and a dark bottom-right one — and
- * they hold only if there is exactly one place that knows how.
+ * <p><b>Nothing outside this class draws a bare rectangle, and nothing outside it draws a
+ * string.</b> SPEC.md §7's screen-chrome rules come down to one thing — everything has a light
+ * top-left edge and a dark bottom-right one — and they hold only if there is exactly one place that
+ * knows how. {@link #text} is the same argument applied to words: see its comment.
  */
 public final class Draw {
     private Draw() {}
@@ -123,6 +129,97 @@ public final class Draw {
         }
         int filled = Math.max(1, (int) ((long) (w - 2) * Math.min(value, max) / max));
         g.fill(x + 1, y + 1, x + 1 + filled, y + h - 1, argb);
+    }
+
+    // ------------------------------------------------------------------ text
+
+    /**
+     * <b>The one place this mod draws a string, and it is always told the width it has.</b>
+     *
+     * <p>Text running off its box was fixed twice and came back twice, because both fixes audited a
+     * list of call sites. Auditing a list closes the list; it does not close the hole the list came
+     * out of. The hole was {@code GuiGraphics#drawString}, which takes a position and no width, so
+     * every one of forty-odd call sites was free to be wrong on its own and nothing anywhere could
+     * tell. Here a width is not optional, so a string that does not fit is <em>cut</em> rather than
+     * spilled — that outcome is structural, not something a call site remembers to ask for.
+     * {@code tools/check-text.sh} fails the build on any {@code drawString} outside this file, so
+     * the next call site cannot opt out either.
+     *
+     * <p><b>And a cut string is still a fault</b> — the player cannot read it — so with the F3
+     * debug overlay on, every box is outlined: <span>red where the string was cut</span>, faint
+     * cyan where it fit. One screenshot of a screen then shows every overflow at once, and a box
+     * drawn wider than the panel it sits in shows up in the same picture, which is the fault
+     * clipping alone cannot catch. F3 rather than a config or a keybind: it is already the
+     * game's "show me the internals" toggle, and it costs one field read. Vanilla only accepts F3
+     * with no screen open, so it is pressed in the world and the screen opened after.
+     *
+     * @return true when the whole string fitted; false when it was cut, so the caller can offer
+     *         the whole of it in a tooltip
+     */
+    public static boolean text(GuiGraphics g, Font font, String s, int px, int py, int room,
+        int colour) {
+        return draw(g, font, s, px, px, py, room, colour);
+    }
+
+    /** Right-aligned: the box ends at {@code rightX}, and a cut string still starts inside it. */
+    public static boolean textRight(GuiGraphics g, Font font, String s, int rightX, int py,
+        int room, int colour) {
+        return draw(g, font, s, rightX - room, rightX - Math.min(room, font.width(s)), py, room,
+            colour);
+    }
+
+    /** Centred on {@code centreX}, inside a box of {@code room} centred on the same point. */
+    public static boolean textCentre(GuiGraphics g, Font font, String s, int centreX, int py,
+        int room, int colour) {
+        return draw(g, font, s, centreX - room / 2,
+            centreX - Math.min(room, font.width(s)) / 2, py, room, colour);
+    }
+
+    /**
+     * {@code boxX} is where the width the string was <em>given</em> starts; {@code textX} is where
+     * the string itself lands inside it. They differ for anything not left-aligned, and the outline
+     * must follow the box rather than the text — an outline drawn from the text would sit further
+     * right than the space the string was actually allowed, which is the one thing the outline
+     * exists to show. It said so on its own first screenshot.
+     */
+    private static boolean draw(GuiGraphics g, Font font, String s, int boxX, int textX, int py,
+        int room, int colour) {
+        boolean fits = font.width(s) <= room;
+        g.drawString(font, fits ? s
+            : font.plainSubstrByWidth(s, Math.max(0, room - font.width(ELLIPSIS))) + ELLIPSIS,
+            textX, py, colour, false);
+        box(g, boxX, py, room, font.lineHeight, fits);
+        return fits;
+    }
+
+    /**
+     * A sentence too long for one line, wrapped to {@code room} and drawn down from {@code py}.
+     * The wrapped form is the only kind of long text on these screens that is not a fault, so it
+     * says so here rather than each caller splitting by hand and hoping the widths match.
+     */
+    public static void wrapped(GuiGraphics g, Font font, Component text, int px, int py, int room,
+        int colour) {
+        List<net.minecraft.util.FormattedCharSequence> lines = font.split(text, room);
+        for (int i = 0; i < lines.size(); i++) {
+            g.drawString(font, lines.get(i), px, py + i * 10, colour, false);
+            box(g, px, py + i * 10, room, font.lineHeight, true);
+        }
+    }
+
+    private static final String ELLIPSIS = "…";
+
+    /** The debug outline. Costs one boolean read per string when it is off, which it normally is. */
+    private static void box(GuiGraphics g, int px, int py, int room, int h, boolean fits) {
+        if (!Minecraft.getInstance().getDebugOverlay().showDebugScreen()) {
+            return;
+        }
+        int colour = fits ? 0x5533D6D6 : 0xFFFF0000;
+        int top = py - 1;
+        int bottom = py + h;
+        g.fill(px, top, px + room, top + 1, colour);
+        g.fill(px, bottom, px + room, bottom + 1, colour);
+        g.fill(px, top, px + 1, bottom + 1, colour);
+        g.fill(px + room - 1, top, px + room, bottom + 1, colour);
     }
 
     public static int roleColour(FaceConfig.Role role) {

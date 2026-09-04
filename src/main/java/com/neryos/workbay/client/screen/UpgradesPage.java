@@ -77,7 +77,6 @@ class UpgradesPage extends WorkbayPage {
 
     /** Left: the block, its power bar at full size with exact figures, and the incoming rate. */
     private void preview(GuiGraphics g, int mouseX, int mouseY) {
-        var font = screen.font();
         WorkbaySnapshot snap = snapshot();
 
         Draw.well(g, x(WELL_X), y(WELL_Y), WELL_W, WELL_H);
@@ -86,24 +85,29 @@ class UpgradesPage extends WorkbayPage {
         PREVIEW.render(g, BlockPreview.facingCamera(
                 com.neryos.workbay.init.WBBlocks.WORKBAY.get().defaultBlockState()),
             x(WELL_X + WELL_W / 2), y(WELL_Y + WELL_H / 2), 34);
-        g.drawString(font, WorkbayScreen.gui("faces.drag").getString(), x(WELL_X), y(WELL_Y + WELL_H + 3),
-            Draw.TEXT_FAINT, false);
+        textCentre(g, WorkbayScreen.gui("faces.drag").getString(), x(WELL_X + WELL_W / 2),
+            y(WELL_Y + WELL_H + 3), WELL_W, Draw.TEXT_FAINT);
 
         Draw.bar(g, x(WELL_X), y(WELL_Y + WELL_H + 16), WELL_W, 12,
             snap.energy(), snap.energyCapacity(), Draw.AMBER);
-        g.drawString(font, snap.energy() + " / " + snap.energyCapacity() + " FE",
-            x(WELL_X), y(WELL_Y + WELL_H + 32), Draw.TEXT_DIM, false);
-        g.drawString(font, WorkbayScreen.gui("upgrades.rate",
-                com.neryos.workbay.content.workbay.WorkbayBlockEntity.MAX_FE_PER_TICK).getString(),
-            x(WELL_X), y(WELL_Y + WELL_H + 44), Draw.TEXT_FAINT, false);
+        // Compact, like every other energy figure in the mod: "0 / 100000 FE" is 74 pixels in a
+        // column 96 wide before the capacity grows a digit, and the exact figure is in the tooltip.
+        text(g, Draw.compact(snap.energy()) + " / " + Draw.compact(snap.energyCapacity()) + " FE",
+            x(WELL_X), y(WELL_Y + WELL_H + 32), WELL_W, Draw.TEXT_DIM);
+        screen.hit(x(WELL_X), y(WELL_Y + WELL_H + 16), WELL_W, 26, () -> { },
+            WorkbayScreen.gui("power", Draw.exact(snap.energy()), Draw.exact(snap.energyCapacity())),
+            WorkbayScreen.gui("power.tip"));
+        text(g, WorkbayScreen.gui("upgrades.rate",
+                com.neryos.workbay.content.workbay.WorkbayBlockEntity.MAX_FE_PER_TICK),
+            x(WELL_X), y(WELL_Y + WELL_H + 44), WELL_W, Draw.TEXT_FAINT);
 
         // How many of this network's Workbays are standing, out of how many the server allows.
         // Drawn on the first one a player builds, because the cap is otherwise invisible until they
         // have crafted a second, carried it somewhere and had the placement refused.
         boolean full = snap.deployed() >= snap.maxDeployed();
-        g.drawString(font,
-            WorkbayScreen.gui("upgrades.deployed", snap.deployed(), snap.maxDeployed()).getString(),
-            x(WELL_X), y(WELL_Y + WELL_H + 56), full ? Draw.AMBER : Draw.TEXT_FAINT, false);
+        // The short form on the line, the sentence in the tooltip: this column is 96 wide.
+        text(g, WorkbayScreen.gui("upgrades.deployed.short", snap.deployed(), snap.maxDeployed()),
+            x(WELL_X), y(WELL_Y + WELL_H + 56), WELL_W, full ? Draw.AMBER : Draw.TEXT_FAINT);
         screen.hit(x(WELL_X), y(WELL_Y + WELL_H + 54), WELL_W, 12, () -> { },
             WorkbayScreen.gui("upgrades.deployed", snap.deployed(), snap.maxDeployed()),
             WorkbayScreen.gui(full ? "upgrades.deployed.full" : "upgrades.deployed.tip"));
@@ -132,7 +136,6 @@ class UpgradesPage extends WorkbayPage {
     }
 
     private void rows(GuiGraphics g, int mouseX, int mouseY) {
-        var font = screen.font();
         WorkbaySnapshot snap = snapshot();
 
         for (WorkbayUpgrade upgrade : WorkbayUpgrade.values()) {
@@ -157,17 +160,17 @@ class UpgradesPage extends WorkbayPage {
             // figures are right-aligned inside one fixed column, so neither can reach back into
             // the text.
             String count = installed + " / " + upgrade.max();
-            clip(g, WorkbayScreen.gui(key), px + TEXT_X, py + 6, NAME_W,
+            text(g, WorkbayScreen.gui(key), px + TEXT_X, py + 6, NAME_W,
                 canInstall ? Draw.TEXT : Draw.TEXT_FAINT);
-            g.drawString(font, count, px + RIGHT_EDGE - font.width(count), py + 6,
-                maxed ? Draw.GREEN : Draw.TEXT_DIM, false);
+            textRight(g, count, px + RIGHT_EDGE, py + 6, COUNT_W,
+                maxed ? Draw.GREEN : Draw.TEXT_DIM);
 
             // The price is on the row rather than in the tooltip, because it is the thing the
             // player is deciding on and a hover is one step too late for that.
             String price = maxed ? "" : WorkbayScreen.gui("upgrades.levy", cost).getString();
-            g.drawString(font, price, px + RIGHT_EDGE - font.width(price), py + 19,
-                maxed ? Draw.TEXT_FAINT : affordable ? Draw.GREEN : Draw.RED, false);
-            clip(g, WorkbayScreen.gui(key + ".desc"), px + TEXT_X, py + 19, DESC_W,
+            textRight(g, price, px + RIGHT_EDGE, py + 19, PRICE_W,
+                maxed ? Draw.TEXT_FAINT : affordable ? Draw.GREEN : Draw.RED);
+            text(g, WorkbayScreen.gui(key + ".desc"), px + TEXT_X, py + 19, DESC_W,
                 Draw.TEXT_FAINT);
 
             int addX = px + ROW_W - 30;
@@ -195,8 +198,8 @@ class UpgradesPage extends WorkbayPage {
         var font = screen.font();
         WorkbaySnapshot snap = snapshot();
         g.fill(x(12), y(HEIGHT - 26), x(WIDTH - 12), y(HEIGHT - 25), Draw.EDGE_DARK);
-        g.drawString(font, WorkbayScreen.gui("upgrades.levy", snap.levy()).getString(),
-            x(12), y(HEIGHT - 19), snap.levy() > 0 ? Draw.TEXT : Draw.TEXT_DIM, false);
+        text(g, WorkbayScreen.gui("upgrades.levy", snap.levy()), x(12), y(HEIGHT - 19),
+            WIDTH - 24 - 80, snap.levy() > 0 ? Draw.TEXT : Draw.TEXT_DIM);
 
         // The dial. Left-click steps up by five, right-click down, the way every cycling control in
         // this mod works — and it clamps at both ends rather than wrapping, because a dial that
@@ -209,7 +212,7 @@ class UpgradesPage extends WorkbayPage {
         boolean on = snap.skimRate() > 0;
         boolean hover = screen.hovered(px, py, w, 16, mouseX, mouseY);
         Draw.button(g, px, py, w, 16, hover, on);
-        g.drawString(font, rate, px + 5, py + 4, on ? Draw.AMBER : Draw.TEXT_FAINT, false);
+        text(g, rate, px + 5, py + 4, w - 10, on ? Draw.AMBER : Draw.TEXT_FAINT);
         screen.hit(px, py, w, 16, () -> screen.send(WorkbayAction.SET_SKIM),
             WorkbayScreen.gui("skim.name", snap.skimRate()), WorkbayScreen.gui("skim.tip"));
     }

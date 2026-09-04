@@ -105,8 +105,7 @@ public class BlockPreview {
             graphics.fill(at[0] - 6, at[1] - 6, at[0] + 6, at[1] + 6, Draw.EDGE_DARK);
             graphics.fill(at[0] - 5, at[1] - 5, at[0] + 5, at[1] + 5, colour);
             String letter = label(face);
-            graphics.drawString(font, letter, at[0] - font.width(letter) / 2, at[1] - 4,
-                0xFF101214, false);
+            Draw.textCentre(graphics, font, letter, at[0], at[1] - 4, 12, 0xFF101214);
         }
         pose.popPose();
     }

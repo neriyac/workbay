@@ -1,3 +1,5 @@
 #!/usr/bin/env bash
 # Installed by tools/install-hooks.sh (sets core.hooksPath=.githooks).
-exec ./tools/check-docs.sh
+set -e
+./tools/check-docs.sh
+./tools/check-text.sh

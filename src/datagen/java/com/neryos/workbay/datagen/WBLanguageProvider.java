@@ -312,8 +312,11 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("flow.legend.internal"), "bay to bay, never leaves");
         add(WorkbayLang.guiKey("flow.legend.stalled"), "stalled");
 
-        add(WorkbayLang.guiKey("upgrades.rate"), "Accepts up to %s FE/t");
+        // Both of these are drawn in a 96-pixel column, so both are written to fit one. The
+        // sentence each is short for is the tooltip beside it.
+        add(WorkbayLang.guiKey("upgrades.rate"), "Up to %s FE/t");
         add(WorkbayLang.guiKey("upgrades.deployed"), "Workbays placed: %s / %s");
+        add(WorkbayLang.guiKey("upgrades.deployed.short"), "Placed: %s / %s");
         add(WorkbayLang.guiKey("upgrades.deployed.tip"), "How many Workbay blocks of this network "
             + "stand in the world. Every one of them opens onto the same bays, links and upgrades.");
         add(WorkbayLang.guiKey("upgrades.deployed.full"), "This network is at its limit. Placing "
@@ -382,6 +385,7 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("skim.row.tip"), "This link hands the Assay that share of the "
             + "refined goods it carries, so less arrives at the far end than leaves.");
         add(WorkbayLang.guiKey("skim.no_assay"), "No Assay racked");
+        add(WorkbayLang.guiKey("skim.no_assay.short"), "No Assay");
         add(WorkbayLang.guiKey("skim.no_assay.tip"), "Nothing is being skimmed: the rate only "
             + "applies while an Assay is racked in one of this Workbay's bays.");
 
