@@ -283,7 +283,6 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("status.short.target_not_loaded"), "Unloaded");
         add(WorkbayLang.guiKey("status.short.target_no_port"), "No port");
         add(WorkbayLang.guiKey("status.short.machine_no_port"), "No machine");
-        add(WorkbayLang.guiKey("status.short.resource_not_carried"), "No fluids");
         add(WorkbayLang.guiKey("status.short.machine_no_face"), "No face");
         add(WorkbayLang.guiKey("status.running"), "Running");
         add(WorkbayLang.guiKey("status.running.tip"), "This link moved something on its last turn.");
@@ -307,10 +306,6 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("status.machine_no_port"), "Machine unreachable");
         add(WorkbayLang.guiKey("status.machine_no_port.tip"), "The hosted machine answers on none "
             + "of the faces this link may use. Check the cube, or eject and re-rack it.");
-        add(WorkbayLang.guiKey("status.resource_not_carried"), "Fluids not carried yet");
-        add(WorkbayLang.guiKey("status.resource_not_carried.tip"), "This link is set to fluids, "
-            + "which this version does not move. Click the row's type icon to set it back to "
-            + "items or energy.");
         add(WorkbayLang.guiKey("status.machine_no_face"), "No face for this");
         add(WorkbayLang.guiKey("status.machine_no_face.tip"), "This bay has faces set, but none "
             + "marked for this link's direction. Mark one in on the cube for a link that pulls, "

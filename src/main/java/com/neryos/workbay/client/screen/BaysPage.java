@@ -1174,8 +1174,7 @@ class BaysPage extends WorkbayPage {
             case TARGET_MISSING, CONNECTOR_GONE -> Draw.RED;
             // Amber is "you can fix this from here". The face config and an unreachable machine
             // both are; a target that has gone is not.
-            case TARGET_NOT_LOADED, TARGET_NO_PORT, MACHINE_NO_PORT, MACHINE_NO_FACE,
-                 RESOURCE_NOT_CARRIED -> Draw.AMBER;
+            case TARGET_NOT_LOADED, TARGET_NO_PORT, MACHINE_NO_PORT, MACHINE_NO_FACE -> Draw.AMBER;
         };
     }
 

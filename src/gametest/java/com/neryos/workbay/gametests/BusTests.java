@@ -18,6 +18,8 @@ import com.neryos.workbay.world.WorkbayRecord;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestAssertException;
 import net.minecraft.server.level.ServerLevel;
@@ -29,6 +31,8 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.fluids.FluidStack;
+import net.neoforged.neoforge.fluids.capability.IFluidHandler;
 import net.neoforged.neoforge.items.IItemHandler;
 import java.util.Optional;
 import net.neoforged.testframework.DynamicTest;
@@ -954,6 +958,105 @@ public class BusTests {
                 .thenExecute(() -> tearDown(helper, workbayPos))
                 .thenSucceed();
         });
+    }
+
+    /**
+     * Fluids, end to end, through a real mod's handler at both ends. SPEC.md §9.
+     *
+     * <p><b>This does not guard the bind, and it was checked rather than assumed.</b> Rewriting
+     * {@code runFluid} to bind on {@code getTanks() > 0} at both ends leaves this test green. The
+     * reason is structural: {@code basic_fluid_tank} answers identically on all six faces, so
+     * there is no wrong face for a count to pick. OPEN_ISSUES has the measured table and what a
+     * real guard would need.
+     */
+    @GameTest(timeoutTicks = 900)
+    @TestHolder(description = "A fluid link moves water out of a hosted tank into one in the world.")
+    public static void aFluidLinkMovesWaterOutOfAHostedTank(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos targetPos = helper.absolutePos(new BlockPos(4, 1, 4));
+
+            Block tank = BuiltInRegistries.BLOCK
+                .get(ResourceLocation.parse("mekanism:basic_fluid_tank"));
+            if (tank == Blocks.AIR) {
+                helper.fail("mekanism:basic_fluid_tank is not registered. This test is about a real "
+                    + "mod's fluid handler, so a missing partner mod is a failure, never a skip.");
+            }
+
+            // The destination, placed the way a player places it so Mekanism records its sides.
+            BlockState state = tank.defaultBlockState();
+            level.setBlock(targetPos, state, Block.UPDATE_ALL);
+            tank.setPlacedBy(level, targetPos, state, player, new ItemStack(tank));
+            level.invalidateCapabilities(targetPos);
+
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(tank));
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+
+            var water = net.minecraft.world.level.material.Fluids.WATER;
+            int filled = fill(backshop, machinePos, new FluidStack(water, 8_000));
+            if (filled <= 0) {
+                helper.fail("could not fill the hosted tank through any face, so the link has "
+                    + "nothing to carry");
+            }
+            int before = inTanks(backshop, machinePos, water) + inTanks(level, targetPos, water);
+
+            BusConfig link = connect(helper, workbay, targetPos.above(), Direction.DOWN, player);
+            workbay.addBus(link.withResource(BusConfig.Resource.FLUID).withRate(20).withSpeed(10));
+
+            helper.startSequence()
+                .thenWaitUntil(() -> {
+                    if (inTanks(level, targetPos, water) < filled) {
+                        throw new GameTestAssertException("the link has moved "
+                            + inTanks(level, targetPos, water) + " of " + filled
+                            + " mB and reads " + workbay.busStatus(link.id())
+                            + "; a bind on a tank count rather than on the move itself picks a "
+                            + "face that answers and refuses, and then carries nothing");
+                    }
+                })
+                .thenExecute(() -> {
+                    int now = inTanks(backshop, machinePos, water) + inTanks(level, targetPos, water);
+                    helper.assertValueEqual(now, before, "millibuckets of water in existence");
+                    helper.assertValueEqual(inTanks(backshop, machinePos, water), 0,
+                        "water left in the hosted tank");
+                })
+                .thenExecute(() -> tearDown(helper, workbayPos))
+                .thenSucceed();
+        });
+    }
+
+    /** Fills a block's tank through whichever face accepts, never the null side alone. */
+    private static int fill(ServerLevel level, BlockPos pos, FluidStack what) {
+        for (Direction side : Direction.values()) {
+            var handler = level.getCapability(Capabilities.FluidHandler.BLOCK, pos, side);
+            if (handler != null) {
+                int moved = handler.fill(what, IFluidHandler.FluidAction.EXECUTE);
+                if (moved > 0) {
+                    return moved;
+                }
+            }
+        }
+        return 0;
+    }
+
+    private static int inTanks(ServerLevel level, BlockPos pos,
+        net.minecraft.world.level.material.Fluid fluid) {
+        var handler = level.getCapability(Capabilities.FluidHandler.BLOCK, pos, null);
+        if (handler == null) {
+            return 0;
+        }
+        int total = 0;
+        for (int tank = 0; tank < handler.getTanks(); tank++) {
+            if (handler.getFluidInTank(tank).getFluid() == fluid) {
+                total += handler.getFluidInTank(tank).getAmount();
+            }
+        }
+        return total;
     }
 
     /** The row's name, straight out of the snapshot the screen actually draws. */

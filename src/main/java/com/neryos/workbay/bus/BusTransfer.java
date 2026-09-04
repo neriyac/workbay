@@ -1,6 +1,8 @@
 package com.neryos.workbay.bus;
 
 import net.minecraft.world.item.ItemStack;
+import net.neoforged.neoforge.fluids.FluidStack;
+import net.neoforged.neoforge.fluids.capability.IFluidHandler;
 import net.neoforged.neoforge.energy.IEnergyStorage;
 import net.neoforged.neoforge.items.IItemHandler;
 import net.neoforged.neoforge.items.ItemHandlerHelper;
@@ -105,6 +107,54 @@ public final class BusTransfer {
             taken += from.extractItem(slot, sample.getCount(), false).getCount();
         }
         return taken;
+    }
+
+    /**
+     * Moves up to {@code budget} millibuckets. Same shape as the item path, for the same reason:
+     * ask the source what it is offering, then ask the destination what it would take <em>of that
+     * offer</em>, then commit exactly that.
+     *
+     * <p><b>The commit drains by stack, not by amount.</b> {@code drain(int, EXECUTE)} takes from
+     * whichever tank the handler feels like, so on a multi-tank machine it can hand back a
+     * different fluid from the one the destination agreed to accept — and then the fill refuses and
+     * the difference has to be pushed back into a handler that may not take it. Draining the exact
+     * stack that was simulated cannot pick a different fluid.
+     *
+     * @param simulate ask what this move would carry and commit nothing. What a bus binds its
+     *                 destination on. SPEC.md §9.
+     */
+    public static int moveFluid(IFluidHandler from, IFluidHandler to, int budget) {
+        return moveFluid(from, to, budget, false);
+    }
+
+    public static int moveFluid(IFluidHandler from, IFluidHandler to, int budget, boolean simulate) {
+        if (budget <= 0) {
+            return 0;
+        }
+        FluidStack available = from.drain(budget, IFluidHandler.FluidAction.SIMULATE);
+        if (available.isEmpty()) {
+            return 0;
+        }
+        int accepted = to.fill(available, IFluidHandler.FluidAction.SIMULATE);
+        if (accepted <= 0) {
+            return 0;
+        }
+        if (simulate) {
+            return accepted;
+        }
+        FluidStack taken = from.drain(available.copyWithAmount(accepted),
+            IFluidHandler.FluidAction.EXECUTE);
+        if (taken.isEmpty()) {
+            return 0;
+        }
+        int moved = to.fill(taken, IFluidHandler.FluidAction.EXECUTE);
+        if (moved < taken.getAmount()) {
+            // The destination changed its mind between the simulation and the commit. Put the
+            // remainder back rather than dropping it, exactly as the item path does.
+            from.fill(taken.copyWithAmount(taken.getAmount() - moved),
+                IFluidHandler.FluidAction.EXECUTE);
+        }
+        return moved;
     }
 
     /**

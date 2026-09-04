@@ -12,6 +12,7 @@ import net.minecraft.core.GlobalPos;
 import net.minecraft.server.level.ServerLevel;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.energy.IEnergyStorage;
+import net.neoforged.neoforge.fluids.capability.IFluidHandler;
 import net.neoforged.neoforge.items.IItemHandler;
 
 import java.util.HashMap;
@@ -35,11 +36,22 @@ public class BusRunner {
     public static final int WHEEL = 1200;
     public static final int STEP_TICKS = 5;
 
+    /**
+     * What one step of the rate dial is worth to a fluid link. The dial is one number shared by all
+     * three resources, and a rate of 8 meaning eight millibuckets would make every fluid link look
+     * broken — a bucket is a thousand. A hundred keeps the dial's own range (1..64 by default)
+     * spanning a tenth of a bucket to just over six, which is the granularity a player actually
+     * wants when metering a machine.
+     */
+    public static final int MB_PER_RATE = 100;
+
     private final BooleanSupplier alive;
     private final Map<UUID, BusEndpoint<IItemHandler>> targetItems = new HashMap<>();
     private final Map<UUID, BusEndpoint<IEnergyStorage>> targetEnergy = new HashMap<>();
     private final Map<Integer, BusEndpoint<IItemHandler>> machineItems = new HashMap<>();
     private final Map<Integer, BusEndpoint<IEnergyStorage>> machineEnergy = new HashMap<>();
+    private final Map<UUID, BusEndpoint<IFluidHandler>> targetFluids = new HashMap<>();
+    private final Map<Integer, BusEndpoint<IFluidHandler>> machineFluids = new HashMap<>();
     private final Map<UUID, BusStatus> statuses = new HashMap<>();
 
     private static final java.util.Set<Direction> EVERY_FACE =
@@ -148,6 +160,7 @@ public class BusRunner {
     public void forget(UUID busId) {
         targetItems.remove(busId);
         targetEnergy.remove(busId);
+        targetFluids.remove(busId);
         statuses.remove(busId);
     }
 
@@ -155,14 +168,17 @@ public class BusRunner {
     public void forgetBay(int bay) {
         machineItems.remove(bay);
         machineEnergy.remove(bay);
+        machineFluids.remove(bay);
     }
 
     /** Drops every cache. Called when the Workbay is removed, so nothing keeps a level alive. */
     public void invalidate() {
         targetItems.clear();
         targetEnergy.clear();
+        targetFluids.clear();
         machineItems.clear();
         machineEnergy.clear();
+        machineFluids.clear();
     }
 
     private BusStatus run(ServerLevel level, ServerLevel backshop, WorkbayRecord record, BusConfig bus) {
@@ -203,10 +219,7 @@ public class BusRunner {
         return switch (bus.resource()) {
             case ITEM -> runItems(record, bus, targetLevel, target.pos(), backshop, machinePos, faces);
             case ENERGY -> runEnergy(bus, targetLevel, target.pos(), backshop, machinePos, faces);
-            // Fluids use the same shape and are not wired up yet. Reported, not idled: the row's
-            // resource icon is one click away from the mode icon, so a link cycled to fluids by
-            // accident spent a session looking like a link with nothing to do.
-            case FLUID -> BusStatus.RESOURCE_NOT_CARRIED;
+            case FLUID -> runFluid(bus, targetLevel, target.pos(), backshop, machinePos, faces);
         };
     }
 
@@ -355,6 +368,55 @@ public class BusRunner {
     }
 
     /**
+     * Fluids. SPEC.md §9, and deliberately the item path's shape rather than the energy path's:
+     * <b>the source is resolved first, and the destination is bound on the same call the commit
+     * will make</b>, given what the source actually offered. A fluid handler's own answers are no
+     * more trustworthy than an item handler's — a Mekanism machine's null side reports its tanks
+     * perfectly and then swallows the fill — and there is nothing to simulate a fill <em>of</em>
+     * until the source has been asked.
+     *
+     * <p>No skim and no filter. The Assay converts goods, and the link's filter is a ghost
+     * <em>item</em>; SPEC.md §5's filter items are where a fluid filter would go.
+     */
+    private BusStatus runFluid(BusConfig bus, ServerLevel targetLevel, BlockPos targetPos,
+        ServerLevel backshop, BlockPos machinePos, java.util.Set<Direction> faces) {
+        BusEndpoint<IFluidHandler> targetEnd = targetFluids.computeIfAbsent(bus.id(), id ->
+            new BusEndpoint<>(Capabilities.FluidHandler.BLOCK, targetLevel, targetPos, alive,
+                bus.targetFace().orElse(null)));
+        BusEndpoint<IFluidHandler> machineEnd = machineFluids.computeIfAbsent(bus.bay(), b ->
+            new BusEndpoint<>(Capabilities.FluidHandler.BLOCK, backshop, machinePos, alive,
+                bus.machineFace().orElse(null)));
+
+        if (!targetEnd.targetLoaded()) {
+            return BusStatus.TARGET_NOT_LOADED;
+        }
+        boolean insert = bus.mode() == BusConfig.Mode.INSERT;
+        BusEndpoint<IFluidHandler> source = insert ? machineEnd : targetEnd;
+        BusEndpoint<IFluidHandler> sink = insert ? targetEnd : machineEnd;
+        java.util.Set<Direction> sourceFaces = insert ? faces : EVERY_FACE;
+        java.util.Set<Direction> sinkFaces = insert ? EVERY_FACE : faces;
+
+        int budget = Math.max(1, bus.rate() * MB_PER_RATE);
+        IFluidHandler from = source.resolve(
+            h -> !h.drain(budget, IFluidHandler.FluidAction.SIMULATE).isEmpty(), sourceFaces);
+        if (from == null) {
+            // Empty and unreachable are different things, and one message for both is how a dead
+            // link spends a session looking like a resting one.
+            boolean anyHandler = source.resolve(h -> h.getTanks() > 0, sourceFaces) != null;
+            return anyHandler ? BusStatus.IDLE
+                : insert ? BusStatus.MACHINE_NO_PORT : BusStatus.TARGET_NO_PORT;
+        }
+        IFluidHandler to = sink.resolve(
+            h -> BusTransfer.moveFluid(from, h, budget, true) > 0, sinkFaces);
+        if (to == null) {
+            boolean anyHandler = sink.resolve(h -> h.getTanks() > 0, sinkFaces) != null;
+            return anyHandler ? BusStatus.IDLE
+                : insert ? BusStatus.TARGET_NO_PORT : BusStatus.MACHINE_NO_PORT;
+        }
+        return BusTransfer.moveFluid(from, to, budget) > 0 ? BusStatus.RUNNING : BusStatus.IDLE;
+    }
+
+    /**
      * A source only counts if something could actually come out of it. Binding to the first handler
      * that merely exists is how a bus ends up wired to a read-only face and moves nothing forever.
      */
@@ -380,8 +442,6 @@ public class BusRunner {
         CONNECTOR_GONE, TARGET_MISSING, TARGET_NOT_LOADED, TARGET_NO_PORT,
         /** The hosted machine answers on none of the faces this link may use. */
         MACHINE_NO_PORT,
-        /** Set to a resource this build does not move. Fluids, today. */
-        RESOURCE_NOT_CARRIED,
         /** The bay's cube has faces set, but none for this link's direction of travel. */
         MACHINE_NO_FACE;
 
