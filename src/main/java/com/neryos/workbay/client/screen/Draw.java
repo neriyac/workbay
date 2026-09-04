@@ -31,6 +31,16 @@ public final class Draw {
     public static final int WELL = 0xFF191B1F;
     /** One slot. Lighter than a well on purpose — a black square reads as a hole, not a slot. */
     public static final int SLOT = 0xFF212429;
+    /**
+     * The inside of a gauge. Far darker than {@link #WELL} and than the panel, because a gauge is
+     * the one container here whose <em>contents</em> are the reading — the tube has to get out of
+     * the way of two pixels of fluid.
+     */
+    public static final int TUBE = 0xFF0D1015;
+    /** The line along the top of whatever a gauge holds. Turns a sliver into a surface. */
+    public static final int SURFACE = 0x99FFFFFF;
+    /** Quarter marks, light enough to survive a bright fluid and a dark tube alike. */
+    public static final int GRADUATION = 0x40FFFFFF;
 
     // Far enough apart to survive a dark panel. At one pixel, a one-shade edge is no edge.
     public static final int EDGE_LIGHT = 0xFF6A7280;
@@ -132,22 +142,29 @@ public final class Draw {
     }
 
     /**
-     * A vertical gauge: a tall, narrow well filled from the bottom.
+     * A vertical gauge: a tall, narrow tube filled from the bottom.
      *
      * <p>Vertical because that is what a buffer looks like everywhere else in the genre, and a
      * player reads "half full" off a tall column without reading anything. A ten-pixel horizontal
-     * strip with a number beside it reads as a progress bar at best and as nothing at worst - which
-     * is what ours did.
+     * strip with a number beside it reads as a progress bar at best and as nothing at worst.
+     *
+     * <p>Three things make a <em>low</em> level still read as a level, and all three come from
+     * Mekanism's {@code GuiGauge}: the tube is much darker than the panel, so it is visibly a
+     * container rather than a shadow; {@link #gaugeGlass} draws quarter graduations over the
+     * contents, so an almost-empty tube is still a scale with something at the bottom of it; and
+     * the fill carries a bright line along its surface, so two pixels of content read as a
+     * surface rather than as an edge.
      */
     public static void gauge(GuiGraphics g, int x, int y, int w, int h, int value, int max,
         int argb) {
-        slot(g, x, y, w, h);
+        gaugeTube(g, x, y, w, h);
         g.fill(x + 1, y + 1, x + w - 1, y + h - 1, (argb & 0x00FFFFFF) | 0x33000000);
-        if (max <= 0 || value <= 0) {
-            return;
+        if (max > 0 && value > 0) {
+            int top = y + h - 1 - fill(h, value, max);
+            g.fill(x + 1, top, x + w - 1, y + h - 1, argb);
+            g.fill(x + 1, top, x + w - 1, top + 1, SURFACE);
         }
-        int filled = Math.max(1, (int) ((long) (h - 2) * Math.min(value, max) / max));
-        g.fill(x + 1, y + h - 1 - filled, x + w - 1, y + h - 1, argb);
+        gaugeGlass(g, x, y, w, h);
     }
 
     /**
@@ -160,16 +177,17 @@ public final class Draw {
      *
      * <p>Tiled upwards at the sprite's native 16 pixels rather than stretched to fit, and clipped
      * to the fill line, so a gauge that is a third full shows a third of a real fluid rather than a
-     * whole one squashed.
+     * whole one squashed. The tube's inside is sixteen pixels wide for that reason: at fourteen,
+     * every tile lost two columns of the sprite.
      */
     public static void fluidGauge(GuiGraphics g, int x, int y, int w, int h,
         net.neoforged.neoforge.fluids.FluidStack fluid, int capacity) {
-        slot(g, x, y, w, h);
+        gaugeTube(g, x, y, w, h);
         if (fluid.isEmpty() || capacity <= 0) {
+            gaugeGlass(g, x, y, w, h);
             return;
         }
-        int filled = Math.max(1,
-            (int) ((long) (h - 2) * Math.min(fluid.getAmount(), capacity) / capacity));
+        int filled = fill(h, fluid.getAmount(), capacity);
         var extensions = net.neoforged.neoforge.client.extensions.common.IClientFluidTypeExtensions
             .of(fluid.getFluid());
         var sprite = Minecraft.getInstance()
@@ -185,6 +203,54 @@ public final class Draw {
         }
         g.disableScissor();
         g.setColor(1.0F, 1.0F, 1.0F, 1.0F);
+        g.fill(x + 1, bottom - filled, x + w - 1, bottom - filled + 1, SURFACE);
+        gaugeGlass(g, x, y, w, h);
+    }
+
+    /**
+     * How many pixels of a gauge {@code value} fills. <b>Two at the minimum, not one.</b> A single
+     * lit row sitting against the tube's own bottom edge is an edge, not a level - which is how
+     * 2,000 of 32,000 came to read as an empty box.
+     */
+    private static int fill(int h, int value, int max) {
+        return Math.clamp((long) (h - 2) * value / max, 2, h - 2);
+    }
+
+    /**
+     * The empty tube: a recess much darker than the panel, with the sunken bevel every other
+     * container on these screens has.
+     *
+     * <p>Darker than {@link #WELL}, which was the fault. A well one shade off the panel is a shape
+     * the eye does not separate from it, so a gauge with a little in it read as a flat grey box
+     * with nothing in it at all.
+     */
+    private static void gaugeTube(GuiGraphics g, int x, int y, int w, int h) {
+        g.fill(x, y, x + w, y + h, TUBE);
+        bevel(g, x, y, w, h, false);
+    }
+
+    /**
+     * The glass, drawn <b>over</b> the contents: quarter graduations, a highlight down the left
+     * edge and a shadow down the right and across the top.
+     *
+     * <p>Over rather than under is the whole point - it is what makes the fluid look like it is
+     * inside something. Mekanism does the same thing with a one-bit overlay texture
+     * ({@code gui/gauge/standard.png}: a half-width tick every six pixels and a full-width one at
+     * the midpoint); this draws the same idea in code because this mod has no gauge texture and
+     * quarters survive a gauge of any height, which a fixed six-pixel pitch does not.
+     */
+    private static void gaugeGlass(GuiGraphics g, int x, int y, int w, int h) {
+        int left = x + 1;
+        int right = x + w - 1;
+        int top = y + 1;
+        int bottom = y + h - 1;
+        for (int quarter = 1; quarter < 4; quarter++) {
+            int ty = bottom - (h - 2) * quarter / 4;
+            g.fill(left, ty, quarter == 2 ? right : left + (w - 2) / 2, ty + 1, GRADUATION);
+        }
+        g.fill(left, top, left + 1, bottom, 0x26FFFFFF);
+        g.fill(right - 1, top, right, bottom, 0x33000000);
+        g.fill(left, top, right, top + 1, 0x33000000);
     }
 
     // ------------------------------------------------------------------ text

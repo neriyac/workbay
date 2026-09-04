@@ -363,8 +363,15 @@ public class WBLanguageProvider extends LanguageProvider {
         // the tooltip is where "mB" and "FE" are actually said.
         add(WorkbayLang.guiKey("bayview.tank"), "%s / %s mB");
         add(WorkbayLang.guiKey("bayview.tank.empty"), "Empty tank");
-        add(WorkbayLang.guiKey("bayview.tank.tip"), "Click with a bucket or tank on the cursor to "
-            + "fill it, or with an empty one to draw from it.");
+        add(WorkbayLang.guiKey("bayview.tank.tip"), "Fill it from a container in the slot below, "
+            + "or put an empty container there to draw from it.");
+        // The fluid slots. The resting line is the label - two unnamed slots are a guess - and the
+        // three others are the refusals. Only mixing names anything: whether a tank is full or
+        // empty is already drawn, in a gauge, directly above them.
+        add(WorkbayLang.guiKey("bayview.exchange"), "Container in, result out.");
+        add(WorkbayLang.guiKey("bayview.exchange.mixed"), "This tank holds %s.");
+        add(WorkbayLang.guiKey("bayview.exchange.blocked"), "Take the result out first.");
+        add(WorkbayLang.guiKey("bayview.exchange.refused"), "Nothing moves either way.");
         add(WorkbayLang.guiKey("bayview.energy"), "Stored energy");
         add(WorkbayLang.guiKey("bayview.energy.tip"), "The machine's own buffer. The Workbay shares "
             + "power to it automatically - there is nothing to click here.");

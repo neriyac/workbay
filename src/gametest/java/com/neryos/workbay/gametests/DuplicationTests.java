@@ -197,6 +197,41 @@ public class DuplicationTests {
         return count(menu.getCarried(), item);
     }
 
+    /**
+     * Every place a container handed to Bay View's fluid slots could be: the player, the cursor,
+     * both fluid slots, and the floor. A census that skips one of those passes a screen that
+     * quietly keeps a second copy in it.
+     */
+    private static int inEveryPlace(ExtendedGameTestHelper helper, GameTestPlayer player,
+        BayViewMenu view, Item item) {
+        return onPlayer(player, item) + carried(view, item) + loose(helper, item)
+            + count(inFluidSlot(view, 0), item) + count(inFluidSlot(view, 1), item);
+    }
+
+    /** The fluid slots are the last two on the menu: in, then out. */
+    private static ItemStack inFluidSlot(BayViewMenu view, int which) {
+        return view.getSlot(view.slots.size() - 2 + which).getItem();
+    }
+
+    private static void putInFluidSlot(BayViewMenu view, int which, ItemStack stack) {
+        view.getSlot(view.slots.size() - 2 + which).set(stack);
+    }
+
+    /**
+     * A real mod's fluid handler is the point of these tests, so a missing partner mod is a
+     * failure and never a skip.
+     */
+    private static Block mekanismTank(ExtendedGameTestHelper helper) {
+        Block tank = net.minecraft.core.registries.BuiltInRegistries.BLOCK
+            .get(net.minecraft.resources.ResourceLocation.parse("mekanism:basic_fluid_tank"));
+        if (tank == Blocks.AIR) {
+            helper.fail("mekanism:basic_fluid_tank is not registered. These tests are about a real "
+                + "mod's fluid handler, so a missing partner mod is a failure, never a skip. "
+                + "Check the gametestRuntimeOnly Mekanism dependency in build.gradle.");
+        }
+        return tank;
+    }
+
     // ---------------------------------------------------------------- fixture
 
     private static WorkbayBlockEntity placeWorkbay(ExtendedGameTestHelper helper, BlockPos pos,
@@ -711,15 +746,19 @@ public class DuplicationTests {
 
     /**
      * The fluid half of Bay View, against a real Mekanism tank. One bucket of water goes in and
-     * comes back out, and at every step the census is the same: <b>a thousand millibuckets exist,
-     * in exactly one place</b> — either in the bucket or in the tank, never in both, never in
-     * neither.
+     * comes back out through the two container slots, and at every step the census is the same:
+     * <b>a thousand millibuckets exist, in exactly one place</b> — either in a bucket or in the
+     * tank, never in both, never in neither. The bucket itself is counted in every place it could
+     * be: the player, the cursor, both fluid slots, and the floor.
      *
      * <p>Mekanism is the machine that makes this worth testing rather than a formality. Its
      * null-side handler reports the tank's contents perfectly and then silently refuses every
      * write, so a screen that reads and writes through the same resolved handler shows a tank, eats
      * a bucket of water and moves nothing. {@link BayViewMenu.Live#reach} is why this passes: the
      * read takes the null side, the write simulates and takes a face.
+     *
+     * <p>Closing the screen is the last step, because the fluid slots are the menu's own and a
+     * container standing in one when the menu goes away is a container that has to come back.
      */
     @GameTest
     @TestHolder(description = "A bucket of water into a hosted Mekanism tank and back out is never copied or lost.")
@@ -735,66 +774,182 @@ public class DuplicationTests {
             WorkbayTickets.force(backshop, record.id(), record.bayColumn());
             BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
 
-            Block tank = net.minecraft.core.registries.BuiltInRegistries.BLOCK
-                .get(net.minecraft.resources.ResourceLocation.parse("mekanism:basic_fluid_tank"));
-            if (tank == Blocks.AIR) {
-                helper.fail("mekanism:basic_fluid_tank is not registered. This test is about a real "
-                    + "mod's fluid handler, so a missing partner mod is a failure, never a skip. "
-                    + "Check the gametestRuntimeOnly Mekanism dependency in build.gradle.");
-            }
-
             player.getInventory().clearContent();
-            rack(menuFor(workbay, player), player, 0, new ItemStack(tank, 1));
+            rack(menuFor(workbay, player), player, 0, new ItemStack(mekanismTank(helper), 1));
 
             BayViewMenu view = bayView(2, player, workbay, 0);
             // The read half, first: without a tank on the screen the rest of this proves nothing.
             if (view.state().tanks().isEmpty()) {
-                helper.fail("Bay View sees no tanks on a hosted " + tank
-                    + ", so there is nothing for a bucket to be clicked onto");
+                helper.fail("Bay View sees no tanks on a hosted Mekanism tank, so there is nothing "
+                    + "for the container slots to exchange with");
             }
 
             var water = net.minecraft.world.level.material.Fluids.WATER;
-            // Millibuckets in existence: the bucket carries a thousand, the tank holds what it holds.
+            // Millibuckets in existence: a full bucket carries a thousand, the tank holds what it
+            // holds. Both fluid slots count, and so do the cursor and the floor.
             java.util.function.IntSupplier census = () ->
-                (onPlayer(player, Items.WATER_BUCKET) + count(view.getCarried(), Items.WATER_BUCKET)
-                    + loose(helper, Items.WATER_BUCKET)) * 1000
+                inEveryPlace(helper, player, view, Items.WATER_BUCKET) * 1000
                     + inTanks(backshop, machinePos, water);
             java.util.function.IntSupplier buckets = () ->
-                onPlayer(player, Items.WATER_BUCKET) + onPlayer(player, Items.BUCKET)
-                    + count(view.getCarried(), Items.WATER_BUCKET)
-                    + count(view.getCarried(), Items.BUCKET)
-                    + loose(helper, Items.WATER_BUCKET) + loose(helper, Items.BUCKET);
+                inEveryPlace(helper, player, view, Items.WATER_BUCKET)
+                    + inEveryPlace(helper, player, view, Items.BUCKET);
 
-            view.setCarried(new ItemStack(Items.WATER_BUCKET));
-            helper.assertValueEqual(census.getAsInt(), 1000, "millibuckets of water before the click");
+            putInFluidSlot(view, 0, new ItemStack(Items.WATER_BUCKET));
+            helper.assertValueEqual(census.getAsInt(), 1000, "millibuckets of water before the tick");
 
-            view.clickMenuButton(player, BayViewMenu.FLUID_BUTTON);
+            view.tick();
             helper.assertValueEqual(census.getAsInt(), 1000, "millibuckets of water after filling "
-                + "the hosted tank from the cursor");
+                + "the hosted tank from the container slot");
             helper.assertValueEqual(buckets.getAsInt(), 1, "buckets in existence after the fill");
             if (inTanks(backshop, machinePos, water) <= 0) {
-                helper.fail("the click emptied the bucket somewhere that is not the tank. This is "
-                    + "the Mekanism read-only null-side handler: the write must resolve a face by "
-                    + "simulating, not take whichever handler answers first.");
+                helper.fail("the exchange emptied the bucket somewhere that is not the tank. That "
+                    + "is the Mekanism read-only null-side handler: the write must resolve a face "
+                    + "by simulating, not take whichever handler answers first.");
             }
 
             // And back out, which is the direction that can hand the player a full bucket while
             // leaving the tank full as well.
-            view.clickMenuButton(player, BayViewMenu.FLUID_BUTTON);
+            ItemStack emptied = inFluidSlot(view, 1).copy();
+            helper.assertValueEqual(emptied.getItem(), Items.BUCKET,
+                "the item the fill left in the result slot");
+            putInFluidSlot(view, 1, ItemStack.EMPTY);
+            putInFluidSlot(view, 0, emptied);
+            view.tick();
             helper.assertValueEqual(census.getAsInt(), 1000, "millibuckets of water after drawing "
                 + "it back out of the hosted tank");
             helper.assertValueEqual(buckets.getAsInt(), 1, "buckets in existence after the draw");
+
+            view.removed(player);
+            helper.assertValueEqual(census.getAsInt(), 1000,
+                "millibuckets of water after the screen closed on a full container slot");
+            helper.assertValueEqual(buckets.getAsInt(), 1,
+                "buckets in existence after the screen closed on a full container slot");
+            if (!inFluidSlot(view, 1).isEmpty()) {
+                helper.fail("the result slot still holds a container after the screen closed, so "
+                    + "closing it a second time would hand out a second one");
+            }
             helper.succeed();
         });
     }
 
     /**
-     * A machine that is gone must refuse a fluid click the same way it refuses an item one. The
+     * <b>The duplication trap this feature is built around.</b> Sixteen empty buckets in the slot
+     * and one bucket of water in the tank: exactly one bucket may come out full. A handler that
+     * reads the slot's whole stack and fills it makes sixteen buckets of water out of one, which is
+     * why {@code FluidUtil.tryFillContainer} starts by copying one container off the stack and why
+     * the exchange shrinks the input by exactly one to match.
+     *
+     * <p>Two ticks, not one. One tick proves nothing: the second is the one that would fill a
+     * second bucket out of a tank that no longer has anything in it.
+     */
+    @GameTest
+    @TestHolder(description = "A stack of empty buckets fills one bucket per tick and never more than the tank held.")
+    public static void bayViewFillsOneContainerFromAStackNotTheWholeStack(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = backshop(helper);
+            WorkbayTickets.force(backshop, record.id(), record.bayColumn());
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+
+            player.getInventory().clearContent();
+            rack(menuFor(workbay, player), player, 0, new ItemStack(mekanismTank(helper), 1));
+            BayViewMenu view = bayView(2, player, workbay, 0);
+
+            // Put the thousand millibuckets in the tank by the route the test above proves works.
+            putInFluidSlot(view, 0, new ItemStack(Items.WATER_BUCKET));
+            view.tick();
+            putInFluidSlot(view, 1, ItemStack.EMPTY);
+            var water = net.minecraft.world.level.material.Fluids.WATER;
+            helper.assertValueEqual(inTanks(backshop, machinePos, water), 1000,
+                "millibuckets in the hosted tank before the stack of empty buckets goes in");
+
+            putInFluidSlot(view, 0, new ItemStack(Items.BUCKET, 16));
+            java.util.function.IntSupplier census = () ->
+                inEveryPlace(helper, player, view, Items.WATER_BUCKET) * 1000
+                    + inTanks(backshop, machinePos, water);
+            helper.assertValueEqual(census.getAsInt(), 1000,
+                "millibuckets of water before the stack of empty buckets is served");
+
+            view.tick();
+            helper.assertValueEqual(census.getAsInt(), 1000,
+                "millibuckets of water after one tick with sixteen empty buckets waiting");
+            helper.assertValueEqual(inEveryPlace(helper, player, view, Items.WATER_BUCKET), 1,
+                "buckets of water made out of a tank that held exactly one bucket");
+            helper.assertValueEqual(inEveryPlace(helper, player, view, Items.BUCKET), 15,
+                "empty buckets left after one of the sixteen was filled");
+
+            // The tank is empty now, so a second tick must do nothing at all.
+            view.tick();
+            helper.assertValueEqual(census.getAsInt(), 1000,
+                "millibuckets of water after a second tick against an emptied tank");
+            helper.assertValueEqual(inEveryPlace(helper, player, view, Items.WATER_BUCKET), 1,
+                "buckets of water after a second tick against an emptied tank");
+            helper.succeed();
+        });
+    }
+
+    /**
+     * A tank holding one fluid refuses a container of another, moves nothing either way, and
+     * <b>says so</b>. The last part is the half worth a test: a refusal the player cannot see is
+     * indistinguishable from a broken screen, and the line under the slots is the only thing that
+     * tells them apart.
+     */
+    @GameTest
+    @TestHolder(description = "A lava bucket against a water-filled hosted tank moves nothing and says why.")
+    public static void bayViewSaysSoWhenTheTankHoldsADifferentFluid(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = backshop(helper);
+            WorkbayTickets.force(backshop, record.id(), record.bayColumn());
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+
+            player.getInventory().clearContent();
+            rack(menuFor(workbay, player), player, 0, new ItemStack(mekanismTank(helper), 1));
+            BayViewMenu view = bayView(2, player, workbay, 0);
+
+            putInFluidSlot(view, 0, new ItemStack(Items.WATER_BUCKET));
+            view.tick();
+            putInFluidSlot(view, 1, ItemStack.EMPTY);
+            var water = net.minecraft.world.level.material.Fluids.WATER;
+            var lava = net.minecraft.world.level.material.Fluids.LAVA;
+            helper.assertValueEqual(inTanks(backshop, machinePos, water), 1000,
+                "millibuckets of water in the hosted tank before the lava arrives");
+
+            // The record and the level must agree on the same tick the transfer happened. They did
+            // not: the gauges were read before the exchange ran and showed last tick's tank.
+            helper.assertValueEqual(view.state().tanks().get(0).contents().getFluid(), water,
+                "what the screen's own record says the tank holds, one tick after it was filled");
+            putInFluidSlot(view, 0, new ItemStack(Items.LAVA_BUCKET));
+            view.tick();
+            helper.assertValueEqual(inTanks(backshop, machinePos, lava), 0,
+                "millibuckets of lava in a tank that already holds water");
+            helper.assertValueEqual(inTanks(backshop, machinePos, water), 1000,
+                "millibuckets of water still in the tank after lava was offered to it");
+            helper.assertValueEqual(inEveryPlace(helper, player, view, Items.LAVA_BUCKET), 1,
+                "lava buckets in existence after the tank refused one");
+            helper.assertValueEqual(view.state().hint(), BayViewMenu.Hint.MIXED,
+                "what the screen says after a tank holding water refused a bucket of lava");
+            helper.succeed();
+        });
+    }
+
+    /**
+     * A machine that is gone must refuse a fluid exchange the same way it refuses an item one. The
      * failure this catches is the quiet one: a handler resolved before the eject, still accepting
      * the bucket, into a block entity nobody owns any more.
      */
     @GameTest
-    @TestHolder(description = "Clicking a bucket into an ejected bay's tanks moves nothing.")
+    @TestHolder(description = "A bucket in an ejected bay's fluid slot moves nothing.")
     public static void bayViewOverAnEjectedMachineRefusesFluidToo(final DynamicTest test) {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
 
@@ -806,23 +961,17 @@ public class DuplicationTests {
             ServerLevel backshop = backshop(helper);
             WorkbayTickets.force(backshop, record.id(), record.bayColumn());
 
-            Block tank = net.minecraft.core.registries.BuiltInRegistries.BLOCK
-                .get(net.minecraft.resources.ResourceLocation.parse("mekanism:basic_fluid_tank"));
-            if (tank == Blocks.AIR) {
-                helper.fail("mekanism:basic_fluid_tank is not registered.");
-            }
-
             player.getInventory().clearContent();
             WorkbayMenu bays = menuFor(workbay, player);
-            rack(bays, player, 0, new ItemStack(tank, 1));
+            rack(bays, player, 0, new ItemStack(mekanismTank(helper), 1));
 
             BayViewMenu view = bayView(2, player, workbay, 0);
-            view.setCarried(new ItemStack(Items.WATER_BUCKET));
+            putInFluidSlot(view, 0, new ItemStack(Items.WATER_BUCKET));
             bays.act(WorkbayAction.EJECT, 0, Optional.empty());
 
-            view.clickMenuButton(player, BayViewMenu.FLUID_BUTTON);
-            helper.assertValueEqual(count(view.getCarried(), Items.WATER_BUCKET), 1,
-                "water buckets still on the cursor after clicking into a bay with no machine in it");
+            view.tick();
+            helper.assertValueEqual(count(inFluidSlot(view, 0), Items.WATER_BUCKET), 1,
+                "water buckets still in the fluid slot after a tick against a bay with no machine");
             helper.succeed();
         });
     }

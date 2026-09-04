@@ -32,6 +32,10 @@ public class BayViewScreen extends AbstractContainerScreen<BayViewMenu> {
     private static final int LABEL_X = 8 + BayViewMenu.GAUGE_W + 6;
     private static final int LABEL_W = WIDTH - LABEL_X - 8;
 
+    /** And the same for the line beside the two fluid-container slots. */
+    private static final int HINT_X = BayViewMenu.EXCHANGE_OUT_X + 22;
+    private static final int HINT_W = WIDTH - HINT_X - 8;
+
     public BayViewScreen(BayViewMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
         imageWidth = WIDTH;
@@ -72,6 +76,7 @@ public class BayViewScreen extends AbstractContainerScreen<BayViewMenu> {
         }
 
         gauges(g);
+        exchange(g);
 
         // SPEC.md §5's permanent line, in the gap the layout reserves for it.
         Draw.wrapped(g, font, WorkbayScreen.gui("bayview.limits"), leftPos + 8,
@@ -107,6 +112,45 @@ public class BayViewScreen extends AbstractContainerScreen<BayViewMenu> {
         }
     }
 
+    /**
+     * The two fluid-container slots, and one line saying what they are for — or, when the last
+     * exchange refused, why.
+     *
+     * <p>The line is there at rest, not only on a refusal. Two unlabelled slots under a gauge are a
+     * guess, and the player who has to guess is the one who has not thought to hover anything: the
+     * same argument SPEC.md §5 makes for the limits sentence.
+     */
+    private void exchange(GuiGraphics g) {
+        if (!menu.hasTanks()) {
+            return;
+        }
+        int y = topPos + menu.exchangeY();
+        Draw.slot(g, leftPos + BayViewMenu.EXCHANGE_IN_X - 1, y - 1, 18, 18);
+        Draw.slot(g, leftPos + BayViewMenu.EXCHANGE_OUT_X - 1, y - 1, 18, 18);
+        BayViewMenu.Hint hint = menu.state().hint();
+        Draw.wrapped(g, font, hintText(hint), leftPos + HINT_X, y + 1, HINT_W,
+            hint == BayViewMenu.Hint.NONE ? Draw.TEXT_FAINT : Draw.AMBER);
+    }
+
+    /** The mixing refusal is the only one that names something, because it is the only one the
+     * gauge above it does not already show. */
+    private Component hintText(BayViewMenu.Hint hint) {
+        return switch (hint) {
+            case NONE -> WorkbayScreen.gui("bayview.exchange");
+            case MIXED -> WorkbayScreen.gui("bayview.exchange.mixed", heldFluid().getString());
+            case BLOCKED -> WorkbayScreen.gui("bayview.exchange.blocked");
+            case REFUSED -> WorkbayScreen.gui("bayview.exchange.refused");
+        };
+    }
+
+    private Component heldFluid() {
+        return menu.state().tanks().stream()
+            .filter(tank -> !tank.contents().isEmpty())
+            .findFirst()
+            .map(tank -> tank.contents().getHoverName())
+            .orElseGet(() -> WorkbayScreen.gui("bayview.tank.empty"));
+    }
+
     /** What a gauge is, then how full it is. The exact figures stay in the tooltip. */
     private void label(GuiGraphics g, int y, String what, String figures) {
         Draw.text(g, font, what, leftPos + LABEL_X, y + 3, LABEL_W, Draw.TEXT);
@@ -140,23 +184,6 @@ public class BayViewScreen extends AbstractContainerScreen<BayViewMenu> {
             Draw.TEXT);
         Draw.text(g, font, playerInventoryTitle.getString(), 8, inventoryLabelY, imageWidth - 16,
             Draw.TEXT_DIM);
-    }
-
-    /**
-     * Clicking a tank does what right-clicking one in the world does: the container on the cursor
-     * fills it, or an empty one takes from it. The server decides both — this only says which row
-     * was hit, and even that only to keep the click from reaching the slot machinery underneath.
-     */
-    @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        int row = gaugeAt((int) mouseX, (int) mouseY);
-        if (row >= 0 && row < menu.state().tanks().size() && minecraft != null
-            && minecraft.gameMode != null) {
-            minecraft.gameMode.handleInventoryButtonClick(menu.containerId,
-                BayViewMenu.FLUID_BUTTON);
-            return true;
-        }
-        return super.mouseClicked(mouseX, mouseY, button);
     }
 
     @Override

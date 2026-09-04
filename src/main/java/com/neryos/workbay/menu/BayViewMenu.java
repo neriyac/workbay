@@ -22,6 +22,7 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.capabilities.BlockCapability;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.energy.IEnergyStorage;
+import net.neoforged.neoforge.fluids.FluidActionResult;
 import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.fluids.FluidUtil;
 import net.neoforged.neoforge.fluids.capability.IFluidHandler;
@@ -30,7 +31,6 @@ import net.neoforged.neoforge.items.IItemHandlerModifiable;
 import net.neoforged.neoforge.items.ItemHandlerHelper;
 import net.neoforged.neoforge.items.ItemStackHandler;
 import net.neoforged.neoforge.items.SlotItemHandler;
-import net.neoforged.neoforge.items.wrapper.PlayerMainInvWrapper;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.Nullable;
 
@@ -88,23 +88,26 @@ public class BayViewMenu extends AbstractContainerMenu {
     /**
      * One gauge row: a tall narrow gauge on the left, and two lines of text beside it - what the
      * tank holds, and how much. Tall because that is what a tank looks like in every machine mod
-     * there is; twenty-six pixels because two lines of text is what the row has to carry.
+     * there is - EnderIO's tank widget is 16x47, Mekanism's standard gauge 16x58.
+     *
+     * <p><b>Sixteen pixels wide inside</b>, hence eighteen outside: a fluid's still texture is
+     * sixteen wide, and the old fourteen-wide tube clipped two columns off every tile it drew.
+     * Thirty-two inside is two whole tiles and enough height for quarter graduations to separate.
      */
-    public static final int GAUGE_W = 14;
-    public static final int GAUGE_H = 26;
-    public static final int GAUGE_PITCH = 28;
+    public static final int GAUGE_W = 18;
+    public static final int GAUGE_H = 34;
+    public static final int GAUGE_PITCH = 38;
+
+    /** The fluid-container slots under the gauges, and the room the row takes. */
+    public static final int EXCHANGE_ROW = 24;
+    public static final int EXCHANGE_IN_X = 8;
+    public static final int EXCHANGE_OUT_X = 30;
+    public static final int EXCHANGE_IN = 0;
+    public static final int EXCHANGE_OUT = 1;
 
     /** Where the machine grid starts, and where the player's own inventory starts under it. */
     public static final int GRID_X = 8;
     public static final int GRID_Y = 40;
-
-    /**
-     * The one menu button this screen has: "do the obvious thing with what is on the cursor and
-     * this machine's tanks". Vanilla's button channel rather than a payload of our own — the click
-     * carries no argument, and {@code clickMenuButton} is already validated, container-id checked
-     * and spectator-guarded by {@code ServerGamePacketListenerImpl}.
-     */
-    public static final int FLUID_BUTTON = 0;
 
     @Nullable
     private final WorkbayBlockEntity workbay;
@@ -130,6 +133,20 @@ public class BayViewMenu extends AbstractContainerMenu {
      */
     private final int gauges;
 
+    /** Whether the panel was laid out with the fluid-container row. Fixed for the same reason. */
+    private final boolean tanks;
+
+    /**
+     * The two fluid-container slots, in and out.
+     *
+     * <p><b>The menu's own buffer, not the machine's.</b> A foreign machine has nowhere for us to
+     * park a bucket, so these live for as long as the screen does and {@link #removed} hands back
+     * whatever is standing in them — the same contract vanilla's crafting grid has. The alternative
+     * is writing into the machine's item slots, which is a different feature and a worse one: a
+     * furnace's fuel slot is not a place to keep a bucket that is halfway through being filled.
+     */
+    private final ItemStackHandler exchange = new ItemStackHandler(2);
+
     /** Tanks and energy, as last read on the server. Never a source of truth on the client. */
     private State state;
 
@@ -153,6 +170,7 @@ public class BayViewMenu extends AbstractContainerMenu {
         this.machineSlots = Math.clamp(machineSlots, 0, MAX_SLOTS);
         this.state = state;
         this.gauges = state.gauges();
+        this.tanks = !state.tanks().isEmpty();
         // The client has no capability to reach, so it mirrors into a plain handler and lets the
         // ordinary slot sync fill it. Nothing on the client is ever the source of truth.
         this.machine = machine != null ? machine : new ItemStackHandler(this.machineSlots);
@@ -163,7 +181,7 @@ public class BayViewMenu extends AbstractContainerMenu {
                 GRID_Y + (index / COLUMNS) * SLOT_SIZE));
         }
 
-        int inventoryY = inventoryY(machineSlots(), gauges);
+        int inventoryY = inventoryY(machineSlots(), gauges, this.tanks);
         for (int row = 0; row < 3; row++) {
             for (int column = 0; column < 9; column++) {
                 addSlot(new Slot(inventory, 9 + row * 9 + column,
@@ -173,7 +191,26 @@ public class BayViewMenu extends AbstractContainerMenu {
         for (int column = 0; column < 9; column++) {
             addSlot(new Slot(inventory, column, GRID_X + column * SLOT_SIZE, inventoryY + 58));
         }
+        // Last, so every index the rest of this class computes from machineSlots and 36 still
+        // means what it meant. Only when there is a tank: two slots under a machine with none are
+        // two slots that can never do anything.
+        if (tanks) {
+            int y = exchangeY(machineSlots(), gauges);
+            addSlot(new SlotItemHandler(exchange, EXCHANGE_IN, EXCHANGE_IN_X, y) {
+                @Override
+                public boolean mayPlace(ItemStack stack) {
+                    return FluidUtil.getFluidHandler(stack).isPresent();
+                }
+            });
+            addSlot(new SlotItemHandler(exchange, EXCHANGE_OUT, EXCHANGE_OUT_X, y) {
+                @Override
+                public boolean mayPlace(ItemStack stack) {
+                    return false;
+                }
+            });
+        }
     }
+
 
     public int rows() {
         return rows(machineSlots);
@@ -188,9 +225,17 @@ public class BayViewMenu extends AbstractContainerMenu {
         return GRID_Y + rows(slots) * SLOT_SIZE + 6;
     }
 
+    /**
+     * The fluid-container row, straight under the gauges. Its two slots are what a player actually
+     * uses to fill a hosted tank, so they sit beside the thing they change.
+     */
+    public static int exchangeY(int slots, int gauges) {
+        return gaugesY(slots) + gauges * GAUGE_PITCH + 2;
+    }
+
     /** And the limits sentence under those, so gauges push it down rather than sit on top of it. */
-    public static int limitsY(int slots, int gauges) {
-        return gaugesY(slots) + gauges * GAUGE_PITCH;
+    public static int limitsY(int slots, int gauges, boolean tanks) {
+        return gaugesY(slots) + gauges * GAUGE_PITCH + (tanks ? EXCHANGE_ROW : 0);
     }
 
     /**
@@ -204,12 +249,12 @@ public class BayViewMenu extends AbstractContainerMenu {
      * label and the first row of the player's own slots - seen in {@code runClient}, and the exact
      * same class of fault as the skim chip that overran the link name last session.
      */
-    public static int inventoryY(int slots, int gauges) {
-        return limitsY(slots, gauges) + 54;
+    public static int inventoryY(int slots, int gauges, boolean tanks) {
+        return limitsY(slots, gauges, tanks) + 54;
     }
 
-    public static int height(int slots, int gauges) {
-        return inventoryY(slots, gauges) + 58 + SLOT_SIZE + 7;
+    public static int height(int slots, int gauges, boolean tanks) {
+        return inventoryY(slots, gauges, tanks) + 58 + SLOT_SIZE + 7;
     }
 
     public int gauges() {
@@ -217,15 +262,24 @@ public class BayViewMenu extends AbstractContainerMenu {
     }
 
     public int inventoryY() {
-        return inventoryY(machineSlots, gauges);
+        return inventoryY(machineSlots, gauges, tanks);
     }
 
     public int limitsY() {
-        return limitsY(machineSlots, gauges);
+        return limitsY(machineSlots, gauges, tanks);
+    }
+
+    public int exchangeY() {
+        return exchangeY(machineSlots, gauges);
+    }
+
+    /** Whether the fluid-container row is on this panel at all. */
+    public boolean hasTanks() {
+        return tanks;
     }
 
     public int height() {
-        return height(machineSlots, gauges);
+        return height(machineSlots, gauges, tanks);
     }
 
     public State state() {
@@ -275,6 +329,38 @@ public class BayViewMenu extends AbstractContainerMenu {
     }
 
     /**
+     * Why the fluid-container slots did nothing, when they did nothing.
+     *
+     * <p>On the record rather than in a tooltip, and worked out on the <b>server</b> rather than
+     * guessed on the client. The client knows what the tanks hold but not what a face will accept,
+     * and a screen that says "refused because it holds Lava" when the real reason was a read-only
+     * face is worse than a screen that says nothing. Same argument as SPEC.md §5's limits line: the
+     * player who needs it is the one who has not thought to hover anything.
+     */
+    public enum Hint {
+        /** Nothing to say: idle, or it worked. */
+        NONE,
+        /** The tank holds a different fluid. The screen names it from {@link State#tanks}. */
+        MIXED,
+        /** The result has nowhere to go until the out slot is cleared. */
+        BLOCKED,
+        /**
+         * Nothing moves either way. Full, empty, a face that refuses, or a fluid with no container
+         * item at all — a Mekanism gas has no bucket, and an empty bucket held against one must
+         * come back an empty bucket rather than swallow the tank.
+         *
+         * <p>One value for all four because the gauge beside the slots already says whether the
+         * tank is full or empty, and a line repeating what the picture says is a line nobody reads.
+         */
+        REFUSED;
+
+        /** Clamped rather than trusted: a byte off the wire must never index off the end. */
+        public static final StreamCodec<RegistryFriendlyByteBuf, Hint> STREAM_CODEC =
+            StreamCodec.of((buffer, hint) -> buffer.writeVarInt(hint.ordinal()),
+                buffer -> values()[Math.clamp(buffer.readVarInt(), 0, values().length - 1)]);
+    }
+
+    /**
      * Everything on this screen that is not an item slot: the tanks and the energy buffer.
      *
      * <p>Its own packet rather than {@code DataSlot}s because vanilla's data-slot channel is
@@ -283,16 +369,21 @@ public class BayViewMenu extends AbstractContainerMenu {
      * that is wrong once and then wrong forever. A whole record that either matches or does not
      * cannot drift, which is the same argument {@link WorkbaySnapshot} is written on.
      */
-    public record State(List<Tank> tanks, int energy, int energyCapacity) {
+    public record State(List<Tank> tanks, int energy, int energyCapacity, Hint hint) {
 
-        public static final State EMPTY = new State(List.of(), 0, 0);
+        public static final State EMPTY = new State(List.of(), 0, 0, Hint.NONE);
 
         public static final StreamCodec<RegistryFriendlyByteBuf, State> STREAM_CODEC =
             StreamCodec.composite(
                 Tank.STREAM_CODEC.apply(ByteBufCodecs.list(MAX_TANKS)), State::tanks,
                 ByteBufCodecs.VAR_INT, State::energy,
                 ByteBufCodecs.VAR_INT, State::energyCapacity,
+                Hint.STREAM_CODEC, State::hint,
                 State::new);
+
+        public State withHint(Hint updated) {
+            return hint == updated ? this : new State(tanks, energy, energyCapacity, updated);
+        }
 
         /** How many rows the panel has to find room for. */
         public int gauges() {
@@ -307,7 +398,7 @@ public class BayViewMenu extends AbstractContainerMenu {
          */
         public boolean sameAs(State other) {
             if (energy != other.energy || energyCapacity != other.energyCapacity
-                || tanks.size() != other.tanks.size()) {
+                || hint != other.hint || tanks.size() != other.tanks.size()) {
                 return false;
             }
             for (int i = 0; i < tanks.size(); i++) {
@@ -383,11 +474,11 @@ public class BayViewMenu extends AbstractContainerMenu {
      */
     @Override
     public void broadcastChanges() {
+        tick();
         super.broadcastChanges();
-        if (!(viewer instanceof ServerPlayer serverPlayer) || !(machine instanceof Live live)) {
+        if (!(viewer instanceof ServerPlayer serverPlayer) || !(machine instanceof Live)) {
             return;
         }
-        state = live.read();
         if (!state.sameAs(sent)) {
             sent = state;
             PacketDistributor.sendToPlayer(serverPlayer, new BayViewPacket(containerId, state));
@@ -395,50 +486,140 @@ public class BayViewMenu extends AbstractContainerMenu {
     }
 
     /**
-     * A bucket (or any fluid container) clicked onto the gauges, in whichever direction makes sense.
+     * One server tick of this screen: run the fluid exchange, then re-read what the machine holds.
      *
-     * <p>The cursor rather than the hand: this is a container screen, and the stack the player is
-     * holding is the one on the cursor. Which way it goes is not a mode the player has to set — a
-     * container with fluid in it fills the machine, an empty one takes from it, which is the same
-     * rule as right-clicking a tank in the world.
-     *
-     * <p><b>The face is chosen by simulating, never by asking.</b> Every Mekanism machine's null
-     * side hands out a read-only handler that reports its tanks correctly and then swallows the
-     * fill ({@code ProxyHandler: readOnly = side == null}), so a screen that binds to the first
-     * handler it finds shows the tank, accepts the click and moves nothing. Reading is fine on that
-     * side and writing is not, so the two resolve differently.
+     * <p>Separate from {@link #broadcastChanges} so a gametest can drive it without a connection.
+     * Nothing on the client reaches this — {@code machine} is a plain handler there.
      */
-    @Override
-    public boolean clickMenuButton(Player who, int id) {
-        if (id != FLUID_BUTTON || !(machine instanceof Live live) || !stillValid(who)) {
-            return false;
+    public void tick() {
+        if (machine instanceof Live live) {
+            // The exchange first, then the reading. Written the other way round - as
+            // {@code live.read().withHint(exchange(live))} - Java evaluates the receiver before the
+            // argument, so every gauge on the screen showed the tank as it was *before* this tick's
+            // transfer. Cost a red test that said the tank was empty while the level said 1,000mB.
+            Hint hint = exchange(live);
+            state = live.read().withHint(hint);
         }
-        ItemStack cursor = getCarried();
-        if (cursor.isEmpty()) {
-            return false;
+    }
+
+    /**
+     * <b>One</b> container out of the in slot, exchanged with the machine's tanks, and the result
+     * into the out slot. Run once a tick from {@link #broadcastChanges}, which is what makes it the
+     * pattern every other mod uses: put a filled container in and the tank takes it, put an empty
+     * one in and the tank fills it. There is no direction to set and no button to press.
+     *
+     * <p><b>The arithmetic is NeoForge's, not ours.</b> {@link FluidUtil#tryEmptyContainer} and
+     * {@link FluidUtil#tryFillContainer} are the two helpers, and between them they close every
+     * duplication hole this feature has:
+     *
+     * <ul>
+     * <li>Both start with {@code container.copyWithCount(1)}, so a stack of sixteen empty buckets
+     *     is sixteen separate exchanges over sixteen ticks and never one transfer multiplied by
+     *     sixteen. This method shrinks the in slot by exactly one to match.
+     * <li>{@code tryFluidTransfer} fills the destination <em>first</em>, in simulation, and then
+     *     drains only the amount the destination said it would take — so a container that
+     *     advertises a capacity it does not honour moves what it really moved, not what it claimed.
+     * <li>A fluid with no container item at all — a Mekanism gas, which has no bucket — fails the
+     *     simulation and returns {@code FluidActionResult.FAILURE}, which lands here as
+     *     {@link Hint#REFUSED}: the tank keeps its contents and the player keeps their bucket.
+     * </ul>
+     *
+     * <p>Everything left is ours, and it is all ordering. The exchange is <b>simulated in full
+     * before anything commits</b>, because the result container has to have somewhere to go: a
+     * bucket emptied into a tank while the out slot is occupied is a bucket that stops existing.
+     * And mixing is refused by the machine, not by us — a face that will not take the fluid never
+     * gets asked to.
+     *
+     * @return what to say on the screen about why nothing happened
+     */
+    Hint exchange(Live live) {
+        ItemStack input = exchange.getStackInSlot(EXCHANGE_IN);
+        if (input.isEmpty()) {
+            return Hint.NONE;
         }
-        FluidStack offered = FluidUtil.getFluidContained(cursor).orElse(FluidStack.EMPTY);
-        IFluidHandler tanks = offered.isEmpty()
+        ItemStack one = input.copyWithCount(1);
+        FluidStack offered = FluidUtil.getFluidContained(one).orElse(FluidStack.EMPTY);
+        boolean emptying = !offered.isEmpty();
+        // The face is chosen by simulating, never by asking. Every Mekanism machine's null side
+        // hands out a read-only handler that reports its tanks correctly and then swallows the
+        // fill (ProxyHandler: readOnly = side == null), so a screen that binds to the first handler
+        // it finds shows the tank, takes the bucket and moves nothing.
+        IFluidHandler tanks = emptying
             ? live.reach(Capabilities.FluidHandler.BLOCK,
-                handler -> !handler.drain(Integer.MAX_VALUE, IFluidHandler.FluidAction.SIMULATE)
-                    .isEmpty())
+                handler -> handler.fill(offered, IFluidHandler.FluidAction.SIMULATE) > 0)
             : live.reach(Capabilities.FluidHandler.BLOCK,
-                handler -> handler.fill(offered, IFluidHandler.FluidAction.SIMULATE) > 0);
+                handler -> !handler.drain(Integer.MAX_VALUE, IFluidHandler.FluidAction.SIMULATE)
+                    .isEmpty());
+        // Why it refused, if it refuses — worked out once, because the refusal can come from
+        // either the face search or the transfer itself and it means the same thing in both.
+        // Not checked before the attempt: a machine with a water tank and a spare empty one may
+        // legitimately take the lava, and a screen that says "holds Water" while the lava goes in
+        // is worse than one that says nothing.
+        Hint refusal = emptying && mismatched(live, offered) ? Hint.MIXED : Hint.REFUSED;
+        if (tanks == null) {
+            return refusal;
+        }
+        FluidActionResult simulated = emptying
+            ? FluidUtil.tryEmptyContainer(one, tanks, Integer.MAX_VALUE, viewer, false)
+            : FluidUtil.tryFillContainer(one, tanks, Integer.MAX_VALUE, viewer, false);
+        if (!simulated.isSuccess()) {
+            return refusal;
+        }
+        if (!exchange.insertItem(EXCHANGE_OUT, simulated.getResult(), true).isEmpty()) {
+            return Hint.BLOCKED;
+        }
+        FluidActionResult done = emptying
+            ? FluidUtil.tryEmptyContainer(one, tanks, Integer.MAX_VALUE, viewer, true)
+            : FluidUtil.tryFillContainer(one, tanks, Integer.MAX_VALUE, viewer, true);
+        if (!done.isSuccess()) {
+            return Hint.REFUSED;
+        }
+        exchange.extractItem(EXCHANGE_IN, 1, false);
+        // Whatever this refuses would be a leak, and the simulate above proved it will not.
+        exchange.insertItem(EXCHANGE_OUT, done.getResult(), false);
+        return Hint.NONE;
+    }
+
+    /**
+     * Whether some tank is holding a fluid that is not the one being offered — the only refusal
+     * worth naming, because it is the only one the gauge beside the slots does not already show.
+     *
+     * <p>Off the live handler rather than off {@link #state}, which is last tick's reading and is
+     * wrong for exactly the tick that matters: the one where the exchange just changed what the
+     * tank holds.
+     */
+    private boolean mismatched(Live live, FluidStack offered) {
+        IFluidHandler tanks =
+            live.reach(Capabilities.FluidHandler.BLOCK, handler -> handler.getTanks() > 0);
         if (tanks == null) {
             return false;
         }
-        // FluidUtil owns the awkward half of this — a stack of three buckets, a container that
-        // becomes a different item when emptied, a player with no room for the result — and it
-        // simulates before it commits. Reimplementing it is how a bucket gets duplicated.
-        var inventory = new PlayerMainInvWrapper(who.getInventory());
-        var result = offered.isEmpty()
-            ? FluidUtil.tryFillContainerAndStow(cursor, tanks, inventory, Integer.MAX_VALUE, who, true)
-            : FluidUtil.tryEmptyContainerAndStow(cursor, tanks, inventory, Integer.MAX_VALUE, who, true);
-        if (!result.isSuccess()) {
-            return false;
+        for (int tank = 0; tank < tanks.getTanks(); tank++) {
+            FluidStack held = tanks.getFluidInTank(tank);
+            if (!held.isEmpty() && !FluidStack.isSameFluidSameComponents(held, offered)) {
+                return true;
+            }
         }
-        setCarried(result.getResult());
-        return true;
+        return false;
+    }
+
+    /**
+     * The fluid slots are the menu's own, so closing the screen has to give them back. Vanilla's
+     * crafting grid contract, and the same reason: a bucket parked in a slot that stops existing is
+     * a bucket that stops existing.
+     */
+    @Override
+    public void removed(Player who) {
+        super.removed(who);
+        if (who.level().isClientSide()) {
+            return;
+        }
+        for (int slot = 0; slot < exchange.getSlots(); slot++) {
+            ItemStack stack = exchange.extractItem(slot, Integer.MAX_VALUE, false);
+            if (!stack.isEmpty()) {
+                who.getInventory().placeItemBackInInventory(stack);
+            }
+        }
     }
 
     /**
@@ -498,7 +679,44 @@ public class BayViewMenu extends AbstractContainerMenu {
         if (index < machineSlots) {
             return outOfMachine(who, index);
         }
+        if (index >= machineSlots + 36) {
+            return outOfExchange(index);
+        }
+        // A fluid container shift-clicked out of the player's own inventory goes to the slot that
+        // does something with it, not into whichever machine slot happens to accept buckets.
+        if (tanks && FluidUtil.getFluidHandler(slots.get(index).getItem()).isPresent()) {
+            ItemStack moved = intoExchange(index);
+            if (!moved.isEmpty()) {
+                return ItemStack.EMPTY;
+            }
+        }
         return intoMachine(index);
+    }
+
+    /** Out of the fluid slots and into the player's own inventory. Both ends are ours, so vanilla's
+     * mover is safe here in a way it is not over a foreign machine's handler. */
+    private ItemStack outOfExchange(int index) {
+        Slot from = slots.get(index);
+        ItemStack held = from.getItem();
+        if (held.isEmpty() || !moveItemStackTo(held, machineSlots, machineSlots + 36, true)) {
+            return ItemStack.EMPTY;
+        }
+        from.setChanged();
+        return ItemStack.EMPTY;
+    }
+
+    /** @return what actually went in, so the caller can fall through when nothing did */
+    private ItemStack intoExchange(int index) {
+        Slot from = slots.get(index);
+        ItemStack held = from.getItem();
+        ItemStack refused = exchange.insertItem(EXCHANGE_IN, held.copy(), false);
+        int moved = held.getCount() - refused.getCount();
+        if (moved <= 0) {
+            return ItemStack.EMPTY;
+        }
+        from.remove(moved);
+        from.setChanged();
+        return held.copyWithCount(moved);
     }
 
     private ItemStack outOfMachine(Player who, int index) {
@@ -626,7 +844,7 @@ public class BayViewMenu extends AbstractContainerMenu {
             IEnergyStorage energy =
                 reach(Capabilities.EnergyStorage.BLOCK, handler -> handler.getMaxEnergyStored() > 0);
             return new State(List.copyOf(tanks), energy == null ? 0 : energy.getEnergyStored(),
-                energy == null ? 0 : energy.getMaxEnergyStored());
+                energy == null ? 0 : energy.getMaxEnergyStored(), Hint.NONE);
         }
 
         /** The live handler only if it still has this slot; null is "there is nothing to write to". */
