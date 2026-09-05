@@ -305,7 +305,9 @@ public class WBLanguageProvider extends LanguageProvider {
             + "this link can connect to on any face.");
         add(WorkbayLang.guiKey("status.machine_no_port"), "Machine unreachable");
         add(WorkbayLang.guiKey("status.machine_no_port.tip"), "The hosted machine answers on none "
-            + "of the faces this link may use. Check the cube, or eject and re-rack it.");
+            + "of the faces this link may use. Many machines open a face only once you set it to "
+            + "input or output in their own side configuration - enter the bay and check. Run "
+            + "/workbay ports while looking at one to see exactly which faces answer.");
         add(WorkbayLang.guiKey("status.machine_no_face"), "No face for this");
         add(WorkbayLang.guiKey("status.machine_no_face.tip"), "This bay has faces set, but none "
             + "marked for this link's direction. Mark one in on the cube for a link that pulls, "

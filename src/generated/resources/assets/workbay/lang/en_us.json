@@ -191,7 +191,7 @@
   "gui.workbay.status.machine_no_face": "No face for this",
   "gui.workbay.status.machine_no_face.tip": "This bay has faces set, but none marked for this link's direction. Mark one in on the cube for a link that pulls, or out for one that sends. Setting every face back to unset uses whichever answers.",
   "gui.workbay.status.machine_no_port": "Machine unreachable",
-  "gui.workbay.status.machine_no_port.tip": "The hosted machine answers on none of the faces this link may use. Check the cube, or eject and re-rack it.",
+  "gui.workbay.status.machine_no_port.tip": "The hosted machine answers on none of the faces this link may use. Many machines open a face only once you set it to input or output in their own side configuration - enter the bay and check. Run /workbay ports while looking at one to see exactly which faces answer.",
   "gui.workbay.status.running": "Running",
   "gui.workbay.status.running.tip": "This link moved something on its last turn.",
   "gui.workbay.status.short.connector_gone": "Gone",

@@ -38,8 +38,84 @@ public class WorkbayCommands {
                         return builder.buildFuture();
                     })
                     .executes(context -> why(context.getSource(),
-                        ResourceLocationArgument.getId(context, "block")))));
+                        ResourceLocationArgument.getId(context, "block")))))
+            .then(Commands.literal("ports")
+                .executes(context -> ports(context.getSource())));
         event.getDispatcher().register(root);
+    }
+
+    /**
+     * What the block you are looking at offers a link, face by face. SPEC.md §11's argument again:
+     * "my link says no port" is the other question this mod gets, and the answer is never in the
+     * mod — it is in what the other machine chose to expose. A player can now read that themselves.
+     *
+     * <p>Deliberately the same question {@code BusEndpoint} asks. It never uses the null side, so
+     * the null row is printed apart and marked: a machine that answers only there is one Bay View
+     * can show and no link can reach, which is the single most confusing state this mod has.
+     */
+    private static int ports(CommandSourceStack source) {
+        if (!(source.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) {
+            source.sendFailure(Component.literal("Run this as a player, looking at a block."));
+            return 0;
+        }
+        net.minecraft.world.phys.HitResult hit = player.pick(8.0, 0.0F, false);
+        if (!(hit instanceof net.minecraft.world.phys.BlockHitResult block)
+            || player.serverLevel().getBlockState(block.getBlockPos()).isAir()) {
+            source.sendFailure(Component.literal("Look at a block first."));
+            return 0;
+        }
+        net.minecraft.core.BlockPos pos = block.getBlockPos();
+        net.minecraft.server.level.ServerLevel level = player.serverLevel();
+        source.sendSuccess(() -> Component.literal(
+            level.getBlockState(pos).getBlock().getName().getString())
+            .withStyle(ChatFormatting.AQUA)
+            .append(Component.literal(" at " + pos.toShortString()).withStyle(ChatFormatting.GRAY)),
+            false);
+
+        report(source, level, pos, null, "no side (Bay View reads this; links never do)");
+        for (net.minecraft.core.Direction side : net.minecraft.core.Direction.values()) {
+            report(source, level, pos, side, side.getName());
+        }
+        return 1;
+    }
+
+    /** One face, and what it answers. Nothing is inferred: every line is a capability lookup. */
+    private static void report(CommandSourceStack source, net.minecraft.server.level.ServerLevel level,
+        net.minecraft.core.BlockPos pos, @org.jetbrains.annotations.Nullable net.minecraft.core.Direction side,
+        String label) {
+        StringBuilder found = new StringBuilder();
+        var items = level.getCapability(
+            net.neoforged.neoforge.capabilities.Capabilities.ItemHandler.BLOCK, pos, side);
+        if (items != null) {
+            found.append("items ").append(items.getSlots());
+            int accepts = 0;
+            for (int slot = 0; slot < items.getSlots(); slot++) {
+                if (items.insertItem(slot, new ItemStack(net.minecraft.world.item.Items.IRON_INGOT),
+                    true).isEmpty()) {
+                    accepts++;
+                }
+            }
+            found.append(" (").append(accepts).append(" take an item)");
+        }
+        var fluids = level.getCapability(
+            net.neoforged.neoforge.capabilities.Capabilities.FluidHandler.BLOCK, pos, side);
+        if (fluids != null) {
+            found.append(found.isEmpty() ? "" : " · ").append("fluid tanks ").append(fluids.getTanks());
+        }
+        var energy = level.getCapability(
+            net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK, pos, side);
+        if (energy != null) {
+            found.append(found.isEmpty() ? "" : " · ").append("energy");
+        }
+        int chemicals = com.neryos.workbay.compat.MekanismChemicals.tanks(level, pos).size();
+        if (side == null && chemicals > 0) {
+            found.append(found.isEmpty() ? "" : " · ").append("chemical tanks ").append(chemicals);
+        }
+        String line = found.isEmpty() ? "nothing" : found.toString();
+        source.sendSuccess(() -> Component.literal("  " + label + ": ")
+            .withStyle(ChatFormatting.GRAY)
+            .append(Component.literal(line).withStyle(found.isEmpty()
+                ? ChatFormatting.DARK_GRAY : ChatFormatting.GREEN)), false);
     }
 
     private static int why(CommandSourceStack source, ResourceLocation id) {
