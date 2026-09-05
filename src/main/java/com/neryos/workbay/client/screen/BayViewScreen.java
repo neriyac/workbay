@@ -60,9 +60,16 @@ public class BayViewScreen extends AbstractContainerScreen<BayViewMenu> {
             g.renderItem(icon, leftPos + imageWidth - 26, topPos + 6);
         }
 
+        BayViewMenu.MachineLayout layout = menu.layout();
         for (int index = 0; index < menu.machineSlots(); index++) {
-            Draw.slot(g, leftPos + BayViewMenu.GRID_X + (index % BayViewMenu.COLUMNS) * 18 - 1,
-                topPos + BayViewMenu.GRID_Y + (index / BayViewMenu.COLUMNS) * 18 - 1, 18, 18);
+            Draw.slot(g, leftPos + layout.xs()[index] - 1, topPos + layout.ys()[index] - 1, 18, 18);
+        }
+        if (layout.grouped()) {
+            // Item flow, left to right: what the machine will take on the left, what it will only
+            // give on the right. Drawn, never clicked — there is no progress behind it to read, so
+            // an arrow that filled would be an arrow that lied. SPEC.md §5.
+            WBIcons.draw(g, WBIcons.ARROW_RIGHT, leftPos + BayViewMenu.ARROW_X,
+                topPos + BayViewMenu.GRID_Y + 3, Draw.TEXT_FAINT);
         }
 
         int inventoryY = menu.inventoryY();
@@ -148,7 +155,7 @@ public class BayViewScreen extends AbstractContainerScreen<BayViewMenu> {
         }
         Draw.wrapped(g, font, hintText(hint),
             leftPos + HINT_X,
-            topPos + BayViewMenu.gaugesY(menu.machineSlots())
+            topPos + menu.gaugesY()
                 + BayViewMenu.gaugesBlock(menu.gauges(), true) + 1,
             HINT_W, hint == BayViewMenu.Hint.NONE ? Draw.TEXT_FAINT : Draw.AMBER);
     }
@@ -207,7 +214,7 @@ public class BayViewScreen extends AbstractContainerScreen<BayViewMenu> {
     }
 
     private int gaugeY(int row) {
-        return topPos + BayViewMenu.gaugesY(menu.machineSlots()) + row * BayViewMenu.GAUGE_PITCH;
+        return topPos + menu.gaugesY() + row * BayViewMenu.GAUGE_PITCH;
     }
 
     /** Which gauge row the cursor is over, or -1. The whole row, not just the bar. */

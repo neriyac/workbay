@@ -36,6 +36,8 @@ import net.neoforged.neoforge.items.SlotItemHandler;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.Nullable;
 
+import net.minecraft.world.item.Items;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -86,6 +88,99 @@ public class BayViewMenu extends AbstractContainerMenu {
 
     private static final int SLOT_SIZE = 18;
     public static final int COLUMNS = 9;
+    /** Columns in a grouped machine grid. Three keeps both groups and the arrow inside the panel. */
+    public static final int GROUP_COLUMNS = 3;
+
+    /**
+     * What a slot is <b>for the player of this screen</b>, which is the only thing a generic screen
+     * can honestly say. It is read, not guessed: a simulated insert either works or it does not.
+     *
+     * <ul>
+     * <li>{@link #IN} — a plain item can be put here.
+     * <li>{@link #FUEL} — a plain item cannot, but a fuel can. A furnace's middle slot.
+     * <li>{@link #OUT} — nothing offered can go in, so this slot is one to take from.
+     * </ul>
+     *
+     * <p>The names are the player's view, not the machine's: a machine's own idea of "input" is not
+     * exposed by any capability, and every Mekanism machine answers {@link #OUT} to all three
+     * probes because its null side refuses every insert. That is why a machine with no {@link #IN}
+     * slot at all is drawn as one plain grid instead — a grouping where everything lands in one
+     * group is a grouping that says nothing.
+     *
+     * <p><b>ponytail: three probe items, not a recipe search.</b> A slot that takes neither iron,
+     * cobblestone nor coal reads as OUT even when it would take a potion bottle. Widen the probes
+     * if a machine turns up that this reads wrong.
+     */
+    public enum SlotRole {
+        IN, FUEL, OUT;
+
+        public static final StreamCodec<RegistryFriendlyByteBuf, SlotRole> STREAM_CODEC =
+            StreamCodec.of((buffer, role) -> buffer.writeVarInt(role.ordinal()),
+                buffer -> values()[Math.clamp(buffer.readVarInt(), 0, values().length - 1)]);
+    }
+
+    /**
+     * Where every machine slot sits, and how tall that leaves the machine area. Pure arithmetic on
+     * the roles, so the server and the client compute the same thing from the same list rather than
+     * one of them being told.
+     */
+    public record MachineLayout(int[] xs, int[] ys, int height, boolean grouped) {
+
+        public static MachineLayout of(List<SlotRole> roles) {
+            int count = roles.size();
+            int[] xs = new int[count];
+            int[] ys = new int[count];
+            boolean grouped = roles.stream().anyMatch(role -> role != SlotRole.OUT);
+            if (!grouped) {
+                for (int i = 0; i < count; i++) {
+                    xs[i] = GRID_X + (i % COLUMNS) * SLOT_SIZE;
+                    ys[i] = GRID_Y + (i / COLUMNS) * SLOT_SIZE;
+                }
+                return new MachineLayout(xs, ys, Math.max(1, (count + COLUMNS - 1) / COLUMNS)
+                    * SLOT_SIZE, false);
+            }
+            int in = 0;
+            int fuel = 0;
+            int out = 0;
+            for (int i = 0; i < count; i++) {
+                switch (roles.get(i)) {
+                    case IN -> {
+                        xs[i] = GRID_X + (in % GROUP_COLUMNS) * SLOT_SIZE;
+                        ys[i] = GRID_Y + (in / GROUP_COLUMNS) * SLOT_SIZE;
+                        in++;
+                    }
+                    case OUT -> {
+                        xs[i] = OUT_X + (out % GROUP_COLUMNS) * SLOT_SIZE;
+                        ys[i] = GRID_Y + (out / GROUP_COLUMNS) * SLOT_SIZE;
+                        out++;
+                    }
+                    case FUEL -> fuel++;
+                }
+            }
+            // Fuel sits under the input group, which is where a machine puts it and where the eye
+            // looks for it. Counted after the others so its row is known.
+            int inRows = Math.max(1, (in + GROUP_COLUMNS - 1) / GROUP_COLUMNS);
+            int placed = 0;
+            for (int i = 0; i < count; i++) {
+                if (roles.get(i) == SlotRole.FUEL) {
+                    xs[i] = GRID_X + (placed % GROUP_COLUMNS) * SLOT_SIZE;
+                    ys[i] = GRID_Y + (inRows + placed / GROUP_COLUMNS) * SLOT_SIZE + FUEL_GAP;
+                    placed++;
+                }
+            }
+            int leftRows = inRows + (fuel == 0 ? 0 : (fuel + GROUP_COLUMNS - 1) / GROUP_COLUMNS);
+            int outRows = Math.max(1, (out + GROUP_COLUMNS - 1) / GROUP_COLUMNS);
+            int height = Math.max(leftRows * SLOT_SIZE + (fuel == 0 ? 0 : FUEL_GAP),
+                outRows * SLOT_SIZE);
+            return new MachineLayout(xs, ys, height, true);
+        }
+    }
+
+    /** Where the output group starts, and the air the fuel row gets under the input group. */
+    public static final int OUT_X = 104;
+    public static final int FUEL_GAP = 6;
+    /** The arrow between the two groups, drawn only when the layout is grouped. */
+    public static final int ARROW_X = 74;
 
     /**
      * One gauge row: a tall narrow gauge on the left, and two lines of text beside it - what the
@@ -159,6 +254,11 @@ public class BayViewMenu extends AbstractContainerMenu {
     /** Whether the panel was laid out with the fluid-container row. Fixed for the same reason. */
     private final boolean tanks;
 
+    /** Where every machine slot sits. Computed from the roles, identically on both sides. */
+    private final MachineLayout layout;
+
+    private final List<SlotRole> roles;
+
     /**
      * The two fluid-container slots, in and out.
      *
@@ -192,18 +292,22 @@ public class BayViewMenu extends AbstractContainerMenu {
     public BayViewMenu(int containerId, Inventory inventory, RegistryFriendlyByteBuf buffer) {
         this(containerId, inventory, null, buffer.readVarInt(),
             buffer.readOptional(net.minecraft.network.FriendlyByteBuf::readResourceLocation),
-            buffer.readVarInt(), null, State.STREAM_CODEC.decode(buffer));
+            buffer.readList(buf -> SlotRole.STREAM_CODEC.decode((RegistryFriendlyByteBuf) buf)), null,
+            State.STREAM_CODEC.decode(buffer));
     }
 
     public BayViewMenu(int containerId, Inventory inventory, @Nullable WorkbayBlockEntity workbay,
-        int bay, Optional<ResourceLocation> machineId, int machineSlots,
+        int bay, Optional<ResourceLocation> machineId, List<SlotRole> slotRoles,
         @Nullable IItemHandler machine, State state) {
         super(WBMenus.BAY_VIEW.get(), containerId);
         this.workbay = workbay;
         this.bay = bay;
         this.viewer = inventory.player;
         this.machineId = machineId;
-        this.machineSlots = Math.clamp(machineSlots, 0, MAX_SLOTS);
+        this.roles = List.copyOf(slotRoles.size() > MAX_SLOTS
+            ? slotRoles.subList(0, MAX_SLOTS) : slotRoles);
+        this.machineSlots = this.roles.size();
+        this.layout = MachineLayout.of(this.roles);
         this.state = state;
         this.gauges = state.gauges();
         this.tanks = !state.tanks().isEmpty();
@@ -213,11 +317,10 @@ public class BayViewMenu extends AbstractContainerMenu {
 
         for (int index = 0; index < this.machineSlots; index++) {
             addSlot(new SlotItemHandler(this.machine, index,
-                GRID_X + (index % COLUMNS) * SLOT_SIZE,
-                GRID_Y + (index / COLUMNS) * SLOT_SIZE));
+                layout.xs()[index], layout.ys()[index]));
         }
 
-        int inventoryY = inventoryY(machineSlots(), gauges, this.tanks);
+        int inventoryY = inventoryY(layout.height(), gauges, this.tanks);
         for (int row = 0; row < 3; row++) {
             for (int column = 0; column < 9; column++) {
                 addSlot(new Slot(inventory, 9 + row * 9 + column,
@@ -231,7 +334,7 @@ public class BayViewMenu extends AbstractContainerMenu {
         // means what it meant. Only when there is a tank: two slots under a machine with none are
         // two slots that can never do anything.
         if (tanks) {
-            int y = exchangeY(machineSlots(), gauges);
+            int y = exchangeY(layout.height(), gauges);
             addSlot(new SlotItemHandler(exchange, EXCHANGE_IN, EXCHANGE_IN_X, y) {
                 @Override
                 public boolean mayPlace(ItemStack stack) {
@@ -249,25 +352,17 @@ public class BayViewMenu extends AbstractContainerMenu {
     }
 
 
-    public int rows() {
-        return rows(machineSlots);
-    }
-
-    private static int rows(int slots) {
-        return Math.max(1, (slots + COLUMNS - 1) / COLUMNS);
-    }
-
     /** Where the tank and energy gauges start: straight under the item grid. */
-    public static int gaugesY(int slots) {
-        return GRID_Y + rows(slots) * SLOT_SIZE + 6;
+    public static int gaugesY(int machineHeight) {
+        return GRID_Y + machineHeight + 6;
     }
 
     /**
      * The fluid-container row, straight under the gauges. Its two slots are what a player actually
      * uses to fill a hosted tank, so they sit beside the thing they change.
      */
-    public static int exchangeY(int slots, int gauges) {
-        return gaugesY(slots);
+    public static int exchangeY(int machineHeight, int gauges) {
+        return gaugesY(machineHeight);
     }
 
     /**
@@ -282,8 +377,8 @@ public class BayViewMenu extends AbstractContainerMenu {
     public static final int HINT_ROW = 12;
 
     /** And the limits sentence under those, so gauges push it down rather than sit on top of it. */
-    public static int limitsY(int slots, int gauges, boolean tanks) {
-        return gaugesY(slots) + gaugesBlock(gauges, tanks) + (tanks ? HINT_ROW : 0);
+    public static int limitsY(int machineHeight, int gauges, boolean tanks) {
+        return gaugesY(machineHeight) + gaugesBlock(gauges, tanks) + (tanks ? HINT_ROW : 0);
     }
 
     /**
@@ -295,8 +390,8 @@ public class BayViewMenu extends AbstractContainerMenu {
      * player's own top row — seen in {@code runClient}, the same class of fault as the skim chip
      * that overran the link name. The sentence now lives in a tooltip and one line is drawn.
      */
-    public static int inventoryY(int slots, int gauges, boolean tanks) {
-        return limitsY(slots, gauges, tanks) + LIMITS_ROW;
+    public static int inventoryY(int machineHeight, int gauges, boolean tanks) {
+        return limitsY(machineHeight, gauges, tanks) + LIMITS_ROW;
     }
 
     /**
@@ -311,8 +406,8 @@ public class BayViewMenu extends AbstractContainerMenu {
      */
     public static final int LIMITS_ROW = 22;
 
-    public static int height(int slots, int gauges, boolean tanks) {
-        return inventoryY(slots, gauges, tanks) + 58 + SLOT_SIZE + 7;
+    public static int height(int machineHeight, int gauges, boolean tanks) {
+        return inventoryY(machineHeight, gauges, tanks) + 58 + SLOT_SIZE + 7;
     }
 
     public int gauges() {
@@ -320,15 +415,15 @@ public class BayViewMenu extends AbstractContainerMenu {
     }
 
     public int inventoryY() {
-        return inventoryY(machineSlots, gauges, tanks);
+        return inventoryY(layout.height(), gauges, tanks);
     }
 
     public int limitsY() {
-        return limitsY(machineSlots, gauges, tanks);
+        return limitsY(layout.height(), gauges, tanks);
     }
 
     public int exchangeY() {
-        return exchangeY(machineSlots, gauges);
+        return exchangeY(layout.height(), gauges);
     }
 
     /** Whether the fluid-container row is on this panel at all. */
@@ -337,7 +432,7 @@ public class BayViewMenu extends AbstractContainerMenu {
     }
 
     public int height() {
-        return height(machineSlots, gauges, tanks);
+        return height(layout.height(), gauges, tanks);
     }
 
     public State state() {
@@ -347,6 +442,18 @@ public class BayViewMenu extends AbstractContainerMenu {
     /** Server to client, and the client's only source for what is in the tanks. */
     public void applyState(State updated) {
         this.state = updated;
+    }
+
+    public MachineLayout layout() {
+        return layout;
+    }
+
+    public List<SlotRole> roles() {
+        return roles;
+    }
+
+    public int gaugesY() {
+        return gaugesY(layout.height());
     }
 
     public int machineSlots() {
@@ -370,8 +477,13 @@ public class BayViewMenu extends AbstractContainerMenu {
      * is a test-only constructor, and a test that assembles the thing differently from the game
      * is a test of the assembly, not of the mod.
      */
-    public record Opening(Optional<ResourceLocation> machineId, int slots, Live handler,
-        State state) {}
+    public record Opening(Optional<ResourceLocation> machineId, List<SlotRole> roles, Live handler,
+        State state) {
+
+        public int slots() {
+            return roles.size();
+        }
+    }
 
     /**
      * One tank, as the screen draws it. The capacity rides along because {@code getTankCapacity} is
@@ -517,8 +629,34 @@ public class BayViewMenu extends AbstractContainerMenu {
         if ((now == null || now.getSlots() <= 0) && state.gauges() == 0) {
             return null;
         }
-        int slots = now == null ? 0 : Math.min(now.getSlots(), MAX_SLOTS);
-        return new Opening(record.bay(bay).hosted(), slots, live, state);
+        return new Opening(record.bay(bay).hosted(), classify(now), live, state);
+    }
+
+    /**
+     * What each slot is, read off the handler rather than assumed. Three probes: a plain item, a
+     * second plain item in case the first is filtered, and a fuel. A slot that takes a plain item
+     * is one the player can put things in; one that takes only the fuel is a fuel slot; one that
+     * takes none of them is one to take from.
+     *
+     * <p>Simulated inserts, never {@code isItemValid} — that is what a handler <em>says</em>, and
+     * SPEC.md §9 is built on it being wrong. The same rule the buses bind on.
+     */
+    private static List<SlotRole> classify(@Nullable IItemHandler handler) {
+        if (handler == null) {
+            return List.of();
+        }
+        List<SlotRole> roles = new ArrayList<>();
+        for (int slot = 0; slot < Math.min(handler.getSlots(), MAX_SLOTS); slot++) {
+            roles.add(takes(handler, slot, Items.IRON_INGOT) || takes(handler, slot, Items.COBBLESTONE)
+                ? SlotRole.IN
+                : takes(handler, slot, Items.COAL) ? SlotRole.FUEL : SlotRole.OUT);
+        }
+        return List.copyOf(roles);
+    }
+
+    private static boolean takes(IItemHandler handler, int slot, net.minecraft.world.item.Item what) {
+        ItemStack one = new ItemStack(what, 1);
+        return handler.insertItem(slot, one, true).getCount() < one.getCount();
     }
 
     /**
@@ -534,13 +672,15 @@ public class BayViewMenu extends AbstractContainerMenu {
         }
         viewer.openMenu(new net.minecraft.world.SimpleMenuProvider(
             (containerId, inventory, who) -> new BayViewMenu(containerId, inventory, workbay, bay,
-                opening.machineId(), opening.slots(), opening.handler(), opening.state()),
+                opening.machineId(), opening.roles(), opening.handler(), opening.state()),
             com.neryos.workbay.WorkbayLang.gui("bayview.title", bay + 1)),
             buffer -> {
                 buffer.writeVarInt(bay);
                 buffer.writeOptional(opening.machineId(),
                     (buf, value) -> buf.writeResourceLocation(value));
-                buffer.writeVarInt(opening.slots());
+                buffer.writeCollection(opening.roles(),
+                    (buf, role) -> SlotRole.STREAM_CODEC.encode(
+                        (RegistryFriendlyByteBuf) buf, role));
                 State.STREAM_CODEC.encode(buffer, opening.state());
             });
         return true;

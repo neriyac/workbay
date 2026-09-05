@@ -49,6 +49,50 @@ import java.util.Optional;
 @ForEachTest(groups = "menu")
 public class MenuTests {
 
+    /**
+     * Bay View groups a machine's slots by what the player can actually do with each, and it reads
+     * that rather than assuming it: a simulated insert either works or it does not. A vanilla
+     * furnace is the one machine where the answer is known independently — input, fuel, output, in
+     * that order — so it is the one that can prove the reading is real.
+     *
+     * <p>Mekanism machines answer OUT to every probe, because their null side refuses every insert.
+     * That is not a bug in this and it is why a machine with no IN slot is drawn as one plain grid:
+     * a grouping where everything lands in one group says nothing.
+     */
+    @GameTest
+    @TestHolder(description = "Bay View reads a furnace's slots as input, fuel and output.")
+    public static void bayViewReadsAFurnacesSlotRoles(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            WorkbayBlockEntity workbay = placeWorkbay(helper, helper.absolutePos(new BlockPos(0, 1, 0)), player);
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = helper.getLevel().getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            WorkbayTickets.force(backshop, record.id(), record.bayColumn());
+
+            player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Blocks.FURNACE));
+            WorkbayMenu menu = menuFor(workbay, player);
+            menu.act(WorkbayAction.SELECT_BAY, 0, java.util.Optional.empty());
+            menu.act(WorkbayAction.RACK, 0, java.util.Optional.empty());
+
+            var opening = com.neryos.workbay.menu.BayViewMenu.opening(player, record, 0);
+            if (opening == null) {
+                helper.fail("Bay View would not open on a racked furnace");
+                return;
+            }
+            helper.assertValueEqual(opening.roles(), java.util.List.of(
+                com.neryos.workbay.menu.BayViewMenu.SlotRole.IN,
+                com.neryos.workbay.menu.BayViewMenu.SlotRole.FUEL,
+                com.neryos.workbay.menu.BayViewMenu.SlotRole.OUT),
+                "the roles Bay View read off a furnace");
+            helper.assertTrue(com.neryos.workbay.menu.BayViewMenu.MachineLayout
+                    .of(opening.roles()).grouped(),
+                "a furnace has an input slot, so its slots should be grouped rather than in a row");
+            helper.succeed();
+        });
+    }
+
     private static WorkbayBlockEntity placeWorkbay(ExtendedGameTestHelper helper, BlockPos pos,
         GameTestPlayer player) {
         ServerLevel level = helper.getLevel();
