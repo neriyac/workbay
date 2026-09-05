@@ -83,6 +83,21 @@ public final class BayVisit {
     private static final Map<UUID, Integer> CLOSED = new HashMap<>();
 
     /**
+     * Visitors owed their Workbay screen back, and how many ticks they have waited for it.
+     *
+     * <p><b>The screen cannot be opened in the same tick as the trip home.</b> A cross-dimension
+     * teleport sends the client a respawn packet, and the client puts up its own level-loading
+     * screen and then clears the screen when the level arrives — wiping any menu opened before
+     * that. Opening it inline looked right on the server and gave the player nothing, which a
+     * gametest cannot catch because a gametest has no client.
+     */
+    private static final Map<UUID, Integer> REOPEN = new HashMap<>();
+    private static final Map<UUID, Return> OWED = new HashMap<>();
+
+    /** Ticks to let the client finish arriving before the screen is put back. */
+    public static final int REOPEN_DELAY = 5;
+
+    /**
      * Five seconds for the chunk. The server writes it at the end of the tick the player arrives
      * in, so the normal wait is one tick; anything near this is a client that is not receiving.
      */
@@ -166,7 +181,10 @@ public final class BayVisit {
         forget(player);
         player.teleportTo(level, home.where().x, home.where().y, home.where().z, Set.of(),
             home.yRot(), home.xRot());
-        reopen(player, home);
+        if (home.workbay().isPresent()) {
+            REOPEN.put(player.getUUID(), 0);
+            OWED.put(player.getUUID(), home);
+        }
         return true;
     }
 
@@ -201,6 +219,12 @@ public final class BayVisit {
         CLOSED.remove(player.getUUID());
     }
 
+    /** A player who logs out mid-return is owed nothing; the map must not outlive them. */
+    public static void forgetReopen(ServerPlayer player) {
+        REOPEN.remove(player.getUUID());
+        OWED.remove(player.getUUID());
+    }
+
     /**
      * {@code hasData}, never {@code getData}. Asking for an absent attachment <em>materialises</em>
      * its default, and this one's default is null - which NeoForge then tries to encode at the next
@@ -220,6 +244,20 @@ public final class BayVisit {
             return;
         }
         UUID id = player.getUUID();
+        // Owed a screen from a trip home. Counted here rather than done in leave(), because the
+        // client is still swapping levels then and throws away anything opened too early.
+        Integer waitingForScreen = REOPEN.get(id);
+        if (waitingForScreen != null) {
+            if (waitingForScreen >= REOPEN_DELAY) {
+                REOPEN.remove(id);
+                Return owed = OWED.remove(id);
+                if (owed != null) {
+                    reopen(player, owed);
+                }
+            } else {
+                REOPEN.put(id, waitingForScreen + 1);
+            }
+        }
         if (!player.level().dimension().equals(WorkbayDimensions.BACKSHOP)) {
             if (isVisiting(player)) {
                 // Something else took them out. The record must not outlive the visit, or it is a
@@ -333,9 +371,21 @@ public final class BayVisit {
     @SubscribeEvent
     public static void onLogin(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer player
-            && player.level().dimension().equals(WorkbayDimensions.BACKSHOP)
-            && !leave(player)) {
-            toSpawn(player);
+            && player.level().dimension().equals(WorkbayDimensions.BACKSHOP)) {
+            if (!leave(player)) {
+                toSpawn(player);
+            }
+            // Somebody who quit inside a bay is arriving, not returning from one. A screen that
+            // opens itself on login is a screen nobody asked for.
+            forgetReopen(player);
+        }
+    }
+
+    /** A visit interrupted by a logout is over, and so is anything it was owed. */
+    @SubscribeEvent
+    public static void onLogout(PlayerEvent.PlayerLoggedOutEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            forgetReopen(player);
         }
     }
 }

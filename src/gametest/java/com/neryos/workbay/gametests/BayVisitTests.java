@@ -223,7 +223,8 @@ public class BayVisitTests {
             helper.startSequence()
                 .thenWaitUntil(() -> helper.assertTrue(v.screenOpen(), "no screen opened yet"))
                 .thenExecute(() -> v.player().closeContainer())
-                .thenIdle(BayVisit.GRACE + 2)
+                // The trip home, and then the wait the client needs before a screen will stick.
+                .thenIdle(BayVisit.GRACE + BayVisit.REOPEN_DELAY + 4)
                 .thenExecute(() -> {
                     assertHome(helper, v);
                     helper.assertTrue(v.player().containerMenu instanceof WorkbayMenu,
