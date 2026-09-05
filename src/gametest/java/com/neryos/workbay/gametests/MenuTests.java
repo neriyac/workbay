@@ -112,19 +112,21 @@ public class MenuTests {
     }
 
     /**
-     * The same reading, on the mod that gives up nothing to a simulated insert. Mekanism's null-side
-     * proxy refuses every insert, so probing with items alone reads every slot as an output and the
-     * screen falls back to a plain row. But that same proxy answers {@code isItemValid} with the
-     * <b>real</b> slot validity — its one use of the read-only flag is inverted — so the layout can
-     * be read after all.
+     * The honest limit, asserted so nobody rediscovers it as a bug. Mekanism's null-side proxy
+     * refuses every simulated insert, so every slot reads OUT and the screen falls back to a plain
+     * row — and it must, because there is nothing there to group on.
      *
-     * <p>And the write must not follow the layout: this asserts the roles separate <em>and</em> that
-     * nothing is writable, because Bay View genuinely cannot put an item in one of these. Believing
-     * the layout there is what put a ghost item on the client.
+     * <p>{@code isItemValid} does <b>not</b> rescue it. That proxy returns the real slot validity
+     * when read-only, which sounds like the missing signal and is not: an output slot can hold the
+     * item too, so it answers yes for every slot and turns "all OUT" into "all IN" — a grouping that
+     * is wrong rather than absent. Tried on this machine, reverted, and written down here.
+     *
+     * <p>Nothing is writable either, and that is the half that matters: saying otherwise is what
+     * drew a ghost item on the client.
      */
     @GameTest
-    @TestHolder(description = "A Mekanism machine's slots are grouped, and none of them are writable.")
-    public static void aMekanismMachineIsGroupedButNotWritable(final DynamicTest test) {
+    @TestHolder(description = "A Mekanism machine falls back to a plain grid, and nothing is writable.")
+    public static void aMekanismMachineFallsBackToAPlainGrid(final DynamicTest test) {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
 
         test.onGameTest(ExtendedGameTestHelper.class, helper -> {
@@ -150,16 +152,69 @@ public class MenuTests {
                 helper.fail("Bay View would not open on a racked Enrichment Chamber");
                 return;
             }
-            helper.assertTrue(opening.roles().stream()
-                    .anyMatch(role -> role != com.neryos.workbay.menu.BayViewMenu.SlotRole.OUT),
-                "every slot read as OUT, so the screen falls back to a plain row - isItemValid on "
-                    + "the read-only null side is the only thing that separates them here");
-            helper.assertTrue(com.neryos.workbay.menu.BayViewMenu.MachineLayout
-                    .of(opening.roles()).grouped(), "the slots should be grouped");
+            helper.assertFalse(com.neryos.workbay.menu.BayViewMenu.MachineLayout
+                    .of(opening.roles()).grouped(),
+                "a Mekanism machine gives no role signal, so it must draw as a plain grid rather "
+                    + "than a grouping invented from nothing: read " + opening.roles());
             helper.assertTrue(opening.writable().stream().noneMatch(can -> can),
                 "Bay View cannot write to a Mekanism slot, and saying it can is what draws a ghost");
             helper.succeed();
         });
+    }
+
+    /**
+     * Breadth, not depth: the same reading across every machine this runtime can reach, asserting
+     * the one thing that has to hold for each — a furnace and a Mekanism machine separate into
+     * groups, and a container does not, because twenty-seven input slots and no output would draw
+     * an arrow pointing at a group that is not there.
+     */
+    @GameTest(timeoutTicks = 400)
+    @TestHolder(description = "The slot reading holds across vanilla containers, vanilla machines and Mekanism.")
+    public static void theSlotReadingHoldsAcrossMachines(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            WorkbayBlockEntity workbay = placeWorkbay(helper, helper.absolutePos(new BlockPos(0, 1, 0)), player);
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = helper.getLevel().getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            WorkbayTickets.force(backshop, record.id(), record.bayColumn());
+            WorkbayMenu menu = menuFor(workbay, player);
+
+            record(helper, menu, player, record, Blocks.FURNACE, true, "a furnace");
+            record(helper, menu, player, record, Blocks.BLAST_FURNACE, true, "a blast furnace");
+            record(helper, menu, player, record, Blocks.SMOKER, true, "a smoker");
+            record(helper, menu, player, record, Blocks.BARREL, false, "a barrel");
+            record(helper, menu, player, record, Blocks.CHEST, false, "a chest");
+            record(helper, menu, player, record, Blocks.DISPENSER, false, "a dispenser");
+            Block mek = net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(
+                net.minecraft.resources.ResourceLocation.parse("mekanism:enrichment_chamber"));
+            helper.assertFalse(mek == Blocks.AIR, "mekanism:enrichment_chamber is not registered");
+            record(helper, menu, player, record, mek, false, "an Enrichment Chamber");
+            helper.succeed();
+        });
+    }
+
+    /** Racks one machine, reads Bay View's opening, checks the grouping, and ejects it again. */
+    private static void record(ExtendedGameTestHelper helper, WorkbayMenu menu, GameTestPlayer player,
+        WorkbayRecord record, Block block, boolean shouldGroup, String what) {
+        player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(block));
+        menu.act(WorkbayAction.SELECT_BAY, 0, java.util.Optional.empty());
+        menu.act(WorkbayAction.RACK, 0, java.util.Optional.empty());
+        var opening = com.neryos.workbay.menu.BayViewMenu.opening(player, record, 0);
+        if (opening == null) {
+            helper.fail("Bay View would not open on " + what);
+            return;
+        }
+        boolean grouped = com.neryos.workbay.menu.BayViewMenu.MachineLayout
+            .of(opening.roles()).grouped();
+        if (grouped != shouldGroup) {
+            helper.fail(what + " read as " + opening.roles() + ", which "
+                + (grouped ? "grouped" : "did not group") + " when it should"
+                + (shouldGroup ? "" : " not") + " have");
+        }
+        menu.act(WorkbayAction.EJECT, 0, java.util.Optional.empty());
+        player.getInventory().clearContent();
     }
 
     private static WorkbayBlockEntity placeWorkbay(ExtendedGameTestHelper helper, BlockPos pos,

@@ -107,9 +107,13 @@ public class BayViewMenu extends AbstractContainerMenu {
      * slot at all is drawn as one plain grid instead — a grouping where everything lands in one
      * group is a grouping that says nothing.
      *
-     * <p><b>ponytail: three probe items, not a recipe search.</b> A slot that takes neither iron,
-     * cobblestone nor coal reads as OUT even when it would take a potion bottle. Widen the probes
-     * if a machine turns up that this reads wrong.
+     * <p><b>ponytail: probes, not a recipe search.</b> A slot that takes none of them reads OUT even
+     * when it would take a potion bottle. A full slot dodges that by being asked about its own
+     * contents; an empty filtered one does not. Widen the probes if a machine reads wrong.
+     *
+     * <p>{@code isItemValid} was tried here and reverted: Mekanism's read-only null side answers it
+     * truthfully, but an output slot can hold the item too, so it says yes to every slot and turns
+     * "no signal" into a confident wrong answer. `theSlotReadingHoldsAcrossMachines` catches it.
      */
     public enum SlotRole {
         IN, FUEL, OUT;
@@ -130,7 +134,12 @@ public class BayViewMenu extends AbstractContainerMenu {
             int count = roles.size();
             int[] xs = new int[count];
             int[] ys = new int[count];
-            boolean grouped = roles.stream().anyMatch(role -> role != SlotRole.OUT);
+            // Grouped only when there is something on *both* sides of the arrow. A barrel is
+            // twenty-seven input slots and no output; splitting it puts an arrow next to an empty
+            // group, which says the machine has an output it does not have. A machine with no
+            // input is the Mekanism-shaped case and reads the same way round.
+            boolean grouped = roles.stream().anyMatch(role -> role != SlotRole.OUT)
+                && roles.contains(SlotRole.OUT);
             if (!grouped) {
                 for (int i = 0; i < count; i++) {
                     xs[i] = GRID_X + (i % COLUMNS) * SLOT_SIZE;
@@ -675,10 +684,11 @@ public class BayViewMenu extends AbstractContainerMenu {
     }
 
     /**
-     * Which slots this screen can actually put something into. <b>Simulated inserts only</b> — this
-     * is the safety half, and it is the one rule that must never soften: {@link #classify} may
-     * believe {@code isItemValid} because being wrong there costs a box drawn in the wrong group,
-     * while being wrong here costs the item on the cursor.
+     * Which slots this screen can actually put something into, and what {@code mayPlace} is built
+     * on at both ends. Separate from the role on purpose: a role is a guess about what a slot is
+     * <em>for</em> and being wrong draws a box in the wrong place, while this decides whether the
+     * client is allowed to predict a placement — being wrong here leaves an item drawn in a slot
+     * that never received it. Both ask the same simulated insert; neither asks {@code isItemValid}.
      */
     private static List<Boolean> writable(@Nullable IItemHandler handler) {
         if (handler == null) {
@@ -711,30 +721,14 @@ public class BayViewMenu extends AbstractContainerMenu {
     private static SlotRole role(IItemHandler handler, int slot) {
         ItemStack held = handler.getStackInSlot(slot);
         if (!held.isEmpty()) {
-            return admits(handler, slot, held.copyWithCount(1)) ? SlotRole.IN : SlotRole.OUT;
+            return takes(handler, slot, held.copyWithCount(1)) ? SlotRole.IN : SlotRole.OUT;
         }
-        if (admits(handler, slot, new ItemStack(Items.IRON_INGOT))
-            || admits(handler, slot, new ItemStack(Items.COBBLESTONE))
-            || admits(handler, slot, new ItemStack(Items.REDSTONE))) {
+        if (takes(handler, slot, new ItemStack(Items.IRON_INGOT))
+            || takes(handler, slot, new ItemStack(Items.COBBLESTONE))
+            || takes(handler, slot, new ItemStack(Items.REDSTONE))) {
             return SlotRole.IN;
         }
-        return admits(handler, slot, new ItemStack(Items.COAL)) ? SlotRole.FUEL : SlotRole.OUT;
-    }
-
-    /**
-     * Would this slot hold that, whether or not <em>we</em> may put it there. A simulated insert
-     * answers for vanilla and for EnderIO, whose null side applies each slot's own role. It answers
-     * nothing for Mekanism, whose null-side proxy refuses every insert — but that same proxy
-     * returns the <b>real</b> slot validity from {@code isItemValid}, because its one use of the
-     * flag is inverted: {@code return !readOnly || inventory.isItemValid(...)}, and the null side
-     * is the read-only one. So the two together read every machine we can reach.
-     *
-     * <p><b>This is the only place {@code isItemValid} is believed, and it decides a layout, never
-     * a write.</b> Wrong here draws a box in the wrong group; wrong in {@link #writable} loses the
-     * cursor. SPEC.md §9's rule is about the second.
-     */
-    private static boolean admits(IItemHandler handler, int slot, ItemStack one) {
-        return takes(handler, slot, one) || handler.isItemValid(slot, one);
+        return takes(handler, slot, new ItemStack(Items.COAL)) ? SlotRole.FUEL : SlotRole.OUT;
     }
 
     private static boolean takes(IItemHandler handler, int slot, ItemStack one) {
