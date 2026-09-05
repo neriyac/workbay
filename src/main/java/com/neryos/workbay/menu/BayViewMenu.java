@@ -662,15 +662,36 @@ public class BayViewMenu extends AbstractContainerMenu {
         }
         List<SlotRole> roles = new ArrayList<>();
         for (int slot = 0; slot < Math.min(handler.getSlots(), MAX_SLOTS); slot++) {
-            roles.add(takes(handler, slot, Items.IRON_INGOT) || takes(handler, slot, Items.COBBLESTONE)
-                ? SlotRole.IN
-                : takes(handler, slot, Items.COAL) ? SlotRole.FUEL : SlotRole.OUT);
+            roles.add(role(handler, slot));
         }
         return List.copyOf(roles);
     }
 
-    private static boolean takes(IItemHandler handler, int slot, net.minecraft.world.item.Item what) {
-        ItemStack one = new ItemStack(what, 1);
+    /**
+     * <b>What is already in the slot is the best probe there is.</b> A slot that will not take back
+     * a copy of its own contents cannot be one you put things into — that is true whatever the
+     * machine, whatever its recipe, and it needs no guess about what the machine eats. It is what
+     * separates a filtered input from an output, which a fixed probe list cannot: EnderIO gates an
+     * output slot on {@code layout.canInsert} and a *filtered input* on a recipe-driven
+     * {@code isItemValid}, and both refuse iron.
+     *
+     * <p>An empty slot has nothing to ask about, so it falls back to the probe items, and the
+     * probes are also what tell a fuel slot from an input.
+     */
+    private static SlotRole role(IItemHandler handler, int slot) {
+        ItemStack held = handler.getStackInSlot(slot);
+        if (!held.isEmpty()) {
+            return takes(handler, slot, held.copyWithCount(1)) ? SlotRole.IN : SlotRole.OUT;
+        }
+        if (takes(handler, slot, new ItemStack(Items.IRON_INGOT))
+            || takes(handler, slot, new ItemStack(Items.COBBLESTONE))
+            || takes(handler, slot, new ItemStack(Items.REDSTONE))) {
+            return SlotRole.IN;
+        }
+        return takes(handler, slot, new ItemStack(Items.COAL)) ? SlotRole.FUEL : SlotRole.OUT;
+    }
+
+    private static boolean takes(IItemHandler handler, int slot, ItemStack one) {
         return handler.insertItem(slot, one, true).getCount() < one.getCount();
     }
 

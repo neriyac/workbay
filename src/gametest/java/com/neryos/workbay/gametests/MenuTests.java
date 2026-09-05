@@ -89,6 +89,24 @@ public class MenuTests {
             helper.assertTrue(com.neryos.workbay.menu.BayViewMenu.MachineLayout
                     .of(opening.roles()).grouped(),
                 "a furnace has an input slot, so its slots should be grouped rather than in a row");
+
+            // The other half of the reading, and the one a fixed probe list cannot do: a slot that
+            // already holds something is asked whether it would take that back. An output slot will
+            // not take back its own contents; an input slot will. This is what keeps a *filtered*
+            // input from reading as an output on a machine whose slots only accept one recipe.
+            ServerLevel back = helper.getLevel().getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BlockPos machine = BayGeometry.machinePos(record.bayColumn(), 0);
+            if (back.getBlockEntity(machine) instanceof Container furnace) {
+                furnace.setItem(0, new ItemStack(Items.IRON_INGOT, 1));
+                furnace.setItem(2, new ItemStack(Items.IRON_INGOT, 1));
+            }
+            var filled = com.neryos.workbay.menu.BayViewMenu.opening(player, record, 0);
+            helper.assertValueEqual(filled.roles().get(0),
+                com.neryos.workbay.menu.BayViewMenu.SlotRole.IN,
+                "a full input slot, which will take back what it holds");
+            helper.assertValueEqual(filled.roles().get(2),
+                com.neryos.workbay.menu.BayViewMenu.SlotRole.OUT,
+                "a full output slot, which will not take back even its own contents");
             helper.succeed();
         });
     }
