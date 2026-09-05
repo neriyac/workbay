@@ -51,14 +51,25 @@ public final class BayVisit {
 
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    /** Where a visitor came from, so they can be put back exactly there, and which machine they face. */
-    public record Return(ResourceKey<Level> dimension, Vec3 where, float yRot, float xRot, BlockPos machine) {
+    /**
+     * Where a visitor came from, so they can be put back exactly there: the spot, the way they were
+     * facing, the machine they went to see — and <b>the screen they left</b>. Coming back to the
+     * ground with nothing open is not where they were; they were in the Workbay screen, on a bay,
+     * and closing a machine's screen should undo the visit rather than undo that too.
+     *
+     * <p>The screen half is optional in the codec because this attachment is persisted and a visit
+     * saved by an older build has no such field. A missing one just means the old behaviour.
+     */
+    public record Return(ResourceKey<Level> dimension, Vec3 where, float yRot, float xRot,
+        BlockPos machine, java.util.Optional<net.minecraft.core.GlobalPos> workbay, int bay) {
         public static final Codec<Return> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             ResourceKey.codec(Registries.DIMENSION).fieldOf("dimension").forGetter(Return::dimension),
             Vec3.CODEC.fieldOf("where").forGetter(Return::where),
             Codec.FLOAT.fieldOf("y_rot").forGetter(Return::yRot),
             Codec.FLOAT.fieldOf("x_rot").forGetter(Return::xRot),
-            BlockPos.CODEC.fieldOf("machine").forGetter(Return::machine)
+            BlockPos.CODEC.fieldOf("machine").forGetter(Return::machine),
+            net.minecraft.core.GlobalPos.CODEC.optionalFieldOf("workbay").forGetter(Return::workbay),
+            Codec.INT.optionalFieldOf("bay", 0).forGetter(Return::bay)
         ).apply(instance, Return::new));
     }
 
@@ -107,7 +118,8 @@ public final class BayVisit {
      * @return false when there is nothing to visit — no dimension, no such bay, or an empty one,
      *         because a visitor with no screen to open is put out on the next tick anyway
      */
-    public static boolean enter(ServerPlayer player, WorkbayRecord record, int bay) {
+    public static boolean enter(ServerPlayer player, WorkbayRecord record, int bay,
+        @org.jetbrains.annotations.Nullable net.minecraft.core.GlobalPos workbay) {
         ServerLevel backshop = player.server.getLevel(WorkbayDimensions.BACKSHOP);
         if (backshop == null || bay < 0 || bay >= record.bayCapacity()) {
             return false;
@@ -117,7 +129,8 @@ public final class BayVisit {
             return false;
         }
         player.setData(WBAttachments.BAY_RETURN.get(), new Return(player.level().dimension(),
-            player.position(), player.getYRot(), player.getXRot(), machine));
+            player.position(), player.getYRot(), player.getXRot(), machine,
+            java.util.Optional.ofNullable(workbay), bay));
 
         Vec3 spot = standingSpot(record.bayColumn(), bay);
         // Facing east and a little down: from this corner that is the Port on the machine's north
@@ -153,7 +166,32 @@ public final class BayVisit {
         forget(player);
         player.teleportTo(level, home.where().x, home.where().y, home.where().z, Set.of(),
             home.yRot(), home.xRot());
+        reopen(player, home);
         return true;
+    }
+
+    /**
+     * Puts the Workbay screen back up on the bay the visitor left from. Best effort by design: a
+     * Workbay that was broken while its owner stood in the bay leaves them on the ground, which is
+     * the truth. Never throws the player anywhere — this only ever opens a screen.
+     */
+    private static void reopen(ServerPlayer player, Return home) {
+        if (home.workbay().isEmpty()) {
+            return;
+        }
+        net.minecraft.core.GlobalPos at = home.workbay().get();
+        if (!player.level().dimension().equals(at.dimension())) {
+            return;
+        }
+        ServerLevel level = player.server.getLevel(at.dimension());
+        if (level == null || !level.isLoaded(at.pos())) {
+            return;
+        }
+        if (level.getBlockEntity(at.pos())
+            instanceof com.neryos.workbay.content.workbay.WorkbayBlockEntity workbay
+            && workbay.record().isPresent()) {
+            com.neryos.workbay.menu.WorkbayMenu.open(player, workbay, home.bay());
+        }
     }
 
     private static void forget(ServerPlayer player) {

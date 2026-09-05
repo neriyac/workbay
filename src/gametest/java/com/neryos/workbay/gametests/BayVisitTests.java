@@ -58,7 +58,7 @@ public class BayVisitTests {
 
     /** One visitor, standing in bay 1 of their own Workbay, with a real Mekanism machine in it. */
     private record Visit(GameTestPlayer player, ServerLevel backshop, WorkbayRecord record,
-        Vec3 from, float yRot, float xRot) {
+        Vec3 from, float yRot, float xRot, WorkbayBlockEntity workbay) {
 
         BlockPos machine() {
             return BayGeometry.machinePos(record.bayColumn(), 0);
@@ -86,9 +86,11 @@ public class BayVisitTests {
         helper.assertFalse(backshop.getBlockState(BayGeometry.machinePos(record.bayColumn(), 0)).isAir(),
             "racking " + MACHINE + " left bay 1 empty");
 
-        Visit visit = new Visit(player, backshop, record, player.position(), player.getYRot(), player.getXRot());
+        Visit visit = new Visit(player, backshop, record, player.position(), player.getYRot(),
+            player.getXRot(), workbay);
         player.clearOutboundPackets();
-        helper.assertTrue(BayVisit.enter(player, record, 0), "entering bay 1 was refused");
+        helper.assertTrue(BayVisit.enter(player, record, 0, net.minecraft.core.GlobalPos.of(
+            helper.getLevel().dimension(), workbay.getBlockPos())), "entering bay 1 was refused");
         helper.assertTrue(player.level().dimension().equals(WorkbayDimensions.BACKSHOP),
             "the player is not in the Backshop after entering a bay");
         if (!chunkArrives) {
@@ -207,6 +209,32 @@ public class BayVisitTests {
     }
 
     /**
+     * Coming back means coming back to <b>where you were</b>, and where you were was the Workbay
+     * screen on the bay you entered — not standing on the ground with nothing open. A visit is
+     * supposed to read as a screen that opened and closed over the top of the one you had.
+     */
+    @GameTest
+    @TestHolder(description = "Leaving a bay puts the Workbay screen back up on the bay you entered.")
+    public static void leavingABayGivesTheWorkbayScreenBack(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            Visit v = visit(helper, true);
+            helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(v.screenOpen(), "no screen opened yet"))
+                .thenExecute(() -> v.player().closeContainer())
+                .thenIdle(BayVisit.GRACE + 2)
+                .thenExecute(() -> {
+                    assertHome(helper, v);
+                    helper.assertTrue(v.player().containerMenu instanceof WorkbayMenu,
+                        "the visitor came back to no screen at all; the Workbay screen they left "
+                            + "from should be up again");
+                })
+                .thenSucceed();
+        });
+    }
+
+    /**
      * The trap. Mekanism's Digital Miner config, its multiblock stats tabs and its back button all
      * close one container and open another; a return fired on "no screen" would eject the player
      * exactly when they open the settings this feature exists for. Two shapes: the switch inside
@@ -308,7 +336,7 @@ public class BayVisitTests {
             GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
             WorkbayBlockEntity workbay = placeWorkbay(helper, helper.absolutePos(new BlockPos(0, 1, 0)), player);
             WorkbayRecord record = workbay.record().orElseThrow();
-            helper.assertFalse(BayVisit.enter(player, record, 0), "an empty bay was entered");
+            helper.assertFalse(BayVisit.enter(player, record, 0, null), "an empty bay was entered");
             helper.assertTrue(player.level().dimension().equals(helper.getLevel().dimension()),
                 "the player left their dimension for an empty bay");
             helper.assertFalse(BayVisit.isVisiting(player), "a refused entry left a visit record");

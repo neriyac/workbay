@@ -208,12 +208,7 @@ public class WorkbayBlock extends BaseEntityBlock {
         if (workbay.record().isEmpty()) {
             return net.minecraft.world.InteractionResult.PASS;
         }
-        serverPlayer.openMenu(new net.minecraft.world.SimpleMenuProvider(
-            (id, inventory, viewer) -> new com.neryos.workbay.menu.WorkbayMenu(id, inventory, workbay,
-                com.neryos.workbay.menu.WorkbayMenu.build(workbay, serverPlayer, 0)),
-            WorkbayLang.gui("title")),
-            buffer -> com.neryos.workbay.menu.WorkbaySnapshot.STREAM_CODEC.encode(buffer,
-                com.neryos.workbay.menu.WorkbayMenu.build(workbay, serverPlayer, 0)));
+        com.neryos.workbay.menu.WorkbayMenu.open(serverPlayer, workbay, 0);
         return net.minecraft.world.InteractionResult.CONSUME;
     }
 

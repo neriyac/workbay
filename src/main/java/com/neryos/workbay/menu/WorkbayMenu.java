@@ -205,7 +205,9 @@ public class WorkbayMenu extends AbstractContainerMenu {
                 // Closing first: the player is about to be somewhere this menu's stillValid would
                 // refuse anyway, and a screen left open over a teleport is how you get a ghost.
                 serverPlayer.closeContainer();
-                if (!com.neryos.workbay.world.BayVisit.enter(serverPlayer, record, selectedBay)) {
+                if (!com.neryos.workbay.world.BayVisit.enter(serverPlayer, record, selectedBay,
+                    workbay == null ? null : net.minecraft.core.GlobalPos.of(
+                        serverPlayer.level().dimension(), workbay.getBlockPos()))) {
                     serverPlayer.displayClientMessage(
                         com.neryos.workbay.WorkbayLang.message("bay_enter_failed"), true);
                 }
@@ -512,6 +514,20 @@ public class WorkbayMenu extends AbstractContainerMenu {
      * so every read there is guarded by {@code isLoaded} — a status screen must never be the thing
      * that drags a chunk in synchronously on the server thread (SPEC.md §9).
      */
+    /**
+     * Opens the Workbay screen on one bay. <b>The only place that knows how</b>: the block's
+     * right-click and {@link com.neryos.workbay.world.BayVisit}'s return trip both come here, so a
+     * player who entered a bay from this screen gets <em>this screen</em> back rather than an empty
+     * hand — closing the machine's screen should undo the visit, not undo everything.
+     */
+    public static void open(ServerPlayer viewer, WorkbayBlockEntity workbay, int bay) {
+        viewer.openMenu(new net.minecraft.world.SimpleMenuProvider(
+            (id, inventory, who) -> new WorkbayMenu(id, inventory, workbay,
+                build(workbay, viewer, bay)),
+            com.neryos.workbay.WorkbayLang.gui("title")),
+            buffer -> WorkbaySnapshot.STREAM_CODEC.encode(buffer, build(workbay, viewer, bay)));
+    }
+
     public static WorkbaySnapshot build(WorkbayBlockEntity workbay, ServerPlayer player, int selected) {
         WorkbayRecord record = workbay.record().orElse(null);
         if (record == null) {

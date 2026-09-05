@@ -9,6 +9,8 @@ public class W {
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int n);
   [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr h);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
   [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint a, uint b, bool f);
   [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
@@ -45,18 +47,33 @@ function Focus-MC {
   $me = [W]::GetCurrentThreadId()
   $ot = [W]::GetWindowThreadProcessId($fg, [ref]([uint32]0))
   [W]::AttachThreadInput($me, $ot, $true) | Out-Null
-  [W]::ShowWindow($h, 9) | Out-Null     # SW_RESTORE
+  # SW_RESTORE only when it is actually minimised. Calling it unconditionally un-maximises a
+  # maximised window, so every Focus-MC shrank the game back down -- which changes the framebuffer
+  # size mid-session and sends every coordinate measured off the last screenshot to the wrong place.
+  # Cost a run of missed clicks that looked like the GUI moving on its own.
+  if ([W]::IsIconic($h)) { [W]::ShowWindow($h, 9) | Out-Null }   # SW_RESTORE
   [W]::BringWindowToTop($h) | Out-Null
   [W]::SetForegroundWindow($h) | Out-Null
   [W]::AttachThreadInput($me, $ot, $false) | Out-Null
   Start-Sleep -Milliseconds 400
   if (-not (In-Front $p.Id)) {
+    $wasMaximised = [W]::IsZoomed($h)
     [W]::ShowWindow($h, 6) | Out-Null   # SW_MINIMIZE
     Start-Sleep -Milliseconds 300
-    [W]::ShowWindow($h, 9) | Out-Null   # SW_RESTORE
+    [W]::ShowWindow($h, $(if ($wasMaximised) { 3 } else { 9 })) | Out-Null
     Start-Sleep -Milliseconds 600
   }
   return (In-Front $p.Id)
+}
+
+# Maximise, never fullscreen. A human watching wants the game big and the taskbar reachable, and
+# F11 fullscreen gives GLFW a different window whose handle MainWindowHandle no longer matches.
+# Call it once after the client is up; Focus-MC will not undo it.
+function Maximize-MC {
+  $p = Get-MC
+  [W]::ShowWindow($p.MainWindowHandle, 3) | Out-Null   # SW_MAXIMIZE
+  Start-Sleep -Milliseconds 800
+  return (Get-MC).MainWindowHandle -ne 0
 }
 
 function In-Front([int]$processId) {
