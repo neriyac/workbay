@@ -316,8 +316,23 @@ public class BayViewMenu extends AbstractContainerMenu {
         this.machine = machine != null ? machine : new ItemStackHandler(this.machineSlots);
 
         for (int index = 0; index < this.machineSlots; index++) {
+            SlotRole role = this.roles.get(index);
             addSlot(new SlotItemHandler(this.machine, index,
-                layout.xs()[index], layout.ys()[index]));
+                layout.xs()[index], layout.ys()[index]) {
+                /**
+                 * <b>The client has to refuse what the server will refuse.</b> Its mirror is a
+                 * plain {@code ItemStackHandler}, whose {@code isItemValid} is always true, so it
+                 * predicts a placement the server then declines — and nothing resyncs the slot,
+                 * because the server's view never changed. The player is left looking at an item
+                 * that is not there. The role is already on the client, and an OUT slot is one
+                 * nothing goes into by definition, which is the case that produces every ghost on
+                 * a Mekanism machine. OPEN_ISSUES #19.
+                 */
+                @Override
+                public boolean mayPlace(ItemStack stack) {
+                    return role != SlotRole.OUT && super.mayPlace(stack);
+                }
+            });
         }
 
         int inventoryY = inventoryY(layout.height(), gauges, this.tanks);
