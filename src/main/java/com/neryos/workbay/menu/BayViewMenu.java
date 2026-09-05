@@ -259,6 +259,9 @@ public class BayViewMenu extends AbstractContainerMenu {
 
     private final List<SlotRole> roles;
 
+    /** Which of those this screen may actually write to. Never the same question as the role. */
+    private final List<Boolean> writable;
+
     /**
      * The two fluid-container slots, in and out.
      *
@@ -292,13 +295,14 @@ public class BayViewMenu extends AbstractContainerMenu {
     public BayViewMenu(int containerId, Inventory inventory, RegistryFriendlyByteBuf buffer) {
         this(containerId, inventory, null, buffer.readVarInt(),
             buffer.readOptional(net.minecraft.network.FriendlyByteBuf::readResourceLocation),
-            buffer.readList(buf -> SlotRole.STREAM_CODEC.decode((RegistryFriendlyByteBuf) buf)), null,
+            buffer.readList(buf -> SlotRole.STREAM_CODEC.decode((RegistryFriendlyByteBuf) buf)),
+            buffer.readList(net.minecraft.network.FriendlyByteBuf::readBoolean), null,
             State.STREAM_CODEC.decode(buffer));
     }
 
     public BayViewMenu(int containerId, Inventory inventory, @Nullable WorkbayBlockEntity workbay,
         int bay, Optional<ResourceLocation> machineId, List<SlotRole> slotRoles,
-        @Nullable IItemHandler machine, State state) {
+        List<Boolean> slotWritable, @Nullable IItemHandler machine, State state) {
         super(WBMenus.BAY_VIEW.get(), containerId);
         this.workbay = workbay;
         this.bay = bay;
@@ -308,6 +312,9 @@ public class BayViewMenu extends AbstractContainerMenu {
             ? slotRoles.subList(0, MAX_SLOTS) : slotRoles);
         this.machineSlots = this.roles.size();
         this.layout = MachineLayout.of(this.roles);
+        this.writable = List.copyOf(slotWritable.size() >= this.machineSlots
+            ? slotWritable.subList(0, this.machineSlots)
+            : java.util.Collections.nCopies(this.machineSlots, Boolean.FALSE));
         this.state = state;
         this.gauges = state.gauges();
         this.tanks = !state.tanks().isEmpty();
@@ -316,7 +323,7 @@ public class BayViewMenu extends AbstractContainerMenu {
         this.machine = machine != null ? machine : new ItemStackHandler(this.machineSlots);
 
         for (int index = 0; index < this.machineSlots; index++) {
-            SlotRole role = this.roles.get(index);
+            boolean canWrite = this.writable.get(index);
             addSlot(new SlotItemHandler(this.machine, index,
                 layout.xs()[index], layout.ys()[index]) {
                 /**
@@ -330,7 +337,7 @@ public class BayViewMenu extends AbstractContainerMenu {
                  */
                 @Override
                 public boolean mayPlace(ItemStack stack) {
-                    return role != SlotRole.OUT && super.mayPlace(stack);
+                    return canWrite && super.mayPlace(stack);
                 }
             });
         }
@@ -492,8 +499,8 @@ public class BayViewMenu extends AbstractContainerMenu {
      * is a test-only constructor, and a test that assembles the thing differently from the game
      * is a test of the assembly, not of the mod.
      */
-    public record Opening(Optional<ResourceLocation> machineId, List<SlotRole> roles, Live handler,
-        State state) {
+    public record Opening(Optional<ResourceLocation> machineId, List<SlotRole> roles,
+        List<Boolean> writable, Live handler, State state) {
 
         public int slots() {
             return roles.size();
@@ -644,7 +651,7 @@ public class BayViewMenu extends AbstractContainerMenu {
         if ((now == null || now.getSlots() <= 0) && state.gauges() == 0) {
             return null;
         }
-        return new Opening(record.bay(bay).hosted(), classify(now), live, state);
+        return new Opening(record.bay(bay).hosted(), classify(now), writable(now), live, state);
     }
 
     /**
@@ -668,6 +675,29 @@ public class BayViewMenu extends AbstractContainerMenu {
     }
 
     /**
+     * Which slots this screen can actually put something into. <b>Simulated inserts only</b> — this
+     * is the safety half, and it is the one rule that must never soften: {@link #classify} may
+     * believe {@code isItemValid} because being wrong there costs a box drawn in the wrong group,
+     * while being wrong here costs the item on the cursor.
+     */
+    private static List<Boolean> writable(@Nullable IItemHandler handler) {
+        if (handler == null) {
+            return List.of();
+        }
+        List<Boolean> can = new ArrayList<>();
+        for (int slot = 0; slot < Math.min(handler.getSlots(), MAX_SLOTS); slot++) {
+            ItemStack held = handler.getStackInSlot(slot);
+            can.add(!held.isEmpty()
+                ? takes(handler, slot, held.copyWithCount(1))
+                : takes(handler, slot, new ItemStack(Items.IRON_INGOT))
+                    || takes(handler, slot, new ItemStack(Items.COBBLESTONE))
+                    || takes(handler, slot, new ItemStack(Items.REDSTONE))
+                    || takes(handler, slot, new ItemStack(Items.COAL)));
+        }
+        return List.copyOf(can);
+    }
+
+    /**
      * <b>What is already in the slot is the best probe there is.</b> A slot that will not take back
      * a copy of its own contents cannot be one you put things into — that is true whatever the
      * machine, whatever its recipe, and it needs no guess about what the machine eats. It is what
@@ -681,14 +711,30 @@ public class BayViewMenu extends AbstractContainerMenu {
     private static SlotRole role(IItemHandler handler, int slot) {
         ItemStack held = handler.getStackInSlot(slot);
         if (!held.isEmpty()) {
-            return takes(handler, slot, held.copyWithCount(1)) ? SlotRole.IN : SlotRole.OUT;
+            return admits(handler, slot, held.copyWithCount(1)) ? SlotRole.IN : SlotRole.OUT;
         }
-        if (takes(handler, slot, new ItemStack(Items.IRON_INGOT))
-            || takes(handler, slot, new ItemStack(Items.COBBLESTONE))
-            || takes(handler, slot, new ItemStack(Items.REDSTONE))) {
+        if (admits(handler, slot, new ItemStack(Items.IRON_INGOT))
+            || admits(handler, slot, new ItemStack(Items.COBBLESTONE))
+            || admits(handler, slot, new ItemStack(Items.REDSTONE))) {
             return SlotRole.IN;
         }
-        return takes(handler, slot, new ItemStack(Items.COAL)) ? SlotRole.FUEL : SlotRole.OUT;
+        return admits(handler, slot, new ItemStack(Items.COAL)) ? SlotRole.FUEL : SlotRole.OUT;
+    }
+
+    /**
+     * Would this slot hold that, whether or not <em>we</em> may put it there. A simulated insert
+     * answers for vanilla and for EnderIO, whose null side applies each slot's own role. It answers
+     * nothing for Mekanism, whose null-side proxy refuses every insert — but that same proxy
+     * returns the <b>real</b> slot validity from {@code isItemValid}, because its one use of the
+     * flag is inverted: {@code return !readOnly || inventory.isItemValid(...)}, and the null side
+     * is the read-only one. So the two together read every machine we can reach.
+     *
+     * <p><b>This is the only place {@code isItemValid} is believed, and it decides a layout, never
+     * a write.</b> Wrong here draws a box in the wrong group; wrong in {@link #writable} loses the
+     * cursor. SPEC.md §9's rule is about the second.
+     */
+    private static boolean admits(IItemHandler handler, int slot, ItemStack one) {
+        return takes(handler, slot, one) || handler.isItemValid(slot, one);
     }
 
     private static boolean takes(IItemHandler handler, int slot, ItemStack one) {
@@ -708,7 +754,8 @@ public class BayViewMenu extends AbstractContainerMenu {
         }
         viewer.openMenu(new net.minecraft.world.SimpleMenuProvider(
             (containerId, inventory, who) -> new BayViewMenu(containerId, inventory, workbay, bay,
-                opening.machineId(), opening.roles(), opening.handler(), opening.state()),
+                opening.machineId(), opening.roles(), opening.writable(), opening.handler(),
+                opening.state()),
             com.neryos.workbay.WorkbayLang.gui("bayview.title", bay + 1)),
             buffer -> {
                 buffer.writeVarInt(bay);
@@ -717,6 +764,8 @@ public class BayViewMenu extends AbstractContainerMenu {
                 buffer.writeCollection(opening.roles(),
                     (buf, role) -> SlotRole.STREAM_CODEC.encode(
                         (RegistryFriendlyByteBuf) buf, role));
+                buffer.writeCollection(opening.writable(),
+                    net.minecraft.network.FriendlyByteBuf::writeBoolean);
                 State.STREAM_CODEC.encode(buffer, opening.state());
             });
         return true;

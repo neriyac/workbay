@@ -111,6 +111,57 @@ public class MenuTests {
         });
     }
 
+    /**
+     * The same reading, on the mod that gives up nothing to a simulated insert. Mekanism's null-side
+     * proxy refuses every insert, so probing with items alone reads every slot as an output and the
+     * screen falls back to a plain row. But that same proxy answers {@code isItemValid} with the
+     * <b>real</b> slot validity — its one use of the read-only flag is inverted — so the layout can
+     * be read after all.
+     *
+     * <p>And the write must not follow the layout: this asserts the roles separate <em>and</em> that
+     * nothing is writable, because Bay View genuinely cannot put an item in one of these. Believing
+     * the layout there is what put a ghost item on the client.
+     */
+    @GameTest
+    @TestHolder(description = "A Mekanism machine's slots are grouped, and none of them are writable.")
+    public static void aMekanismMachineIsGroupedButNotWritable(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            WorkbayBlockEntity workbay = placeWorkbay(helper, helper.absolutePos(new BlockPos(0, 1, 0)), player);
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = helper.getLevel().getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            WorkbayTickets.force(backshop, record.id(), record.bayColumn());
+
+            Block machine = net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(
+                net.minecraft.resources.ResourceLocation.parse("mekanism:enrichment_chamber"));
+            if (machine == Blocks.AIR) {
+                helper.fail("mekanism:enrichment_chamber is not registered. This test is about a "
+                    + "real mod's handler, so a missing partner mod is a failure, never a skip.");
+            }
+            player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(machine));
+            WorkbayMenu menu = menuFor(workbay, player);
+            menu.act(WorkbayAction.SELECT_BAY, 0, java.util.Optional.empty());
+            menu.act(WorkbayAction.RACK, 0, java.util.Optional.empty());
+
+            var opening = com.neryos.workbay.menu.BayViewMenu.opening(player, record, 0);
+            if (opening == null) {
+                helper.fail("Bay View would not open on a racked Enrichment Chamber");
+                return;
+            }
+            helper.assertTrue(opening.roles().stream()
+                    .anyMatch(role -> role != com.neryos.workbay.menu.BayViewMenu.SlotRole.OUT),
+                "every slot read as OUT, so the screen falls back to a plain row - isItemValid on "
+                    + "the read-only null side is the only thing that separates them here");
+            helper.assertTrue(com.neryos.workbay.menu.BayViewMenu.MachineLayout
+                    .of(opening.roles()).grouped(), "the slots should be grouped");
+            helper.assertTrue(opening.writable().stream().noneMatch(can -> can),
+                "Bay View cannot write to a Mekanism slot, and saying it can is what draws a ghost");
+            helper.succeed();
+        });
+    }
+
     private static WorkbayBlockEntity placeWorkbay(ExtendedGameTestHelper helper, BlockPos pos,
         GameTestPlayer player) {
         ServerLevel level = helper.getLevel();
