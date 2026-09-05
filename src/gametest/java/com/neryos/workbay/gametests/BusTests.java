@@ -1030,6 +1030,95 @@ public class BusTests {
         });
     }
 
+    /**
+     * <b>The mod's whole promise in one test.</b> Three chests on the floor and a furnace in a bay:
+     * one link feeds it coal, another feeds it raw chicken, a third takes the cooked chicken away.
+     * Nobody configures a face — the routing has to fall out of the links themselves.
+     *
+     * <p>It does, and only because a bind is a simulated move. A furnace's faces each expose a
+     * different slot ({@code SLOTS_FOR_DOWN} is the output and the fuel, {@code SLOTS_FOR_SIDES}
+     * the fuel, {@code SLOTS_FOR_UP} the input), so <em>trying</em> the insert is what sorts coal
+     * from chicken: the down face takes coal into the fuel slot and refuses chicken, the up face
+     * takes the chicken. A bind on {@code getSlots() > 0} sends both to the down face and the
+     * chicken link then reads IDLE forever.
+     *
+     * <p>It is also the only test here that proves a <b>hosted machine ticks</b>. Nothing else
+     * would turn raw chicken into cooked. OPEN_ISSUES #19.
+     */
+    @GameTest(timeoutTicks = 2400)
+    @TestHolder(description = "Two links feed a hosted furnace fuel and food; a third takes the meal away.")
+    public static void twoLinksFeedAFurnaceAndAThirdTakesTheMealAway(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(7, 5, 7));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos fuelChest = helper.absolutePos(new BlockPos(5, 1, 0));
+            BlockPos foodChest = helper.absolutePos(new BlockPos(5, 1, 2));
+            BlockPos outChest = helper.absolutePos(new BlockPos(5, 1, 4));
+
+            for (BlockPos at : new BlockPos[] {fuelChest, foodChest, outChest}) {
+                level.setBlock(at, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            }
+            if (level.getBlockEntity(fuelChest) instanceof Container fuel) {
+                fuel.setItem(0, new ItemStack(Items.COAL, 8));
+            }
+            if (level.getBlockEntity(foodChest) instanceof Container food) {
+                food.setItem(0, new ItemStack(Items.CHICKEN, 4));
+            }
+
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.FURNACE));
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+
+            // Three links, made the way a player makes them, and told apart only by their filters.
+            BusConfig coal = connect(helper, workbay, fuelChest.above(), Direction.DOWN, player);
+            workbay.addBus(coal.withMode(BusConfig.Mode.EXTRACT).withRate(4).withSpeed(10)
+                .withFilter(Optional.of(ResourceLocation.parse("minecraft:coal"))));
+            BusConfig raw = connect(helper, workbay, foodChest.above(), Direction.DOWN, player);
+            workbay.addBus(raw.withMode(BusConfig.Mode.EXTRACT).withRate(4).withSpeed(10)
+                .withFilter(Optional.of(ResourceLocation.parse("minecraft:chicken"))));
+            BusConfig cooked = connect(helper, workbay, outChest.above(), Direction.DOWN, player);
+            workbay.addBus(cooked.withMode(BusConfig.Mode.INSERT).withRate(4).withSpeed(10)
+                .withFilter(Optional.of(ResourceLocation.parse("minecraft:cooked_chicken"))));
+
+            helper.startSequence()
+                .thenWaitUntil(() -> {
+                    int done = countIn(level, outChest, Items.COOKED_CHICKEN);
+                    if (done < 4) {
+                        throw new GameTestAssertException("the line has delivered " + done
+                            + " of 4 cooked chicken. fuel slot=" + inSlot(backshop, machinePos, 1)
+                            + " input slot=" + inSlot(backshop, machinePos, 0)
+                            + " output slot=" + inSlot(backshop, machinePos, 2)
+                            + "; links read " + workbay.busStatus(coal.id()) + "/"
+                            + workbay.busStatus(raw.id()) + "/" + workbay.busStatus(cooked.id()));
+                    }
+                })
+                .thenExecute(() -> {
+                    helper.assertValueEqual(countIn(level, foodChest, Items.CHICKEN), 0,
+                        "raw chicken left in the food chest");
+                    // The coal link must not have posted chicken into the fuel slot, or the other
+                    // way round: each face takes only what belongs in it.
+                    helper.assertValueEqual(countIn(level, outChest, Items.CHICKEN), 0,
+                        "raw chicken that reached the output chest");
+                })
+                .thenExecute(() -> tearDown(helper, workbayPos))
+                .thenSucceed();
+        });
+    }
+
+    /** What is in one slot of a hosted machine, by name, for a failure message worth reading. */
+    private static String inSlot(ServerLevel level, BlockPos pos, int slot) {
+        if (!(level.getBlockEntity(pos) instanceof Container container)
+            || slot >= container.getContainerSize()) {
+            return "none";
+        }
+        ItemStack held = container.getItem(slot);
+        return held.isEmpty() ? "empty" : held.getCount() + "x" + held.getItem();
+    }
+
     /** Fills a block's tank through whichever face accepts, never the null side alone. */
     private static int fill(ServerLevel level, BlockPos pos, FluidStack what) {
         for (Direction side : Direction.values()) {
