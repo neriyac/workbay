@@ -1,5 +1,6 @@
 package com.neryos.workbay.client.screen;
 
+import com.neryos.workbay.bus.BusConfig;
 import com.neryos.workbay.menu.BayViewMenu;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
@@ -30,11 +31,12 @@ public class BayViewScreen extends AbstractContainerScreen<BayViewMenu> {
 
     /** Where the two lines of text beside a gauge start, and how much room they get. */
     private static final int LABEL_X = 8 + BayViewMenu.GAUGE_W + 6;
-    private static final int LABEL_W = WIDTH - LABEL_X - 8;
+    /** Stops four pixels short of the exchange column, which shares the band to its right. */
+    private static final int LABEL_W = BayViewMenu.EXCHANGE_IN_X - 4 - LABEL_X;
 
-    /** And the same for the line beside the two fluid-container slots. */
-    private static final int HINT_X = BayViewMenu.EXCHANGE_OUT_X + 22;
-    private static final int HINT_W = WIDTH - HINT_X - 8;
+    /** The hint gets the panel's full width on its own line under the block, not a narrow gutter. */
+    private static final int HINT_X = 8;
+    private static final int HINT_W = WIDTH - 16;
 
     public BayViewScreen(BayViewMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
@@ -76,10 +78,10 @@ public class BayViewScreen extends AbstractContainerScreen<BayViewMenu> {
         }
 
         gauges(g);
-        exchange(g);
+        exchange(g, mouseX, mouseY);
 
-        // SPEC.md §5's permanent line, in the gap the layout reserves for it.
-        Draw.wrapped(g, font, WorkbayScreen.gui("bayview.limits"), leftPos + 8,
+        // SPEC.md §5's permanent line. One line drawn, the sentence on hover.
+        Draw.text(g, font, WorkbayScreen.gui("bayview.limits.short").getString(), leftPos + 8,
             topPos + menu.limitsY(), imageWidth - 16, Draw.TEXT_FAINT);
     }
 
@@ -98,17 +100,13 @@ public class BayViewScreen extends AbstractContainerScreen<BayViewMenu> {
             int y = gaugeY(row++);
             Draw.fluidGauge(g, leftPos + 8, y, BayViewMenu.GAUGE_W, BayViewMenu.GAUGE_H,
                 tank.contents(), tank.capacity());
-            label(g, y, tankName(tank).getString(),
-                WorkbayScreen.gui("bayview.tank", Draw.compact(tank.contents().getAmount()),
-                    Draw.compact(tank.capacity())).getString());
+            label(g, y, tankName(tank).getString());
         }
         if (state.energyCapacity() > 0) {
             int y = gaugeY(row);
             Draw.gauge(g, leftPos + 8, y, BayViewMenu.GAUGE_W, BayViewMenu.GAUGE_H, state.energy(),
                 state.energyCapacity(), Draw.AMBER);
-            label(g, y, WorkbayScreen.gui("bayview.energy").getString(),
-                WorkbayScreen.gui("power", Draw.compact(state.energy()),
-                    Draw.compact(state.energyCapacity())).getString());
+            label(g, y, WorkbayScreen.gui("bayview.energy").getString());
         }
     }
 
@@ -120,16 +118,56 @@ public class BayViewScreen extends AbstractContainerScreen<BayViewMenu> {
      * guess, and the player who has to guess is the one who has not thought to hover anything: the
      * same argument SPEC.md §5 makes for the limits sentence.
      */
-    private void exchange(GuiGraphics g) {
+    private void exchange(GuiGraphics g, int mouseX, int mouseY) {
         if (!menu.hasTanks()) {
             return;
         }
         int y = topPos + menu.exchangeY();
-        Draw.slot(g, leftPos + BayViewMenu.EXCHANGE_IN_X - 1, y - 1, 18, 18);
-        Draw.slot(g, leftPos + BayViewMenu.EXCHANGE_OUT_X - 1, y - 1, 18, 18);
+        int x = leftPos + BayViewMenu.EXCHANGE_IN_X;
+        Draw.slot(g, x - 1, y - 1, 18, 18);
+        Draw.slot(g, x - 1, y - 1 + BayViewMenu.EXCHANGE_OUT_DY, 18, 18);
+        // The arrow is item flow, not fluid flow: what goes in the top comes out of the bottom,
+        // whichever way the fluid is moving. It is drawn, never clicked - the direction button
+        // beside it is the control, and one glyph that is sometimes a button is how a player
+        // learns to distrust every glyph.
+        WBIcons.draw(g, WBIcons.ARROW_DOWN, x + 3, y + BayViewMenu.EXCHANGE_ARROW_DY,
+            Draw.TEXT_FAINT);
+
+        int modeX = leftPos + BayViewMenu.EXCHANGE_MODE_X;
+        int modeY = y + BayViewMenu.EXCHANGE_MODE_DY;
+        boolean hovered = overMode(mouseX, mouseY);
+        Draw.button(g, modeX, modeY, 18, 18, hovered, false);
+        WBIcons.draw(g, menu.state().mode() == BusConfig.Mode.INSERT
+            ? WBIcons.INSERT : WBIcons.EXTRACT, modeX + 3, modeY + 3, Draw.TEXT);
+
         BayViewMenu.Hint hint = menu.state().hint();
-        Draw.wrapped(g, font, hintText(hint), leftPos + HINT_X, y + 1, HINT_W,
-            hint == BayViewMenu.Hint.NONE ? Draw.TEXT_FAINT : Draw.AMBER);
+        if (hint == BayViewMenu.Hint.NONE) {
+            // Nothing wrong, so nothing said. The row stays reserved rather than reclaimed: a
+            // panel that changes height when a bucket goes in moves every slot under the cursor.
+            return;
+        }
+        Draw.wrapped(g, font, hintText(hint),
+            leftPos + HINT_X,
+            topPos + BayViewMenu.gaugesY(menu.machineSlots())
+                + BayViewMenu.gaugesBlock(menu.gauges(), true) + 1,
+            HINT_W, hint == BayViewMenu.Hint.NONE ? Draw.TEXT_FAINT : Draw.AMBER);
+    }
+
+    /** The limits line's box. The whole line, so a player brushing past it gets the sentence. */
+    private boolean overLimits(int mouseX, int mouseY) {
+        int y = topPos + menu.limitsY();
+        return mouseX >= leftPos + 8 && mouseX < leftPos + imageWidth - 8
+            && mouseY >= y && mouseY < y + font.lineHeight;
+    }
+
+    /** The direction button's box, in screen coordinates. */
+    private boolean overMode(int mouseX, int mouseY) {
+        if (!menu.hasTanks()) {
+            return false;
+        }
+        int x = leftPos + BayViewMenu.EXCHANGE_MODE_X;
+        int y = topPos + menu.exchangeY() + BayViewMenu.EXCHANGE_MODE_DY;
+        return mouseX >= x && mouseX < x + 18 && mouseY >= y && mouseY < y + 18;
     }
 
     /** The mixing refusal is the only one that names something, because it is the only one the
@@ -140,6 +178,7 @@ public class BayViewScreen extends AbstractContainerScreen<BayViewMenu> {
             case MIXED -> WorkbayScreen.gui("bayview.exchange.mixed", heldFluid().getString());
             case BLOCKED -> WorkbayScreen.gui("bayview.exchange.blocked");
             case REFUSED -> WorkbayScreen.gui("bayview.exchange.refused");
+            case WRONG_WAY -> WorkbayScreen.gui("bayview.exchange.wrong_way");
         };
     }
 
@@ -151,10 +190,14 @@ public class BayViewScreen extends AbstractContainerScreen<BayViewMenu> {
             .orElseGet(() -> WorkbayScreen.gui("bayview.tank.empty"));
     }
 
-    /** What a gauge is, then how full it is. The exact figures stay in the tooltip. */
-    private void label(GuiGraphics g, int y, String what, String figures) {
+    /**
+     * What a gauge is, and only that. <b>The figures are a hover, not a line.</b> A gauge already
+     * says how full it is — that is the entire reason it is a gauge — so a number repeating it is a
+     * line the eye has to skip past on every screen. The name cannot be read off the picture, so
+     * the name stays; the exact millibuckets go where the exact anything goes.
+     */
+    private void label(GuiGraphics g, int y, String what) {
         Draw.text(g, font, what, leftPos + LABEL_X, y + 3, LABEL_W, Draw.TEXT);
-        Draw.text(g, font, figures, leftPos + LABEL_X, y + 14, LABEL_W, Draw.TEXT_DIM);
     }
 
     private static Component tankName(BayViewMenu.Tank tank) {
@@ -186,9 +229,37 @@ public class BayViewScreen extends AbstractContainerScreen<BayViewMenu> {
             Draw.TEXT_DIM);
     }
 
+    /**
+     * One control means one thing: left-click is the next value in the cycle, right-click the
+     * previous. With two directions they land on the same place, and a right-click that did
+     * nothing would read as a broken button.
+     */
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (overMode((int) mouseX, (int) mouseY) && minecraft != null && minecraft.gameMode != null) {
+            minecraft.gameMode.handleInventoryButtonClick(menu.containerId,
+                BayViewMenu.MODE_BUTTON);
+            return true;
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
         super.render(g, mouseX, mouseY, partial);
+        if (overLimits(mouseX, mouseY)) {
+            g.renderTooltip(font, Draw.tooltip(font, List.of(
+                WorkbayScreen.gui("bayview.limits.short"),
+                WorkbayScreen.gui("bayview.limits"))), mouseX, mouseY);
+            return;
+        }
+        if (overMode(mouseX, mouseY)) {
+            g.renderTooltip(font, Draw.tooltip(font, List.of(
+                WorkbayScreen.gui(menu.state().mode() == BusConfig.Mode.INSERT
+                    ? "bayview.exchange.into" : "bayview.exchange.outof"),
+                WorkbayScreen.gui("bayview.exchange.direction.tip"))), mouseX, mouseY);
+            return;
+        }
         int row = gaugeAt(mouseX, mouseY);
         if (row >= 0) {
             // Draw#tooltip, not renderComponentTooltip: the mod's tooltips are sentences, and

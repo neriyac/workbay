@@ -808,16 +808,24 @@ public class DuplicationTests {
             }
 
             // And back out, which is the direction that can hand the player a full bucket while
-            // leaving the tank full as well.
+            // leaving the tank full as well. The direction is set, not inferred: with the button
+            // still on "into the machine" an empty bucket moves nothing, and every count below
+            // would hold anyway - which is a test that passes without testing.
             ItemStack emptied = inFluidSlot(view, 1).copy();
             helper.assertValueEqual(emptied.getItem(), Items.BUCKET,
                 "the item the fill left in the result slot");
             putInFluidSlot(view, 1, ItemStack.EMPTY);
             putInFluidSlot(view, 0, emptied);
+            view.clickMenuButton(player, BayViewMenu.MODE_BUTTON);
             view.tick();
             helper.assertValueEqual(census.getAsInt(), 1000, "millibuckets of water after drawing "
                 + "it back out of the hosted tank");
             helper.assertValueEqual(buckets.getAsInt(), 1, "buckets in existence after the draw");
+            // The half that makes the two above mean something: the water really came back.
+            helper.assertValueEqual(inTanks(backshop, machinePos, water), 0,
+                "millibuckets left in the hosted tank after the draw");
+            helper.assertValueEqual(inEveryPlace(helper, player, view, Items.WATER_BUCKET), 1,
+                "buckets of water the draw handed back");
 
             view.removed(player);
             helper.assertValueEqual(census.getAsInt(), 1000,
@@ -867,6 +875,12 @@ public class DuplicationTests {
             var water = net.minecraft.world.level.material.Fluids.WATER;
             helper.assertValueEqual(inTanks(backshop, machinePos, water), 1000,
                 "millibuckets in the hosted tank before the stack of empty buckets goes in");
+
+            // Out of the machine now, which is the button rather than a guess about the bucket:
+            // the direction is the player's to set, so the test presses what the player presses.
+            view.clickMenuButton(player, BayViewMenu.MODE_BUTTON);
+            helper.assertValueEqual(view.state().mode(), com.neryos.workbay.bus.BusConfig.Mode.EXTRACT,
+                "the exchange direction after one press");
 
             putInFluidSlot(view, 0, new ItemStack(Items.BUCKET, 16));
             java.util.function.IntSupplier census = () ->

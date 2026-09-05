@@ -363,10 +363,18 @@ public class WBLanguageProvider extends LanguageProvider {
         // The fluid slots. The resting line is the label - two unnamed slots are a guess - and the
         // three others are the refusals. Only mixing names anything: whether a tank is full or
         // empty is already drawn, in a gauge, directly above them.
+        add(WorkbayLang.guiKey("bayview.limits.short"), "Settings stay on the machine.");
         add(WorkbayLang.guiKey("bayview.exchange"), "Container in, result out.");
         add(WorkbayLang.guiKey("bayview.exchange.mixed"), "This tank holds %s.");
         add(WorkbayLang.guiKey("bayview.exchange.blocked"), "Take the result out first.");
         add(WorkbayLang.guiKey("bayview.exchange.refused"), "Nothing moves either way.");
+        add(WorkbayLang.guiKey("bayview.exchange.wrong_way"), "Press the arrow - it is set the "
+            + "other way.");
+        add(WorkbayLang.guiKey("bayview.exchange.into"), "Filling the machine");
+        add(WorkbayLang.guiKey("bayview.exchange.outof"), "Emptying the machine");
+        add(WorkbayLang.guiKey("bayview.exchange.direction.tip"), "Which way the container in the "
+            + "top slot carries fluid. Click to swap. The result always comes out of the bottom "
+            + "slot.");
         add(WorkbayLang.guiKey("bayview.energy"), "Stored energy");
         add(WorkbayLang.guiKey("bayview.energy.tip"), "The machine's own buffer. The Workbay shares "
             + "power to it automatically - there is nothing to click here.");

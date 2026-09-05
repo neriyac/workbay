@@ -1,5 +1,7 @@
 package com.neryos.workbay.menu;
 
+import com.neryos.workbay.bus.BusConfig;
+
 import com.neryos.workbay.content.workbay.WorkbayBlockEntity;
 import com.neryos.workbay.init.WBMenus;
 import com.neryos.workbay.network.BayViewPacket;
@@ -98,12 +100,33 @@ public class BayViewMenu extends AbstractContainerMenu {
     public static final int GAUGE_H = 34;
     public static final int GAUGE_PITCH = 38;
 
-    /** The fluid-container slots under the gauges, and the room the row takes. */
-    public static final int EXCHANGE_ROW = 24;
-    public static final int EXCHANGE_IN_X = 8;
-    public static final int EXCHANGE_OUT_X = 30;
+    /**
+     * The fluid-container column under the gauges: <b>the in slot, an arrow, the out slot beneath
+     * it</b>. Stacked rather than side by side because that is the shape every machine mod in the
+     * genre uses for "this goes in, that comes out" — Industrial Foregoing and Mekanism both — and
+     * a player reads a column with an arrow down it without being told what it is. Two slots in a
+     * row, by contrast, read as two places to put something.
+     */
+    public static final int EXCHANGE_ROW = 50;
+    /**
+     * The column sits to the <b>right of the gauges, level with them</b>, not on a row of its own.
+     * A gauge is 34 tall and the column 50, so side by side they cost 50 where stacked they cost
+     * 94 — and the panel is tall enough already. The gauge is the thing being changed and the slots
+     * are what changes it, so they belong in the same eyeline anyway.
+     */
+    public static final int EXCHANGE_IN_X = 124;
+    /** Both slots share a column; the out slot is this far below the in one. */
+    public static final int EXCHANGE_OUT_DY = 32;
+    /** The arrow between them, and the direction button beside them. Both 12x12 glyphs. */
+    public static final int EXCHANGE_ARROW_DY = 19;
+    public static final int EXCHANGE_MODE_X = 146;
+    /** Level with the in slot, because what it says is what happens to whatever is in that slot. */
+    public static final int EXCHANGE_MODE_DY = 0;
     public static final int EXCHANGE_IN = 0;
     public static final int EXCHANGE_OUT = 1;
+
+    /** The one menu button this screen has: flip which way the exchange carries fluid. */
+    public static final int MODE_BUTTON = 0;
 
     /** Where the machine grid starts, and where the player's own inventory starts under it. */
     public static final int GRID_X = 8;
@@ -146,6 +169,19 @@ public class BayViewMenu extends AbstractContainerMenu {
      * furnace's fuel slot is not a place to keep a bucket that is halfway through being filled.
      */
     private final ItemStackHandler exchange = new ItemStackHandler(2);
+
+    /**
+     * Which way the exchange carries, and <b>the player's choice rather than a guess about their
+     * intent</b>. It used to be inferred — a container with fluid in it emptied, an empty one
+     * filled — which is right until the container is half full, and then it is a coin toss the
+     * player cannot call or override. {@link BusConfig.Mode} rather than an enum of this screen's
+     * own: INSERT and EXTRACT already mean "into the machine" and "out of it" on every link row,
+     * and the same two glyphs are already drawn for them.
+     *
+     * <p>Lives for as long as the screen does. Reopening starts at INSERT again, which is the
+     * common direction — topping a machine up — and is one click from the other.
+     */
+    private BusConfig.Mode mode = BusConfig.Mode.INSERT;
 
     /** Tanks and energy, as last read on the server. Never a source of truth on the client. */
     private State state;
@@ -202,7 +238,8 @@ public class BayViewMenu extends AbstractContainerMenu {
                     return FluidUtil.getFluidHandler(stack).isPresent();
                 }
             });
-            addSlot(new SlotItemHandler(exchange, EXCHANGE_OUT, EXCHANGE_OUT_X, y) {
+            addSlot(new SlotItemHandler(exchange, EXCHANGE_OUT, EXCHANGE_IN_X,
+                y + EXCHANGE_OUT_DY) {
                 @Override
                 public boolean mayPlace(ItemStack stack) {
                     return false;
@@ -230,28 +267,49 @@ public class BayViewMenu extends AbstractContainerMenu {
      * uses to fill a hosted tank, so they sit beside the thing they change.
      */
     public static int exchangeY(int slots, int gauges) {
-        return gaugesY(slots) + gauges * GAUGE_PITCH + 2;
-    }
-
-    /** And the limits sentence under those, so gauges push it down rather than sit on top of it. */
-    public static int limitsY(int slots, int gauges, boolean tanks) {
-        return gaugesY(slots) + gauges * GAUGE_PITCH + (tanks ? EXCHANGE_ROW : 0);
+        return gaugesY(slots);
     }
 
     /**
-     * Where the player's own inventory starts. The fifty-four pixels under the limits line are not
-     * padding: SPEC.md §5 requires a permanent line naming what this screen cannot reach, and a
-     * screen that mimics a machine's and silently lacks half its controls reads as a broken mod
-     * rather than a limit.
+     * How tall the gauges and the exchange column are together. Whichever is taller decides, since
+     * they sit side by side.
+     */
+    public static int gaugesBlock(int gauges, boolean tanks) {
+        return Math.max(gauges * GAUGE_PITCH, tanks ? EXCHANGE_ROW : 0);
+    }
+
+    /** The one line under the block saying what the slots are for, or why they refused. */
+    public static final int HINT_ROW = 12;
+
+    /** And the limits sentence under those, so gauges push it down rather than sit on top of it. */
+    public static int limitsY(int slots, int gauges, boolean tanks) {
+        return gaugesY(slots) + gaugesBlock(gauges, tanks) + (tanks ? HINT_ROW : 0);
+    }
+
+    /**
+     * Where the player's own inventory starts, straight under the limits line. SPEC.md §5 requires
+     * a permanent line naming what this screen cannot reach.
      *
-     * <p>Fifty-four and not twenty because that sentence wraps to <b>four</b> lines at this panel's
-     * width, not the two it looks like in the source. Short, it ran straight through the Inventory
-     * label and the first row of the player's own slots - seen in {@code runClient}, and the exact
-     * same class of fault as the skim chip that overran the link name last session.
+     * <p><b>Whatever this reserves, the line must fit in.</b> It was once twenty pixels for a
+     * sentence that wraps to four lines, and it ran straight through the Inventory label and the
+     * player's own top row — seen in {@code runClient}, the same class of fault as the skim chip
+     * that overran the link name. The sentence now lives in a tooltip and one line is drawn.
      */
     public static int inventoryY(int slots, int gauges, boolean tanks) {
-        return limitsY(slots, gauges, tanks) + 54;
+        return limitsY(slots, gauges, tanks) + LIMITS_ROW;
     }
+
+    /**
+     * One drawn line, with the sentence in its tooltip. It used to be fifty-four pixels, because
+     * the sentence wraps to <b>four</b> lines at this width — the largest block on a panel whose
+     * point is that it is small. SPEC.md §5 asks for a permanent line, and permanent means always
+     * present rather than always spelled out.
+     *
+     * <p>Twenty-two rather than the fourteen a nine-pixel line needs, because the Inventory label
+     * is drawn ten pixels <em>above</em> {@code inventoryY}: anything under twenty-one puts this
+     * line straight through it. Fourteen did exactly that, and it took a screenshot to see.
+     */
+    public static final int LIMITS_ROW = 22;
 
     public static int height(int slots, int gauges, boolean tanks) {
         return inventoryY(slots, gauges, tanks) + 58 + SLOT_SIZE + 7;
@@ -352,7 +410,17 @@ public class BayViewMenu extends AbstractContainerMenu {
          * <p>One value for all four because the gauge beside the slots already says whether the
          * tank is full or empty, and a line repeating what the picture says is a line nobody reads.
          */
-        REFUSED;
+        REFUSED,
+        /**
+         * Nothing moved, but flipping the direction button would have moved something. Worked out
+         * by simulating the other way round rather than by guessing from what the container holds,
+         * so it fires exactly when the toggle is the answer and never otherwise.
+         *
+         * <p>Its own value because a direction the player sets is a direction the player can set
+         * <em>wrong</em>, and "nothing to exchange" over a full bucket is the same fault as a dead
+         * link reading IDLE. The button is the fix and the line has to say so.
+         */
+        WRONG_WAY;
 
         /** Clamped rather than trusted: a byte off the wire must never index off the end. */
         public static final StreamCodec<RegistryFriendlyByteBuf, Hint> STREAM_CODEC =
@@ -369,9 +437,17 @@ public class BayViewMenu extends AbstractContainerMenu {
      * that is wrong once and then wrong forever. A whole record that either matches or does not
      * cannot drift, which is the same argument {@link WorkbaySnapshot} is written on.
      */
-    public record State(List<Tank> tanks, int energy, int energyCapacity, Hint hint) {
+    /** Clamped rather than trusted, exactly as {@link Hint#STREAM_CODEC} is. */
+    public static final StreamCodec<RegistryFriendlyByteBuf, BusConfig.Mode> MODE_STREAM_CODEC =
+        StreamCodec.of((buffer, mode) -> buffer.writeVarInt(mode.ordinal()),
+            buffer -> BusConfig.Mode.values()[
+                Math.clamp(buffer.readVarInt(), 0, BusConfig.Mode.values().length - 1)]);
 
-        public static final State EMPTY = new State(List.of(), 0, 0, Hint.NONE);
+    public record State(List<Tank> tanks, int energy, int energyCapacity, Hint hint,
+        BusConfig.Mode mode) {
+
+        public static final State EMPTY =
+            new State(List.of(), 0, 0, Hint.NONE, BusConfig.Mode.INSERT);
 
         public static final StreamCodec<RegistryFriendlyByteBuf, State> STREAM_CODEC =
             StreamCodec.composite(
@@ -379,10 +455,15 @@ public class BayViewMenu extends AbstractContainerMenu {
                 ByteBufCodecs.VAR_INT, State::energy,
                 ByteBufCodecs.VAR_INT, State::energyCapacity,
                 Hint.STREAM_CODEC, State::hint,
+                MODE_STREAM_CODEC, State::mode,
                 State::new);
 
         public State withHint(Hint updated) {
-            return hint == updated ? this : new State(tanks, energy, energyCapacity, updated);
+            return hint == updated ? this : new State(tanks, energy, energyCapacity, updated, mode);
+        }
+
+        public State withMode(BusConfig.Mode updated) {
+            return mode == updated ? this : new State(tanks, energy, energyCapacity, hint, updated);
         }
 
         /** How many rows the panel has to find room for. */
@@ -398,7 +479,8 @@ public class BayViewMenu extends AbstractContainerMenu {
          */
         public boolean sameAs(State other) {
             if (energy != other.energy || energyCapacity != other.energyCapacity
-                || hint != other.hint || tanks.size() != other.tanks.size()) {
+                || hint != other.hint || mode != other.mode
+                || tanks.size() != other.tanks.size()) {
                 return false;
             }
             for (int i = 0; i < tanks.size(); i++) {
@@ -498,7 +580,7 @@ public class BayViewMenu extends AbstractContainerMenu {
             // argument, so every gauge on the screen showed the tank as it was *before* this tick's
             // transfer. Cost a red test that said the tank was empty while the level said 1,000mB.
             Hint hint = exchange(live);
-            state = live.read().withHint(hint);
+            state = live.read().withHint(hint).withMode(mode);
         }
     }
 
@@ -538,39 +620,29 @@ public class BayViewMenu extends AbstractContainerMenu {
             return Hint.NONE;
         }
         ItemStack one = input.copyWithCount(1);
-        FluidStack offered = FluidUtil.getFluidContained(one).orElse(FluidStack.EMPTY);
-        boolean emptying = !offered.isEmpty();
-        // The face is chosen by simulating, never by asking. Every Mekanism machine's null side
-        // hands out a read-only handler that reports its tanks correctly and then swallows the
-        // fill (ProxyHandler: readOnly = side == null), so a screen that binds to the first handler
-        // it finds shows the tank, takes the bucket and moves nothing.
-        IFluidHandler tanks = emptying
-            ? live.reach(Capabilities.FluidHandler.BLOCK,
-                handler -> handler.fill(offered, IFluidHandler.FluidAction.SIMULATE) > 0)
-            : live.reach(Capabilities.FluidHandler.BLOCK,
-                handler -> !handler.drain(Integer.MAX_VALUE, IFluidHandler.FluidAction.SIMULATE)
-                    .isEmpty());
-        // Why it refused, if it refuses — worked out once, because the refusal can come from
-        // either the face search or the transfer itself and it means the same thing in both.
-        // Not checked before the attempt: a machine with a water tank and a spare empty one may
-        // legitimately take the lava, and a screen that says "holds Water" while the lava goes in
-        // is worse than one that says nothing.
-        Hint refusal = emptying && mismatched(live, offered) ? Hint.MIXED : Hint.REFUSED;
-        if (tanks == null) {
-            return refusal;
-        }
-        FluidActionResult simulated = emptying
-            ? FluidUtil.tryEmptyContainer(one, tanks, Integer.MAX_VALUE, viewer, false)
-            : FluidUtil.tryFillContainer(one, tanks, Integer.MAX_VALUE, viewer, false);
+        boolean emptying = mode == BusConfig.Mode.INSERT;
+        IFluidHandler tanks = reach(live, one, emptying);
+        FluidActionResult simulated = tanks == null ? FluidActionResult.FAILURE
+            : attempt(one, tanks, emptying, false);
         if (!simulated.isSuccess()) {
-            return refusal;
+            // Nothing moved. Before saying so, ask whether the *other* direction would have — a
+            // simulation, not a guess from what the container holds, so this fires exactly when
+            // pressing the button is the fix. A player who has just set the direction wrong is the
+            // one most likely to be looking at this line.
+            IFluidHandler other = reach(live, one, !emptying);
+            if (other != null && attempt(one, other, !emptying, false).isSuccess()) {
+                return Hint.WRONG_WAY;
+            }
+            // Not checked before the attempt: a machine with a water tank and a spare empty one may
+            // legitimately take the lava, and a screen that says "holds Water" while the lava goes
+            // in is worse than one that says nothing.
+            return emptying && mismatched(live, FluidUtil.getFluidContained(one)
+                .orElse(FluidStack.EMPTY)) ? Hint.MIXED : Hint.REFUSED;
         }
         if (!exchange.insertItem(EXCHANGE_OUT, simulated.getResult(), true).isEmpty()) {
             return Hint.BLOCKED;
         }
-        FluidActionResult done = emptying
-            ? FluidUtil.tryEmptyContainer(one, tanks, Integer.MAX_VALUE, viewer, true)
-            : FluidUtil.tryFillContainer(one, tanks, Integer.MAX_VALUE, viewer, true);
+        FluidActionResult done = attempt(one, tanks, emptying, true);
         if (!done.isSuccess()) {
             return Hint.REFUSED;
         }
@@ -578,6 +650,50 @@ public class BayViewMenu extends AbstractContainerMenu {
         // Whatever this refuses would be a leak, and the simulate above proved it will not.
         exchange.insertItem(EXCHANGE_OUT, done.getResult(), false);
         return Hint.NONE;
+    }
+
+    /**
+     * The face this direction can actually use. <b>Chosen by simulating, never by asking.</b> Every
+     * Mekanism machine's null side hands out a read-only handler that reports its tanks correctly
+     * and then swallows the fill ({@code ProxyHandler: readOnly = side == null}), so a screen that
+     * binds to the first handler it finds shows the tank, takes the bucket and moves nothing.
+     */
+    @Nullable
+    private IFluidHandler reach(Live live, ItemStack one, boolean emptying) {
+        if (emptying) {
+            FluidStack offered = FluidUtil.getFluidContained(one).orElse(FluidStack.EMPTY);
+            if (offered.isEmpty()) {
+                return null;
+            }
+            return live.reach(Capabilities.FluidHandler.BLOCK,
+                handler -> handler.fill(offered, IFluidHandler.FluidAction.SIMULATE) > 0);
+        }
+        return live.reach(Capabilities.FluidHandler.BLOCK,
+            handler -> !handler.drain(Integer.MAX_VALUE, IFluidHandler.FluidAction.SIMULATE)
+                .isEmpty());
+    }
+
+    /** One direction of the exchange, simulated or committed. NeoForge owns the arithmetic. */
+    private FluidActionResult attempt(ItemStack one, IFluidHandler tanks, boolean emptying,
+        boolean commit) {
+        return emptying
+            ? FluidUtil.tryEmptyContainer(one, tanks, Integer.MAX_VALUE, viewer, commit)
+            : FluidUtil.tryFillContainer(one, tanks, Integer.MAX_VALUE, viewer, commit);
+    }
+
+    /**
+     * The direction button. Vanilla's channel rather than a payload of our own: the click carries
+     * no argument, and {@code clickMenuButton} is already validated, container-id checked and
+     * spectator-guarded by {@code ServerGamePacketListenerImpl}.
+     */
+    @Override
+    public boolean clickMenuButton(Player who, int id) {
+        if (id != MODE_BUTTON || !stillValid(who)) {
+            return false;
+        }
+        mode = mode.flip();
+        state = state.withMode(mode);
+        return true;
     }
 
     /**
@@ -843,8 +959,11 @@ public class BayViewMenu extends AbstractContainerMenu {
             }
             IEnergyStorage energy =
                 reach(Capabilities.EnergyStorage.BLOCK, handler -> handler.getMaxEnergyStored() > 0);
+            // The hint and the direction are the menu's, not the machine's; tick() withers them
+            // straight back on. Reading them here would mean Live knowing about a button.
             return new State(List.copyOf(tanks), energy == null ? 0 : energy.getEnergyStored(),
-                energy == null ? 0 : energy.getMaxEnergyStored(), Hint.NONE);
+                energy == null ? 0 : energy.getMaxEnergyStored(), Hint.NONE,
+                BusConfig.Mode.INSERT);
         }
 
         /** The live handler only if it still has this slot; null is "there is nothing to write to". */

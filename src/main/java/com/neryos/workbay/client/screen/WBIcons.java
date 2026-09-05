@@ -287,6 +287,25 @@ public final class WBIcons {
         "............",
     };
 
+    /**
+     * Down the exchange column: what goes in the top slot comes out of the bottom one. The only
+     * arrow on these screens that means item flow rather than which end of a link is which.
+     */
+    public static final String[] ARROW_DOWN = {
+        "............",
+        "....####....",
+        "....####....",
+        "....####....",
+        "....####....",
+        "....####....",
+        ".##########.",
+        "..########..",
+        "...######...",
+        "....####....",
+        ".....##.....",
+        "............",
+    };
+
     /** Out of the target, into the machine. */
     public static final String[] ARROW_LEFT = {
         "............",
