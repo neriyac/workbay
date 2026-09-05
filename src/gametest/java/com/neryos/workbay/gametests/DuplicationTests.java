@@ -265,8 +265,7 @@ public class DuplicationTests {
                 + "Bay View would not open on it");
         }
         return new BayViewMenu(containerId, player.getInventory(), workbay, bay,
-            opening.machineId(), opening.roles(), opening.writable(), opening.handler(),
-            opening.state());
+            opening.machineId(), opening.slots(), opening.handler(), opening.state());
     }
 
     private static ServerLevel backshop(ExtendedGameTestHelper helper) {

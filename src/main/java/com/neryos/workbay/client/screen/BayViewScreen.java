@@ -160,6 +160,48 @@ public class BayViewScreen extends AbstractContainerScreen<BayViewMenu> {
             HINT_W, hint == BayViewMenu.Hint.NONE ? Draw.TEXT_FAINT : Draw.AMBER);
     }
 
+    /** Which machine slot the cursor is over, or -1. */
+    private int machineSlotAt(int mouseX, int mouseY) {
+        BayViewMenu.MachineLayout layout = menu.layout();
+        for (int index = 0; index < menu.machineSlots(); index++) {
+            int x = leftPos + layout.xs()[index];
+            int y = topPos + layout.ys()[index];
+            if (mouseX >= x && mouseX < x + 16 && mouseY >= y && mouseY < y + 16) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * What the slot is, over whatever is in it. <b>The name of the thing first, then what the slot
+     * is for</b> — the item is what the player came to read, and the role is the part this screen
+     * knows that the machine's own screen would have shown with a coloured border.
+     *
+     * <p>"Read-only here" is on every slot this screen cannot write to, which on a Mekanism machine
+     * is all of them. Saying nothing there is how a player learns by losing a click.
+     */
+    private List<Component> slotTooltip(int index) {
+        BayViewMenu.SlotInfo info = menu.slotInfo().get(index);
+        List<Component> lines = new java.util.ArrayList<>();
+        ItemStack held = menu.getSlot(index).getItem();
+        if (!held.isEmpty()) {
+            lines.add(held.getHoverName());
+        }
+        lines.add(WorkbayScreen.gui(switch (info.role()) {
+            case IN -> "bayview.slot.in";
+            case FUEL -> "bayview.slot.fuel";
+            case OUT -> "bayview.slot.out";
+        }));
+        if (info.fluidContainer()) {
+            lines.add(WorkbayScreen.gui("bayview.slot.fluid"));
+        }
+        if (!info.writable()) {
+            lines.add(WorkbayScreen.gui("bayview.slot.readonly"));
+        }
+        return lines;
+    }
+
     /** The limits line's box. The whole line, so a player brushing past it gets the sentence. */
     private boolean overLimits(int mouseX, int mouseY) {
         int y = topPos + menu.limitsY();
@@ -265,6 +307,11 @@ public class BayViewScreen extends AbstractContainerScreen<BayViewMenu> {
                 WorkbayScreen.gui(menu.state().mode() == BusConfig.Mode.INSERT
                     ? "bayview.exchange.into" : "bayview.exchange.outof"),
                 WorkbayScreen.gui("bayview.exchange.direction.tip"))), mouseX, mouseY);
+            return;
+        }
+        int slot = machineSlotAt(mouseX, mouseY);
+        if (slot >= 0) {
+            g.renderTooltip(font, Draw.tooltip(font, slotTooltip(slot)), mouseX, mouseY);
             return;
         }
         int row = gaugeAt(mouseX, mouseY);

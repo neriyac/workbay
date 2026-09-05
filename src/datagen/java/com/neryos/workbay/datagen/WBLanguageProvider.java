@@ -364,6 +364,13 @@ public class WBLanguageProvider extends LanguageProvider {
         // three others are the refusals. Only mixing names anything: whether a tank is full or
         // empty is already drawn, in a gauge, directly above them.
         add(WorkbayLang.guiKey("bayview.limits.short"), "Settings stay on the machine.");
+        add(WorkbayLang.guiKey("bayview.slot.in"), "Input slot");
+        add(WorkbayLang.guiKey("bayview.slot.fuel"), "Fuel slot");
+        add(WorkbayLang.guiKey("bayview.slot.out"), "Output slot");
+        add(WorkbayLang.guiKey("bayview.slot.fluid"), "Takes a bucket or tank, which is how this "
+            + "machine's own fluid is filled by hand.");
+        add(WorkbayLang.guiKey("bayview.slot.readonly"), "Read-only here. This machine only accepts "
+            + "items through a link, or from inside the bay.");
         add(WorkbayLang.guiKey("bayview.exchange"), "Container in, result out.");
         add(WorkbayLang.guiKey("bayview.exchange.mixed"), "This tank holds %s.");
         add(WorkbayLang.guiKey("bayview.exchange.blocked"), "Take the result out first.");

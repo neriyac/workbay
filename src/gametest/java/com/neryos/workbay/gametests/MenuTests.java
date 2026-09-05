@@ -156,7 +156,8 @@ public class MenuTests {
                     .of(opening.roles()).grouped(),
                 "a Mekanism machine gives no role signal, so it must draw as a plain grid rather "
                     + "than a grouping invented from nothing: read " + opening.roles());
-            helper.assertTrue(opening.writable().stream().noneMatch(can -> can),
+            helper.assertTrue(opening.slots().stream()
+                    .noneMatch(com.neryos.workbay.menu.BayViewMenu.SlotInfo::writable),
                 "Bay View cannot write to a Mekanism slot, and saying it can is what draws a ghost");
             helper.succeed();
         });
