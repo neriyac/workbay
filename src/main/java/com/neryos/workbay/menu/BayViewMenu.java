@@ -36,6 +36,7 @@ import net.neoforged.neoforge.items.SlotItemHandler;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.Nullable;
 
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.Items;
 
 import java.util.ArrayList;
@@ -602,15 +603,31 @@ public class BayViewMenu extends AbstractContainerMenu {
             buffer -> BusConfig.Mode.values()[
                 Math.clamp(buffer.readVarInt(), 0, BusConfig.Mode.values().length - 1)]);
 
-    public record State(List<Tank> tanks, int energy, int energyCapacity, Hint hint,
-        BusConfig.Mode mode) {
+    /**
+     * One Mekanism chemical tank. Its own record rather than a {@link Tank} because a chemical has
+     * no fluid to take a texture from — the gauge is a plain bar and the name carries it — and
+     * because its capacities do not fit an {@code int}.
+     */
+    public record Chemical(Component name, long amount, long capacity) {
+
+        public static final StreamCodec<RegistryFriendlyByteBuf, Chemical> STREAM_CODEC =
+            StreamCodec.composite(
+                net.minecraft.network.chat.ComponentSerialization.STREAM_CODEC, Chemical::name,
+                ByteBufCodecs.VAR_LONG, Chemical::amount,
+                ByteBufCodecs.VAR_LONG, Chemical::capacity,
+                Chemical::new);
+    }
+
+    public record State(List<Tank> tanks, List<Chemical> chemicals, int energy, int energyCapacity,
+        Hint hint, BusConfig.Mode mode) {
 
         public static final State EMPTY =
-            new State(List.of(), 0, 0, Hint.NONE, BusConfig.Mode.INSERT);
+            new State(List.of(), List.of(), 0, 0, Hint.NONE, BusConfig.Mode.INSERT);
 
         public static final StreamCodec<RegistryFriendlyByteBuf, State> STREAM_CODEC =
             StreamCodec.composite(
                 Tank.STREAM_CODEC.apply(ByteBufCodecs.list(MAX_TANKS)), State::tanks,
+                Chemical.STREAM_CODEC.apply(ByteBufCodecs.list(MAX_TANKS)), State::chemicals,
                 ByteBufCodecs.VAR_INT, State::energy,
                 ByteBufCodecs.VAR_INT, State::energyCapacity,
                 Hint.STREAM_CODEC, State::hint,
@@ -618,16 +635,18 @@ public class BayViewMenu extends AbstractContainerMenu {
                 State::new);
 
         public State withHint(Hint updated) {
-            return hint == updated ? this : new State(tanks, energy, energyCapacity, updated, mode);
+            return hint == updated ? this
+                : new State(tanks, chemicals, energy, energyCapacity, updated, mode);
         }
 
         public State withMode(BusConfig.Mode updated) {
-            return mode == updated ? this : new State(tanks, energy, energyCapacity, hint, updated);
+            return mode == updated ? this
+                : new State(tanks, chemicals, energy, energyCapacity, hint, updated);
         }
 
         /** How many rows the panel has to find room for. */
         public int gauges() {
-            return tanks.size() + (energyCapacity > 0 ? 1 : 0);
+            return tanks.size() + chemicals.size() + (energyCapacity > 0 ? 1 : 0);
         }
 
         /**
@@ -639,7 +658,8 @@ public class BayViewMenu extends AbstractContainerMenu {
         public boolean sameAs(State other) {
             if (energy != other.energy || energyCapacity != other.energyCapacity
                 || hint != other.hint || mode != other.mode
-                || tanks.size() != other.tanks.size()) {
+                || tanks.size() != other.tanks.size()
+                || !chemicals.equals(other.chemicals)) {
                 return false;
             }
             for (int i = 0; i < tanks.size(); i++) {
@@ -1189,7 +1209,12 @@ public class BayViewMenu extends AbstractContainerMenu {
                 reach(Capabilities.EnergyStorage.BLOCK, handler -> handler.getMaxEnergyStored() > 0);
             // The hint and the direction are the menu's, not the machine's; tick() withers them
             // straight back on. Reading them here would mean Live knowing about a button.
-            return new State(List.copyOf(tanks), energy == null ? 0 : energy.getEnergyStored(),
+            List<Chemical> chemicals = com.neryos.workbay.compat.MekanismChemicals.tanks(level, pos)
+                .stream()
+                .map(tank -> new Chemical(tank.name(), tank.amount(), tank.capacity()))
+                .toList();
+            return new State(List.copyOf(tanks), chemicals,
+                energy == null ? 0 : energy.getEnergyStored(),
                 energy == null ? 0 : energy.getMaxEnergyStored(), Hint.NONE,
                 BusConfig.Mode.INSERT);
         }

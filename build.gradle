@@ -202,6 +202,11 @@ dependencies {
     localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
     compileOnly "dev.emi:emi-neoforge:${emi_version}:api"
 
+    // Mekanism's API, for chemicals only. compileOnly and guarded exactly as JEI and EMI are: a
+    // chemical has no NeoForge capability, so the one alternative to this is not showing a gas at
+    // all, and Mekanism is too large a share of what anyone will rack for that to be right.
+    compileOnly "mekanism:Mekanism:${mekanism_version}:api"
+
     // Example mod dependency using a mod jar from ./libs with a flat dir repository
     // This maps to ./libs/coolmod-${mc_version}-${coolmod_version}.jar
     // The group id is ignored when searching -- in this case, it is "blank"

@@ -109,6 +109,18 @@ public class BayViewScreen extends AbstractContainerScreen<BayViewMenu> {
                 tank.contents(), tank.capacity());
             label(g, y, tankName(tank).getString());
         }
+        for (BayViewMenu.Chemical gas : state.chemicals()) {
+            int y = gaugeY(row++);
+            // No texture: a chemical has no fluid to take one from, so the bar carries the level
+            // and the name carries what it is. Clamped into an int because the gauge draws a ratio
+            // and Mekanism's capacities do not fit one.
+            long shown = Math.min(gas.amount(), gas.capacity());
+            Draw.gauge(g, leftPos + 8, y, BayViewMenu.GAUGE_W, BayViewMenu.GAUGE_H,
+                (int) (shown * 1000L / Math.max(1L, gas.capacity())), 1000, Draw.GREEN);
+            label(g, y, gas.name().getString().isEmpty()
+                ? WorkbayScreen.gui("bayview.chemical.empty").getString()
+                : gas.name().getString());
+        }
         if (state.energyCapacity() > 0) {
             int y = gaugeY(row);
             Draw.gauge(g, leftPos + 8, y, BayViewMenu.GAUGE_W, BayViewMenu.GAUGE_H, state.energy(),
@@ -331,11 +343,21 @@ public class BayViewScreen extends AbstractContainerScreen<BayViewMenu> {
      */
     private List<Component> gaugeTooltip(int row) {
         BayViewMenu.State state = menu.state();
-        if (row >= state.tanks().size()) {
+        if (row >= state.tanks().size() + state.chemicals().size()) {
             return List.of(WorkbayScreen.gui("bayview.energy"),
                 WorkbayScreen.gui("power", Draw.exact(state.energy()),
                     Draw.exact(state.energyCapacity())),
                 WorkbayScreen.gui("bayview.energy.tip"));
+        }
+        if (row >= state.tanks().size() && row < state.tanks().size() + state.chemicals().size()) {
+            BayViewMenu.Chemical gas = state.chemicals().get(row - state.tanks().size());
+            return List.of(
+                gas.name().getString().isEmpty()
+                    ? WorkbayScreen.gui("bayview.chemical.empty") : gas.name(),
+                WorkbayScreen.gui("bayview.chemical", Draw.exact((int) Math.min(gas.amount(),
+                    Integer.MAX_VALUE)), Draw.exact((int) Math.min(gas.capacity(),
+                    Integer.MAX_VALUE))),
+                WorkbayScreen.gui("bayview.chemical.tip"));
         }
         BayViewMenu.Tank tank = state.tanks().get(row);
         return List.of(tankName(tank),

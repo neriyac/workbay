@@ -218,6 +218,48 @@ public class MenuTests {
         player.getInventory().clearContent();
     }
 
+    /**
+     * The one mod this project compiles against beyond NeoForge, and the one thing it buys: a
+     * chemical has no capability anybody else implements, so a racked machine that holds gas would
+     * otherwise show nothing at all. A Chemical Oxidizer turns a solid into a gas, so it has a
+     * chemical tank to find.
+     *
+     * <p>Asserts the reading reaches Bay View's state, not merely that the class compiles: the
+     * capability is looked up by name through the API, and a name that stops matching is exactly
+     * the failure this catches.
+     */
+    @GameTest
+    @TestHolder(description = "A Mekanism machine's chemical tank reaches Bay View.")
+    public static void aMekanismChemicalTankIsRead(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            WorkbayBlockEntity workbay = placeWorkbay(helper, helper.absolutePos(new BlockPos(0, 1, 0)), player);
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = helper.getLevel().getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            WorkbayTickets.force(backshop, record.id(), record.bayColumn());
+
+            Block oxidizer = net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(
+                net.minecraft.resources.ResourceLocation.parse("mekanism:chemical_oxidizer"));
+            helper.assertFalse(oxidizer == Blocks.AIR, "mekanism:chemical_oxidizer is not registered");
+            player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(oxidizer));
+            WorkbayMenu menu = menuFor(workbay, player);
+            menu.act(WorkbayAction.SELECT_BAY, 0, java.util.Optional.empty());
+            menu.act(WorkbayAction.RACK, 0, java.util.Optional.empty());
+
+            var opening = com.neryos.workbay.menu.BayViewMenu.opening(player, record, 0);
+            if (opening == null) {
+                helper.fail("Bay View would not open on a racked Chemical Oxidizer");
+                return;
+            }
+            helper.assertFalse(opening.state().chemicals().isEmpty(),
+                "no chemical tank reached Bay View. The capability is looked up by name through "
+                    + "Mekanism's API, so a renamed capability lands exactly here.");
+            helper.succeed();
+        });
+    }
+
     private static WorkbayBlockEntity placeWorkbay(ExtendedGameTestHelper helper, BlockPos pos,
         GameTestPlayer player) {
         ServerLevel level = helper.getLevel();

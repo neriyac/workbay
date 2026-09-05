@@ -364,6 +364,10 @@ public class WBLanguageProvider extends LanguageProvider {
         // three others are the refusals. Only mixing names anything: whether a tank is full or
         // empty is already drawn, in a gauge, directly above them.
         add(WorkbayLang.guiKey("bayview.limits.short"), "Settings stay on the machine.");
+        add(WorkbayLang.guiKey("bayview.chemical"), "%s / %s mB");
+        add(WorkbayLang.guiKey("bayview.chemical.empty"), "Empty chemical tank");
+        add(WorkbayLang.guiKey("bayview.chemical.tip"), "A Mekanism chemical. It has no bucket, so "
+            + "this screen shows it and a link carries it; there is nothing to click here.");
         add(WorkbayLang.guiKey("bayview.slot.in"), "Input slot");
         add(WorkbayLang.guiKey("bayview.slot.fuel"), "Fuel slot");
         add(WorkbayLang.guiKey("bayview.slot.out"), "Output slot");
