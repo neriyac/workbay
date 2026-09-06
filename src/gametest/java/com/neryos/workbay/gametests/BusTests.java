@@ -54,6 +54,147 @@ import net.neoforged.testframework.gametest.StructureTemplateBuilder;
 public class BusTests {
 
     /** Places a Workbay, gives it a bay with a chest in it, and returns the block entity. */
+    // A Mekanism machine measures its work in hundreds of ticks, where a furnace measures it in
+    // dozens, so the default hundred-tick budget expires while the line is running correctly.
+    @GameTest(timeoutTicks = 1200)
+    @TestHolder(description = "Two chests outside feed a Mekanism machine in a bay through links "
+        + "alone, a racked energy cube powers it through a third, and a fourth banks the alloy in "
+        + "a chest outside. Nothing is placed into a slot by hand.")
+    public static void fourLinksRunAMekanismLineFromOutsideTheBay(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(9, 5, 9));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos dustChest = helper.absolutePos(new BlockPos(5, 1, 0));
+            BlockPos ingotChest = helper.absolutePos(new BlockPos(5, 1, 2));
+            BlockPos outChest = helper.absolutePos(new BlockPos(5, 1, 4));
+            BlockPos cube = helper.absolutePos(new BlockPos(5, 1, 6));
+
+            Block infuser = BuiltInRegistries.BLOCK.get(
+                ResourceLocation.parse("mekanism:metallurgic_infuser"));
+            Block energyCube = BuiltInRegistries.BLOCK.get(
+                ResourceLocation.parse("mekanism:basic_energy_cube"));
+            net.minecraft.world.item.Item alloy = BuiltInRegistries.ITEM.get(
+                ResourceLocation.parse("mekanism:alloy_infused"));
+            helper.assertFalse(infuser == Blocks.AIR, "mekanism:metallurgic_infuser is not "
+                + "registered - check the gametestRuntimeOnly Mekanism dependency in build.gradle");
+
+            for (BlockPos at : new BlockPos[] {dustChest, ingotChest, outChest}) {
+                level.setBlock(at, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            }
+            if (level.getBlockEntity(dustChest) instanceof Container dustIn) {
+                dustIn.setItem(0, new ItemStack(Items.REDSTONE, 32));
+            }
+            if (level.getBlockEntity(ingotChest) instanceof Container ingotsIn) {
+                ingotsIn.setItem(0, new ItemStack(Items.COPPER_INGOT, 8));
+            }
+
+            // The power is the one thing this test is allowed to conjure, and it still has to
+            // travel: the cube stands outside with the chests and reaches the machine only through
+            // a link. Placed the long way on purpose -- a setBlock alone leaves a Mekanism cube
+            // exposing energy on no face at all, which cost a run to find out.
+            BlockState cubeState = energyCube.defaultBlockState();
+            level.setBlock(cube, cubeState, Block.UPDATE_ALL);
+            net.minecraft.world.item.BlockItem.updateCustomBlockEntityTag(level, player, cube,
+                new ItemStack(energyCube));
+            if (level.getBlockEntity(cube) != null) {
+                level.getBlockEntity(cube).applyComponentsFromItemStack(new ItemStack(energyCube));
+            }
+            energyCube.setPlacedBy(level, cube, cubeState, player, new ItemStack(energyCube));
+            level.invalidateCapabilities(cube);
+            int charged = 0;
+            for (Direction side : Direction.values()) {
+                var store = level.getCapability(Capabilities.EnergyStorage.BLOCK, cube, side);
+                if (store != null) {
+                    charged = store.receiveEnergy(200_000, false);
+                    if (charged > 0) {
+                        break;
+                    }
+                }
+            }
+            helper.assertFalse(charged <= 0, "could not charge the Energy Cube through any face, "
+                + "so there is nothing for the link to carry");
+
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(infuser));
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+
+            BusConfig dust = connect(helper, workbay, dustChest.above(), Direction.DOWN, player);
+            workbay.addBus(dust.withMode(BusConfig.Mode.EXTRACT).withRate(4).withSpeed(10)
+                .withFilter(Optional.of(ResourceLocation.parse("minecraft:redstone"))));
+            BusConfig copper = connect(helper, workbay, ingotChest.above(), Direction.DOWN, player);
+            workbay.addBus(copper.withMode(BusConfig.Mode.EXTRACT).withRate(4).withSpeed(10)
+                .withFilter(Optional.of(ResourceLocation.parse("minecraft:copper_ingot"))));
+            BusConfig out = connect(helper, workbay, outChest.above(), Direction.DOWN, player);
+            workbay.addBus(out.withMode(BusConfig.Mode.INSERT).withRate(4).withSpeed(10)
+                .withFilter(Optional.of(ResourceLocation.parse("mekanism:alloy_infused"))));
+
+            BusConfig power = connect(helper, workbay, cube.above(), Direction.DOWN, player);
+            workbay.addBus(power.withResource(BusConfig.Resource.ENERGY)
+                .withMode(BusConfig.Mode.EXTRACT).withRate(64).withSpeed(1));
+
+            helper.startSequence()
+                .thenWaitUntil(() -> {
+                    int made = countIn(level, outChest, alloy);
+                    if (made < 2) {
+                        throw new GameTestAssertException("the line has banked " + made
+                            + " of 2 alloy. links read " + workbay.busStatus(dust.id()) + "/"
+                            + workbay.busStatus(copper.id()) + "/" + workbay.busStatus(out.id())
+                            + "/" + workbay.busStatus(power.id())
+                            + "; inside=" + inside(backshop, machinePos)
+                            + "; chests hold " + countIn(level, dustChest, Items.REDSTONE)
+                            + " redstone and " + countIn(level, ingotChest, Items.COPPER_INGOT)
+                            + " copper; the cube offers"
+                            + energyFaces(level, cube));
+                    }
+                })
+                .thenExecute(() -> {
+                    // Every ingot that left the chest is accounted for by the line rather than by
+                    // a link shovelling it straight through to the output.
+                    helper.assertValueEqual(countIn(level, outChest, Items.COPPER_INGOT), 0,
+                        "copper ingots that reached the output chest");
+                    helper.assertValueEqual(countIn(level, outChest, Items.REDSTONE), 0,
+                        "redstone that reached the output chest");
+                })
+                .thenExecute(() -> tearDown(helper, workbayPos))
+                .thenSucceed();
+        });
+    }
+
+    /** Which faces of a block will hand energy out, read the way a link reads them. */
+    private static String energyFaces(ServerLevel level, BlockPos pos) {
+        StringBuilder out = new StringBuilder();
+        for (Direction face : Direction.values()) {
+            var energy = level.getCapability(Capabilities.EnergyStorage.BLOCK, pos, face);
+            out.append(' ').append(face.getName()).append('=')
+                .append(energy == null ? "-" : energy.canExtract() + "/" + energy.getEnergyStored());
+        }
+        return out.toString();
+    }
+
+    /** What a hosted machine is actually holding, read the way a link reads it. */
+    private static String inside(ServerLevel backshop, BlockPos machinePos) {
+        IItemHandler handler = backshop.getCapability(Capabilities.ItemHandler.BLOCK, machinePos, null);
+        var energy = backshop.getCapability(Capabilities.EnergyStorage.BLOCK, machinePos, null);
+        StringBuilder out = new StringBuilder();
+        if (handler == null) {
+            out.append("no handler");
+        } else {
+            for (int slot = 0; slot < handler.getSlots(); slot++) {
+                if (!handler.getStackInSlot(slot).isEmpty()) {
+                    out.append(' ').append(slot).append(':').append(handler.getStackInSlot(slot));
+                }
+            }
+            if (out.isEmpty()) {
+                out.append("empty");
+            }
+        }
+        return out + ", energy=" + (energy == null ? "none" : energy.getEnergyStored());
+    }
+
     private static WorkbayBlockEntity setUp(ExtendedGameTestHelper helper, BlockPos workbayPos,
         GameTestPlayer player, ItemStack inTheBay) {
         ServerLevel level = helper.getLevel();
