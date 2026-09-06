@@ -30,18 +30,24 @@ public final class WBIcons {
         "............",
     };
 
-    public static final String[] MAP = {
+    /**
+     * The flow map. Was four arms meeting in the middle, which reads as "expand", not as a map --
+     * a flow map is <b>things joined by routes</b>, so this is two sources routed into one target.
+     * The nodes are hollow 3x3 boxes rather than solid 2x2 ones: filled squares that small merge
+     * into the lines they are attached to and the whole icon reads as a pitchfork.
+     */
+public static final String[] MAP = {
         "............",
-        ".###....###.",
-        ".###....###.",
-        ".###....###.",
-        "...##..##...",
-        ".....##.....",
-        ".....##.....",
-        "...##..##...",
-        ".###....###.",
-        ".###....###.",
-        ".###....###.",
+        "###.....###.",
+        "#.#.....#.#.",
+        "###.....###.",
+        "..#.......#.",
+        "..#########.",
+        ".....#......",
+        ".....#......",
+        "....###.....",
+        "....#.#.....",
+        "....###.....",
         "............",
     };
 
@@ -91,19 +97,24 @@ public final class WBIcons {
         "............",
     };
 
-    /** Stepping through a doorway: the arrow is the player, the frame is the bay. */
-    public static final String[] ENTER = {
+    /**
+     * The trip to a hosted machine. ART.md: it must read as <b>reaching the machine</b>, not as a
+     * doorway -- one button carries "open its screen where you stand" and "walk into the bay"
+     * (SPEC.md §5), and a door is wrong for the first of those. So: a distance crossed, and the
+     * machine at the end of it. {@link #SCREEN} is the window; this is the journey.
+     */
+public static final String[] ENTER = {
         "............",
-        "......#####.",
-        "......#...#.",
-        "......#...#.",
-        "...#..#...#.",
-        "...##.....#.",
-        "#####.....#.",
-        "...##.....#.",
-        "...#..#...#.",
-        "......#...#.",
-        "......#####.",
+        "............",
+        ".........###",
+        "....#....###",
+        "....##...###",
+        "########.###",
+        "########.###",
+        "....##...###",
+        "....#....###",
+        ".........###",
+        "............",
         "............",
     };
 
@@ -192,82 +203,37 @@ public final class WBIcons {
         "............",
     };
 
-    public static final String[] ITEMS = {
+    /** Into the machine: the arrow passes through the wall of the box, which is the only part of
+     *  the picture that separates it from {@link #EXTRACT}. */
+public static final String[] INSERT = {
         "............",
-        "..########..",
-        "..#......#..",
-        "..#.####.#..",
-        "..#.####.#..",
-        "..#.####.#..",
-        "..#.####.#..",
-        "..#.####.#..",
-        "..#......#..",
-        "..########..",
-        "............",
-        "............",
-    };
-
-    /** Fluids: a droplet. */
-    public static final String[] FLUIDS = {
-        "............",
-        ".....##.....",
-        ".....##.....",
-        "....####....",
-        "...######...",
-        "..########..",
-        "..########..",
-        "..########..",
-        "...######...",
-        "....####....",
-        "............",
+        ".....#######",
+        ".....#.....#",
+        "..#..#.....#",
+        "..##.#.....#",
+        "#####......#",
+        "#####......#",
+        "..##.#.....#",
+        "..#..#.....#",
+        ".....#.....#",
+        ".....#######",
         "............",
     };
 
-    /** Energy: a bolt. */
-    public static final String[] ENERGY = {
+    /** Out of the machine, and the mirror of {@link #INSERT} on purpose: the pair only works if
+     *  the two are the same drawing seen from opposite sides. */
+public static final String[] EXTRACT = {
         "............",
-        ".......###..",
-        "......###...",
-        ".....###....",
-        "....######..",
-        "...######...",
-        "......###...",
-        ".....###....",
-        "....###.....",
-        "...###......",
-        "............",
-        "............",
-    };
-
-    /** Insert: into the bar on the right. */
-    public static final String[] INSERT = {
-        "............",
-        "............",
-        "......##.##.",
-        ".......####.",
-        "..########..",
-        "..########..",
-        "..########..",
-        ".......####.",
-        "......##.##.",
-        "............",
-        "............",
-        "............",
-    };
-
-    /** Extract: out of the bar on the left. */
-    public static final String[] EXTRACT = {
-        "............",
-        "............",
-        ".##.##......",
-        ".####.......",
-        "..########..",
-        "..########..",
-        "..########..",
-        ".####.......",
-        ".##.##......",
-        "............",
-        "............",
+        "#######.....",
+        "#.....#.....",
+        "#.....#..#..",
+        "#.....#..##.",
+        "#......#####",
+        "#......#####",
+        "#.....#..##.",
+        "#.....#..#..",
+        "#.....#.....",
+        "#######.....",
         "............",
     };
 
@@ -352,21 +318,6 @@ public final class WBIcons {
         "............",
     };
 
-    public static final String[] GEAR = {
-        "............",
-        "...#.##.#...",
-        "...######...",
-        "..########..",
-        ".###....###.",
-        ".##......##.",
-        ".##......##.",
-        ".###....###.",
-        "..########..",
-        "...######...",
-        "...#.##.#...",
-        "............",
-    };
-
     /** Filter: a funnel. Also the filter-view button in the LINKS header. */
     public static final String[] FILTER = {
         "............",
@@ -433,17 +384,22 @@ public final class WBIcons {
         "............",
     };
 
-    public static final String[] BACK = {
+    /**
+     * Return to the page you came from. Was a left arrow, which is what {@link #ARROW_LEFT} is:
+     * two controls drawing one picture on one screen. A return arrow says <i>where</i> it goes
+     * back to, which a bare arrow does not.
+     */
+public static final String[] BACK = {
         "............",
-        "............",
-        ".....##.....",
-        "....##......",
-        "...##.......",
-        "..##########",
-        "..##########",
-        "...##.......",
-        "....##......",
-        ".....##.....",
+        "..........##",
+        "..........##",
+        "..........##",
+        "..#.......##",
+        ".##.......##",
+        "###########.",
+        "###########.",
+        ".##.........",
+        "..#.........",
         "............",
         "............",
     };

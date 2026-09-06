@@ -30,6 +30,7 @@ so they are one command and one sheet:
 The models that point at these are generated -- change WBBlockStateProvider and
 run ./gradlew runData. The textures themselves reload with F3+T.
 """
+import io
 import os
 import sys
 
@@ -443,114 +444,194 @@ def assay_edge():
 
 # =================================================================== the item sprites
 #
-# 16x16, met in a crafting grid. Two rules from SPEC.md section 7 do the teaching: Shopsteel reads
-# as a material rather than a tool, and Plates are flat and stacked where Frames are open squares
-# -- the shape separates the two upgrade lines before the names do. Everything gets a dark
-# outline, because an item sprite sits on backgrounds from black to white and an unoutlined one
-# dissolves into half of them.
+# 16x16, met in a crafting grid. Written as pixel grids rather than as polygons, because at this
+# size every pixel is a decision and a polygon call makes four of them for you.
+#
+# EnderIO's own upgrades are the reference Neriya pointed at, and they are not filled squares
+# (`basic_capacitor`, `dark_steel_ingot`, `dark_bimetal_gear`, `coordinate_selector`). Four rules
+# come off them:
+#
+#   1. MARGIN. The object floats; it does not reach the frame. A sprite that touches all four
+#      edges reads as a tile, not as a thing you are holding.
+#   2. THREE QUARTERS, and off the axis. A rhomboid seen from above-left has a top face and a
+#      front face; an axis-aligned rectangle has neither and reads as a button.
+#   3. FIVE TONES AND ONE SPECULAR. Two greys is a silhouette. The white block on EnderIO's
+#      capacitor is a third of what makes it look like metal.
+#   4. ONE PROTRUSION breaking the silhouette -- the capacitor's lead, the probe's antennae. It
+#      is the single cheapest way to say "this is an object", and every sprite below has one.
+#
+# SPEC.md §7 does the teaching on top of that: Shopsteel reads as a material rather than a tool,
+# Plates are flat and stacked, Frames are open squares -- the shape separates the two upgrade
+# lines before the names do.
 
-def edge(d, box, c=DARK):
-    x0, y0, x1, y1 = box
-    d.rectangle([x0, y0, x1, y1], outline=c)
+# The sprite ramp is wider than the block ramp on purpose. A 16x16 in a crafting grid is lit by
+# nothing, so all of its form has to be painted in; a block face gets the world's own light.
+SP_EDGE = (18, 20, 25, 255)
+SP_DARK = (46, 52, 62, 255)
+SP_MID = (78, 87, 101, 255)
+SP_LIT = (120, 132, 150, 255)
+SP_HI = (168, 181, 200, 255)
+SP_SPEC = (216, 226, 240, 255)
+
+KEY = {
+    ".": None,
+    "#": SP_EDGE, "d": SP_DARK, "m": SP_MID, "l": SP_LIT, "h": SP_HI, "w": SP_SPEC,
+    "k": CYAN[0], "c": CYAN[1], "C": CYAN[2],
+    "g": ENERGY, "b": FLUID,
+    "o": BOLT, "O": BOLT_D,
+}
+
+
+def stamp(rows):
+    """A 16x16 from sixteen sixteen-character strings. Asserts the shape, because a grid that is
+    fifteen wide silently shifts every row under it and the mistake is invisible in the source."""
+    assert len(rows) == 16, "a sprite is 16 rows, got %d" % len(rows)
+    im = blank()
+    for y, row in enumerate(rows):
+        assert len(row) == 16, "row %d is %d wide, not 16" % (y, len(row))
+        for x, ch in enumerate(row):
+            c = KEY[ch]
+            if c is not None:
+                im.putpixel((x, y), c)
+    return im
 
 
 def shopsteel():
-    """The mod's own metal. An ingot silhouette, because that is the genre's word for `material`
-    and a shape nobody has to be taught -- in our steel, with one cyan sheen so it is not iron."""
-    im = blank()
-    d = ImageDraw.Draw(im)
-    d.polygon([(4, 5), (12, 5), (14, 11), (2, 11)], fill=STEEL, outline=DARK)
-    d.polygon([(5, 6), (11, 6), (12, 8), (4, 8)], fill=STEEL_L)
-    d.line([(4, 9), (12, 9)], fill=STEEL_D)
-    d.line([(3, 10), (13, 10)], fill=STEEL_D)
-    d.line([(6, 6), (10, 6)], fill=STEEL_H)
-    d.line([(5, 7), (8, 7)], fill=CYAN[0])
-    d.line([(6, 6), (8, 6)], fill=CYAN[1])
-    return im
+    """The mod's own metal, as a three-quarter ingot -- the genre's word for `material`, a shape
+    nobody has to be taught, and the one sprite that must not read as a tool. Ours, not iron: the
+    ramp is the cold steel the blocks are made of and one cyan pixel sits in the specular."""
+    return stamp([
+        "................",
+        "................",
+        "................",
+        ".........####...",
+        "......###hhwh#..",
+        "...###hwwwwhh#..",
+        "..#hwwwwwChhl#..",
+        ".#hllllllllll#..",
+        ".#mllllllllm#...",
+        ".#dmmmmmmmm#....",
+        ".#ddmmmmmm#.....",
+        "..#dddddd#......",
+        "...######.......",
+        "................",
+        "................",
+        "................",
+    ])
 
 
 def housing():
-    """A component, and clearly not a finished thing: an open-topped shell with nothing in it.
-    The hollow is the whole sprite -- a closed box would read as a chest or a machine."""
-    im = blank()
-    d = ImageDraw.Draw(im)
-    d.polygon([(2, 6), (13, 6), (13, 12), (2, 12)], fill=STEEL, outline=DARK)
-    rect(d, 4, 7, 11, 9, STEEL_D)
-    bevel(d, 4, 7, 11, 9, DARK, STEEL_L)
-    for cx in (3, 12):
-        px(d, cx, 8, BOLT)
-        px(d, cx, 11, BOLT_D)
-    # the open rim, seen from slightly above, drawn last so it sits on top of the walls
-    d.polygon([(3, 3), (12, 3), (13, 6), (2, 6)], fill=STEEL_L, outline=DARK)
-    rect(d, 4, 4, 11, 5, GLASS_D)
-    return im
+    """A component, and clearly not a finished thing: an open-topped chassis with nothing in it.
+    The hollow is the whole sprite -- a closed box reads as a chest. The lug on the right is the
+    protrusion, and it is also what says the shell bolts into something else."""
+    return stamp([
+        "................",
+        "................",
+        "...########.....",
+        "..#hhhhhhhh#....",
+        ".#hlmm#####dh#..",
+        ".#hl##ddddd#dh#.",
+        ".#hl#dddddd#dh#.",
+        ".#hl#dddddd#dh#o",
+        ".#hlm######ddh#o",
+        ".#hlllllllllmh#.",
+        ".#lomlllllomlm#.",
+        ".#lmmmmmmmmmmd#.",
+        ".#mddddddddddd#.",
+        "..############..",
+        "................",
+        "................",
+    ])
 
 
 def expansion_plate():
-    """Flat and stacked, which is the whole rule for the bay ladder. Three plates, offset, so the
-    stack is legible at 16 pixels; the top one takes the cyan edge so the eye finds the front."""
-    im = blank()
-    d = ImageDraw.Draw(im)
-    for i, (ox, oy) in enumerate(((3, 10), (2, 7), (1, 4))):
-        rect(d, ox, oy, ox + 11, oy + 2, STEEL if i < 2 else STEEL_L)
-        edge(d, (ox, oy, ox + 11, oy + 2))
-        d.line([(ox + 1, oy + 1), (ox + 10, oy + 1)],
-               fill=CYAN[0] if i == 2 else STEEL_D)
-    return im
+    """Flat and stacked, which is the whole rule for the bay ladder -- but stacked in three
+    quarters, so it reads as three plates lying on each other rather than as three stripes. The
+    cyan edge is on the top one, which is where the eye lands first."""
+    return stamp([
+        "................",
+        "................",
+        "................",
+        ".....#######....",
+        "....#hwwwwwh#...",
+        "....#CCCCCCk#...",
+        "...##ddddddd#...",
+        "...#hhhhhhh##...",
+        "...#lllllld#....",
+        "..##ddddddd#....",
+        "..#hhhhhhh##....",
+        "..#llllllm#.....",
+        "..#dddddd#......",
+        "...######.......",
+        "................",
+        "................",
+    ])
 
 
 def resonator():
-    """Something tuned, reaching across dimensions. A crystal held in a steel yoke, with two ticks
-    of the signal leaving it -- the ticks are what stop it reading as a plain gem."""
-    im = blank()
-    d = ImageDraw.Draw(im)
-    d.polygon([(7, 1), (9, 4), (9, 11), (8, 14), (7, 14), (6, 11), (6, 4)],
-              fill=CYAN[1], outline=DARK)
-    d.line([(7, 3), (7, 12)], fill=CYAN[2])
-    rect(d, 4, 7, 11, 9, STEEL)
-    edge(d, (4, 7, 11, 9))
-    d.line([(5, 8), (10, 8)], fill=STEEL_H)
-    rect(d, 6, 7, 9, 9, CYAN[0])
-    for x, y in ((2, 4), (2, 6), (13, 4), (13, 6)):
-        px(d, x, y, CYAN[0])
-    for x, y in ((3, 5), (12, 5)):
-        px(d, x, y, CYAN[1])
-    return im
+    """Something tuned, reaching across dimensions: a crystal in a collar on a short handle, held
+    at an angle. The handle is what makes it an object rather than a gem, and the two ticks
+    leaving it are what make it a resonator rather than a torch."""
+    return stamp([
+        "................",
+        "........###.....",
+        ".......#CCk#....",
+        "....c..#CCc#....",
+        "...c...#CCc#....",
+        "..c...#kCCc#....",
+        ".....##kCCc#....",
+        "....#hlkkc#.....",
+        "....#hwlh#......",
+        "...#dmlh#..c....",
+        "...#dmh#..c.....",
+        "..#dmh#..c......",
+        "..#dm#..........",
+        "..#h#...........",
+        "..##............",
+        "................",
+    ])
 
 
 def multichannel():
-    """Three things carried down one wire, so three strands and one ferrule. The strands take the
-    colours the screens already spend on the three resources, which is the only reason a player
-    can guess what the item does from the sprite."""
-    im = blank()
-    d = ImageDraw.Draw(im)
-    for x, c in ((3, (214, 222, 234, 255)), (8, FLUID), (13, ENERGY)):
-        d.line([(x, 1), (x, 3)], fill=c)
-        d.line([(x, 3), (8, 7)], fill=c)
-    d.line([(6, 7), (9, 7)], fill=STEEL_H)
-    rect(d, 5, 8, 10, 13, STEEL)
-    edge(d, (5, 8, 10, 13))
-    d.line([(6, 9), (9, 9)], fill=STEEL_H)
-    d.line([(6, 12), (9, 12)], fill=STEEL_D)
-    px(d, 6, 10, BOLT)
-    px(d, 9, 10, BOLT)
-    return im
+    """Three things carried down one wire, so three strands and one plug. The strands take the
+    colours the screens already spend on items, fluid and energy, which is the only reason a
+    player can guess what the item does from the sprite; the keyed nose says it plugs in."""
+    return stamp([
+        "........b.......",
+        "..w.....b....g..",
+        "...w....b...g...",
+        "....w...b..g....",
+        ".....w..b.g.....",
+        "......w.bg......",
+        ".....#######....",
+        ".....#hwwwh#....",
+        ".....#lllll#....",
+        "....##lllll##...",
+        "....#hllllll#...",
+        "....#mlooolm#...",
+        "....#dmmmmmd#...",
+        ".....#dddd#.....",
+        "......####......",
+        "......#dd#......",
+    ])
 
 
 def impeller():
-    """Speed and volume at once, and section 1 sells it as one upgrade -- so one rotor, not a fan
-    beside a pile. The blades are swept rather than straight, which is what makes a still sprite
-    read as turning, and only the tips are lit."""
+    """Speed and volume at once, and §1 sells it as one upgrade -- so one rotor, not a fan beside
+    a pile. The blades are swept rather than straight, which is what makes a still sprite read as
+    turning, and only the tips are lit. Four copies of one quad turned a quarter about the centre,
+    which is the one sprite where the arithmetic is the drawing."""
     im = blank()
     d = ImageDraw.Draw(im)
-    blade = [(7, 6), (8, 1), (12, 5), (9, 7)]
+    blade = [(7, 6), (8, 2), (11, 5), (9, 7)]
     for _ in range(4):
-        d.polygon(blade, fill=STEEL, outline=DARK)
-        d.line([blade[0], blade[1]], fill=STEEL_L)
-        blade = [(15 - y, x) for x, y in blade]     # a quarter turn about the centre
+        d.polygon(blade, fill=SP_MID, outline=SP_EDGE)
+        d.line([blade[0], blade[1]], fill=SP_HI)      # the leading edge catches the light
+        d.line([blade[2], blade[3]], fill=SP_DARK)    # the trailing one does not
+        blade = [(15 - y, x) for x, y in blade]       # a quarter turn about the centre
         px(d, blade[1][0], blade[1][1], CYAN[1])
-    d.ellipse([6, 6, 9, 9], fill=STEEL_L, outline=DARK)
-    px(d, 7, 7, CYAN[0])
+    d.ellipse([6, 6, 9, 9], fill=SP_LIT, outline=SP_EDGE)
+    px(d, 7, 7, SP_SPEC)
     px(d, 8, 8, CYAN[0])
     return im
 
@@ -563,11 +644,10 @@ ITEM_ART = {"shopsteel": shopsteel, "housing": housing,
 
 
 def write_pip(root):
-    """The 2x2 white pixel WorkbayPips tints. Two pixels rather than one because a 1x1 texture
-    has no interior to sample and mipmapping has been known to eat it."""
+    """The 2x2 white pixel WorkbayPips tints. Two pixels rather than one because a 1x1 texture has
+    no interior to sample and mipmapping has been known to eat it."""
     os.makedirs(root, exist_ok=True)
-    im = Image.new("RGBA", (2, 2), (255, 255, 255, 255))
-    im.save(os.path.join(root, "pip.png"))
+    Image.new("RGBA", (2, 2), (255, 255, 255, 255)).save(os.path.join(root, "pip.png"))
     return "pip"
 
 
@@ -609,6 +689,57 @@ def items_preview(path):
     return path
 
 
+# ==================================================================== the screen icons
+#
+# WBIcons holds twenty-seven 12x12 grids and draws them straight into the screen, which stays:
+# being data rather than a PNG is what lets every icon tint to the colour its row needs, and it
+# costs no atlas. What it does NOT get for free is ever being looked at -- fifteen of them had
+# never been seen at size. This reads the Java and renders it, so a candidate is a text edit and a
+# re-run rather than a game restart per guess.
+
+ICON_RE = None
+
+
+def read_icons(java_path):
+    """{name: [twelve strings]} straight out of WBIcons.java. Parsed rather than transcribed: two
+    copies of an icon set drift, and the one in the screen is the one that ships."""
+    import re
+    src = io.open(java_path, encoding="utf-8").read()
+    out = {}
+    for m in re.finditer(r"String\[\]\s+(\w+)\s*=\s*\{(.*?)\};", src, re.S):
+        rows = re.findall(r'"([.#]*)"', m.group(2))
+        if rows:
+            out[m.group(1)] = rows
+    return out
+
+
+def icons_preview(path, java_path, only=None):
+    """Every icon at the size it is drawn, then at eight times, on the screen's own panel grey."""
+    icons = read_icons(java_path)
+    names = [n for n in icons if only is None or n in only]
+    panel = (40, 44, 52, 255)
+    ink = (226, 230, 236, 255)
+    cell, pad, cols = 12 * 8, 10, 7
+    rows = (len(names) + cols - 1) // cols
+    sheet = Image.new("RGBA", (pad + cols * (cell + pad), pad + rows * (cell + 34)),
+                      (24, 26, 30, 255))
+    d = ImageDraw.Draw(sheet)
+    for i, name in enumerate(names):
+        grid = icons[name]
+        small = Image.new("RGBA", (12, 12), panel)
+        for y, row in enumerate(grid):
+            for x, ch in enumerate(row):
+                if ch == "#":
+                    small.putpixel((x, y), ink)
+        x = pad + (i % cols) * (cell + pad)
+        y = pad + (i // cols) * (cell + 34)
+        sheet.paste(small.resize((cell, cell), Image.NEAREST), (x, y))
+        sheet.paste(small, (x + cell + 2 - 14, y + cell + 2))
+        d.text((x, y + cell + 18), name, fill=(200, 200, 200, 255))
+    sheet.save(path)
+    return path
+
+
 if __name__ == "__main__":
     here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     dest = os.path.join(here, "src", "main", "resources", "assets", "workbay",
@@ -619,6 +750,10 @@ if __name__ == "__main__":
         print(preview(sys.argv[sys.argv.index("--sheet") + 1]))
     elif "--items-sheet" in sys.argv:
         print(items_preview(sys.argv[sys.argv.index("--items-sheet") + 1]))
+    elif "--icons-sheet" in sys.argv:
+        java = os.path.join(here, "src", "main", "java", "com", "neryos", "workbay",
+                            "client", "screen", "WBIcons.java")
+        print(icons_preview(sys.argv[sys.argv.index("--icons-sheet") + 1], java))
     elif "items" in sys.argv:
         print("items", write_rest(dest, items_dest))
     else:
