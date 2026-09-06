@@ -1,48 +1,57 @@
 package com.neryos.workbay.client;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.world.level.Level;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import net.minecraft.world.level.chunk.LevelChunk;
 
 /**
  * The client's copy of a machine it was never sent, for as long as its screen is open.
  *
- * <p>Read only by {@link com.neryos.workbay.mixin.LevelMixin}, and only when the real lookup found
- * nothing. Empty whenever no remote screen is open, which is almost always.
+ * <p>A whole chunk rather than a block entity, because that is the question mods actually ask —
+ * see {@link com.neryos.workbay.mixin.ClientChunkCacheMixin}. It holds exactly one block: the
+ * machine's state, so {@code getBlockState} is right, and its block entity, so {@code
+ * getBlockEntity} is right. Everything else in it is air, and nothing renders it.
+ *
+ * <p>One at a time. A player has one screen open.
  */
 public final class RemoteMachines {
-    private static final Map<BlockPos, BlockEntity> SHADOWS = new ConcurrentHashMap<>();
+    private static ChunkPos where;
+    private static LevelChunk chunk;
 
     private RemoteMachines() {}
 
-    public static BlockEntity shadow(BlockPos pos) {
-        return SHADOWS.isEmpty() ? null : SHADOWS.get(pos);
+    /** Null unless this is the chunk a remote screen is open on. Hot: called for every chunk miss. */
+    public static LevelChunk chunkAt(int x, int z) {
+        ChunkPos at = where;
+        return at != null && at.x == x && at.z == z ? chunk : null;
     }
 
     public static void apply(BlockPos pos, BlockState state, CompoundTag data) {
-        Level level = Minecraft.getInstance().level;
-        if (level == null) {
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null || data.isEmpty()) {
+            clear();
             return;
         }
-        if (data.isEmpty()) {
-            SHADOWS.remove(pos);
-            return;
+        LevelChunk copy = new LevelChunk(level, new ChunkPos(pos));
+        copy.setBlockState(pos, state, false);
+        BlockEntity machine = BlockEntity.loadStatic(pos, state, data, level.registryAccess());
+        if (machine != null) {
+            // setBlockEntity refuses a position whose state has no block entity, which is why the
+            // state goes in first rather than the two being set in either order.
+            copy.setBlockEntity(machine);
         }
-        BlockEntity copy = BlockEntity.loadStatic(pos, state, data, level.registryAccess());
-        if (copy != null) {
-            copy.setLevel(level);
-            SHADOWS.put(pos, copy);
-        }
+        chunk = copy;
+        where = new ChunkPos(pos);
     }
 
-    /** On disconnect, or the next screen inherits a machine from the last world. */
+    /** On close, and on disconnect, or the next screen inherits a machine from the last world. */
     public static void clear() {
-        SHADOWS.clear();
+        where = null;
+        chunk = null;
     }
 }

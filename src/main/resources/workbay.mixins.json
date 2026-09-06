@@ -8,6 +8,6 @@
         "PlayerMixin"
     ],
     "client": [
-        "LevelMixin"
+        "ClientChunkCacheMixin"
     ]
 }
