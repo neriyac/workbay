@@ -24,7 +24,7 @@ public class WBBlockStateProvider extends BlockStateProvider {
     protected void registerStatesAndModels() {
         // One model per lit state, all three orientable, all three sharing the top. SPEC.md §7
         // wants three readings distinguishable at distance and in the dark; the textures carry the
-        // first half (tools/make-block-art.py draws them) and WBBlocks' lightLevel the second.
+        // first half (tools/make-art.py draws them) and WBBlocks' lightLevel the second.
         // POWERED is not in the key: §7 says it may share art with idle, and a fourth axis of
         // twenty-four variants would be twenty-four ways to draw the same three pictures.
         java.util.Map<WorkbayState, ModelFile> models = new java.util.EnumMap<>(WorkbayState.class);
@@ -48,9 +48,12 @@ public class WBBlockStateProvider extends BlockStateProvider {
         // A thin plate drawn on the NORTH side, then rotated onto whichever face it is stuck to.
         // Same +180 as above; here getting it wrong put the plate on the far side of the block it
         // was stuck to, inside it, where nobody could see it at all.
+        // The plate's own face samples the MIDDLE 8x8 of connector.png, because Minecraft derives
+        // an element's UVs from its bounds and this one starts at 4,4. tools/make-art.py draws it
+        // there for that reason; a plate drawn across the whole texture shows its bolts on the rim.
         ModelFile plate = models().withExistingParent("connector", mcBlock("block"))
-            .texture("particle", mcBlock("netherite_block"))
-            .texture("plate", mcBlock("netherite_block"))
+            .texture("particle", blockTexture("connector"))
+            .texture("plate", blockTexture("connector"))
             .element().from(4, 4, 0).to(12, 12, 2)
             .allFaces((face, builder) -> builder.texture("#plate")).end();
 
@@ -66,12 +69,28 @@ public class WBBlockStateProvider extends BlockStateProvider {
                 .build();
         });
 
-        // Placeholder art, same as everything else in the mod: a flat cartridge is SPEC.md §2's
-        // description and a cube of amethyst is what says "not a machine you plug into" cheapest.
-        simpleBlock(WBBlocks.ASSAY.get(), models().cubeAll("assay", mcBlock("amethyst_block")));
+        // SPEC.md §7's flat cartridge, not a cube: the point of the Assay's look is that it has no
+        // ports on any face and plainly goes *into* something. The two big faces take the label,
+        // the four rims take blank steel, and AssayBlock#getShape is the same box so the collision
+        // matches what is drawn. Explicit UVs because the auto-derived ones would crop the label to
+        // the element's own bounds and cut the top off the window.
+        ModelFile cartridge = models().withExistingParent("assay", mcBlock("block"))
+            .texture("particle", blockTexture("assay_edge"))
+            .texture("face", blockTexture("assay_face"))
+            .texture("edge", blockTexture("assay_edge"))
+            .element().from(2, 0, 5).to(14, 14, 11)
+            .face(Direction.NORTH).uvs(0, 0, 16, 16).texture("#face").end()
+            .face(Direction.SOUTH).uvs(0, 0, 16, 16).texture("#face").end()
+            .face(Direction.EAST).uvs(0, 0, 16, 16).texture("#edge").end()
+            .face(Direction.WEST).uvs(0, 0, 16, 16).texture("#edge").end()
+            .face(Direction.UP).uvs(0, 0, 16, 16).texture("#edge").end()
+            .face(Direction.DOWN).uvs(0, 0, 16, 16).texture("#edge").end()
+            .end();
+        simpleBlock(WBBlocks.ASSAY.get(), cartridge);
 
-        // A Port is only ever seen by a player standing in a room, which cannot happen in v1.
-        simpleBlock(WBBlocks.PORT.get(), models().cubeAll("port", mcBlock("chiseled_polished_blackstone")));
+        // A Port is only ever seen by a player standing in a room, which cannot happen in v1 — but
+        // six of them seal one hosted machine, so the face has to read as a door from the inside.
+        simpleBlock(WBBlocks.PORT.get(), models().cubeAll("port", blockTexture("port")));
     }
 
     private static ResourceLocation mcBlock(String path) {

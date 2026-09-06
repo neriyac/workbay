@@ -15,6 +15,8 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.VoxelShape;
 
 /**
  * The Assay. The mod's own machine, and the only thing that makes Levy. SPEC.md §3.
@@ -56,9 +58,22 @@ public class AssayBlock extends Block {
         super(properties);
     }
 
+    /**
+     * The cartridge SPEC.md §7 asks for, and the same box the model draws. Without it the Assay
+     * would collide as a full cube — a player inside a bay would be stopped by air beside a thing
+     * that plainly is not there, which reads as a bug in the room rather than as a shape.
+     */
+    private static final VoxelShape SHAPE = Block.box(2, 0, 5, 14, 14, 11);
+
     @Override
     protected MapCodec<? extends Block> codec() {
         return CODEC;
+    }
+
+    @Override
+    protected VoxelShape getShape(BlockState state, net.minecraft.world.level.BlockGetter level,
+        BlockPos pos, CollisionContext context) {
+        return SHAPE;
     }
 
     /**

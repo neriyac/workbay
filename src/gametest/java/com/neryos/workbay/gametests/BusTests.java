@@ -327,6 +327,93 @@ public class BusTests {
         });
     }
 
+    /**
+     * SPEC.md §7, the half the frame cannot carry. The lit state answers "is anything wrong?" for
+     * the whole bay; these answer "which link", which is the question a player asks second. Eight
+     * independent lamps is 65,536 combinations, so it can never be a blockstate — it is a byte
+     * array on the update tag and {@code WorkbayPips} draws it.
+     *
+     * <p>Two links, and the assertion is that they differ. A {@code pipFor} rewritten to return one
+     * constant passes a length check and every "is it OK" check written on its own, and fails this.
+     */
+    @GameTest(timeoutTicks = 900)
+    @TestHolder(description = "The front of a Workbay carries one status pip per link, in the list's order.")
+    public static void theFrontOfTheBlockShowsOneStatusPerLink(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(7, 5, 7));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos chestPos = helper.absolutePos(new BlockPos(0, 1, 4));
+            // Stone: the Connector attaches, so the link exists, and the target has no item
+            // capability on any face. The live case a player hits by pairing onto the wrong block.
+            BlockPos deadPos = helper.absolutePos(new BlockPos(4, 1, 4));
+            level.setBlock(chestPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            level.setBlock(deadPos, Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.CHEST));
+            // Both links share bay 0, and the bay is the source. With nothing in it every link
+            // reports IDLE without ever resolving its target, so both pips would read OK and the
+            // test would be measuring an empty chest rather than a status.
+            BlockPos sourcePos = BayGeometry.machinePos(workbay.record().orElseThrow().bayColumn(), 0);
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            if (!(backshop.getBlockEntity(sourcePos) instanceof Container hosted)) {
+                helper.fail("the bay does not hold a container after racking a chest");
+                return;
+            }
+            hosted.setItem(0, new ItemStack(Items.IRON_INGOT, 64));
+
+            // Speed 5, like theBlockSaysRunningOrStuckWithoutBeingOpened: a link at the default
+            // speed does not come round on the wheel inside a gametest's patience, so its status
+            // stays at the never-run default and both pips read OK for the wrong reason.
+            workbay.addBus(connect(helper, workbay, chestPos.above(), Direction.DOWN, player)
+                .withRate(1).withSpeed(5));
+            BusConfig unreachable = connect(helper, workbay, deadPos.above(), Direction.DOWN, player)
+                .withRate(1).withSpeed(5);
+            workbay.addBus(unreachable);
+
+            helper.startSequence()
+                .thenWaitUntil(() -> {
+                    byte[] pips = workbay.pips();
+                    if (pips.length != 2) {
+                        throw new GameTestAssertException("a Workbay with two links shows "
+                            + pips.length + " pips, not 2");
+                    }
+                    if (pips[0] == pips[1]) {
+                        throw new GameTestAssertException("both pips read "
+                            + WorkbayBlockEntity.Pip.VALUES[pips[0]]
+                            + ", so the front of the block cannot tell a link that works from one "
+                            + "that cannot reach its target");
+                    }
+                })
+                .thenExecute(() -> {
+                    byte[] pips = workbay.pips();
+                    helper.assertValueEqual(WorkbayBlockEntity.Pip.VALUES[pips[0]],
+                        WorkbayBlockEntity.Pip.OK, "the pip of the link pointed at a chest");
+                    helper.assertValueEqual(WorkbayBlockEntity.Pip.VALUES[pips[1]],
+                        WorkbayBlockEntity.Pip.ATTENTION,
+                        "the pip of the link pointed at a block with no port");
+                    // The pips exist to be looked at, and nothing else this block entity holds is
+                    // sent to a client. If they are not on the update tag they are invisible.
+                    byte[] sent = workbay.getUpdateTag(level.registryAccess()).getByteArray("Pips");
+                    helper.assertValueEqual(sent.length, 2, "the pips on the update tag");
+                })
+                .thenExecute(() -> workbay.addBus(unreachable.withEnabled(false)))
+                .thenWaitUntil(() -> {
+                    byte[] pips = workbay.pips();
+                    if (pips.length != 2 || WorkbayBlockEntity.Pip.VALUES[pips[1]]
+                        != WorkbayBlockEntity.Pip.NONE) {
+                        throw new GameTestAssertException("a link the player switched off still "
+                            + "lights its pip, so a bay held on purpose reads as a bay with a fault");
+                    }
+                })
+                .thenExecute(() -> tearDown(helper, workbayPos))
+                .thenSucceed();
+        });
+    }
+
     private static WorkbayBlockEntity setUp(ExtendedGameTestHelper helper, BlockPos workbayPos,
         GameTestPlayer player, ItemStack inTheBay) {
         ServerLevel level = helper.getLevel();

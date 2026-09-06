@@ -35,7 +35,7 @@
     }
   ],
   "textures": {
-    "particle": "minecraft:block/netherite_block",
-    "plate": "minecraft:block/netherite_block"
+    "particle": "workbay:block/connector",
+    "plate": "workbay:block/connector"
   }
 }

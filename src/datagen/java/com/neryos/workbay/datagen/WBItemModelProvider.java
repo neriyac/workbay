@@ -18,13 +18,14 @@ public class WBItemModelProvider extends ItemModelProvider {
     protected void registerModels() {
         blockItem(WBBlocks.WORKBAY.getId().getPath());
 
-        // Placeholder art. SPEC.md §7 wants these to read as materials rather than tools.
-        flatItem(WBItems.SHOPSTEEL.getId().getPath(), "iron_ingot");
-        flatItem(WBItems.HOUSING.getId().getPath(), "copper_ingot");
-        flatItem(WBItems.EXPANSION_PLATE.getId().getPath(), "iron_nugget");
-        flatItem(WBItems.RESONATOR.getId().getPath(), "echo_shard");
-        flatItem(WBItems.MULTICHANNEL.getId().getPath(), "prismarine_crystals");
-        flatItem(WBItems.IMPELLER.getId().getPath(), "breeze_rod");
+        // SPEC.md §7: Shopsteel reads as a material rather than a tool, Plates are flat and
+        // stacked, Frames are open squares. tools/make-art.py draws all six.
+        flatItem(WBItems.SHOPSTEEL.getId().getPath());
+        flatItem(WBItems.HOUSING.getId().getPath());
+        flatItem(WBItems.EXPANSION_PLATE.getId().getPath());
+        flatItem(WBItems.RESONATOR.getId().getPath());
+        flatItem(WBItems.MULTICHANNEL.getId().getPath());
+        flatItem(WBItems.IMPELLER.getId().getPath());
         blockItem(WBBlocks.CONNECTOR.getId().getPath());
         blockItem(WBBlocks.ASSAY.getId().getPath());
     }
@@ -33,8 +34,8 @@ public class WBItemModelProvider extends ItemModelProvider {
         withExistingParent(name, ResourceLocation.fromNamespaceAndPath(Workbay.MOD_ID, "block/" + name));
     }
 
-    private void flatItem(String name, String vanillaTexture) {
+    private void flatItem(String name) {
         withExistingParent(name, ResourceLocation.withDefaultNamespace("item/generated"))
-            .texture("layer0", ResourceLocation.withDefaultNamespace("item/" + vanillaTexture));
+            .texture("layer0", ResourceLocation.fromNamespaceAndPath(Workbay.MOD_ID, "item/" + name));
     }
 }

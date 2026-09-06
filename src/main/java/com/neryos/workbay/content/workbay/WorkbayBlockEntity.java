@@ -38,6 +38,34 @@ import java.util.UUID;
 public class WorkbayBlockEntity extends BlockEntity {
     private static final String ID_KEY = "WorkbayId";
     private static final String ENERGY_KEY = "Energy";
+    private static final String PIPS_KEY = "Pips";
+
+    /**
+     * One pip per link, in the LINKS list's own order, as far as the front of the block has room
+     * for. SPEC.md §7 gives the frame the summary — "is anything wrong?" — and these give the
+     * detail beside it: which of the first eight links is the one to look at.
+     *
+     * <p>Deliberately coarser than {@link BusRunner.BusStatus}. RUNNING and IDLE collapse into one
+     * colour because a link on the wheel alternates between them every few ticks, and a pip that
+     * changes colour on the wheel would be a packet per tick and a blinking block. What is left
+     * changes only when the player's world does.
+     */
+    public enum Pip {
+        /** No link in this slot, or one the player has switched off. Says nothing on purpose. */
+        NONE,
+        /** The link is fine: moving, or with nothing to move. */
+        OK,
+        /** It cannot reach, and the answer is a setting: no port, no face, chunk not loaded. */
+        ATTENTION,
+        /** Something the player built is gone: the Connector, or the target block. */
+        BROKEN;
+
+        /** Cached, and public so a test can name what a byte on the wire means. */
+        public static final Pip[] VALUES = values();
+    }
+
+    /** How many links the front of the block can show. tools/make-art.py draws the sockets. */
+    public static final int PIPS = 8;
 
     @Nullable
     private UUID workbayId;
@@ -57,6 +85,10 @@ public class WorkbayBlockEntity extends BlockEntity {
     /** Ticks of {@link WorkbayState#RUNNING} left to show since the last move. Not saved: a Workbay
      * that just loaded has moved nothing yet, and one tick of {@code idle} is the truth. */
     private int runningHold;
+
+    /** {@link Pip} ordinals, one per link. Derived on the server, sent to the client, never saved
+     * to disk — a Workbay that just loaded recomputes it on its first tick. */
+    private byte[] pips = new byte[0];
 
     /** Four seconds. Long enough to bridge a link on the slowest wheel step, short enough that a
      * base that has actually stopped says so before the player has walked the length of it. */
@@ -251,6 +283,9 @@ public class WorkbayBlockEntity extends BlockEntity {
 
         workbay.settleAssay(server);
         workbay.refreshLitState(server, pos, state);
+        // After the lit state, not before: refreshLitState may have replaced the block, and a
+        // sendBlockUpdated with the stale state would tell the client to draw the old variant.
+        workbay.refreshPips(server, pos, server.getBlockState(pos));
 
         // A Connector broken while this Workbay was unloaded could not tell it, so the runner spots
         // the gap instead and the link is swept here, outside the iteration that found it.
@@ -291,6 +326,44 @@ public class WorkbayBlockEntity extends BlockEntity {
         }
         server.setBlock(pos, state.setValue(WorkbayBlock.STATE, want)
             .setValue(WorkbayBlock.POWERED, powered), net.minecraft.world.level.block.Block.UPDATE_ALL);
+    }
+
+    /** What the front of the block is showing. Client-side after the update tag lands. */
+    public byte[] pips() {
+        return pips;
+    }
+
+    /**
+     * The per-link half of SPEC.md §7's "is something wrong?", and the reason the block entity
+     * syncs anything at all. Recomputed every tick and sent only on a difference: the four
+     * readings are all stable, so a base at rest sends nothing.
+     */
+    private void refreshPips(ServerLevel server, BlockPos pos, BlockState state) {
+        var buses = record().map(WorkbayRecord::buses).orElse(java.util.List.of());
+        byte[] want = new byte[Math.min(buses.size(), PIPS)];
+        for (int i = 0; i < want.length; i++) {
+            want[i] = (byte) pipFor(buses.get(i)).ordinal();
+        }
+        if (java.util.Arrays.equals(pips, want)) {
+            return;
+        }
+        pips = want;
+        setChanged();
+        server.sendBlockUpdated(pos, state, state, net.minecraft.world.level.block.Block.UPDATE_CLIENTS);
+    }
+
+    private Pip pipFor(com.neryos.workbay.bus.BusConfig bus) {
+        if (!bus.enabled()) {
+            return Pip.NONE;
+        }
+        return switch (runner.status(bus.id())) {
+            case RUNNING, IDLE, DISABLED, HELD_BY_REDSTONE -> Pip.OK;
+            case CONNECTOR_GONE, TARGET_MISSING -> Pip.BROKEN;
+            // Listed rather than defaulted, so a new BusStatus is a compile error here as well as
+            // in the two screens. A default would have quietly called it ATTENTION.
+            case TARGET_NOT_LOADED, TARGET_NO_PORT, MACHINE_NO_PORT, MACHINE_NO_FACE
+                -> Pip.ATTENTION;
+        };
     }
 
     /**
@@ -382,6 +455,24 @@ public class WorkbayBlockEntity extends BlockEntity {
         tag.putInt(ENERGY_KEY, energy.getEnergyStored());
     }
 
+    /**
+     * The whole saved tag plus the pips. The pips are the only thing the client needs and the only
+     * thing not on disk; everything else rides along because it is already written and leaving it
+     * out would make the client's copy differ from the server's for no gain.
+     */
+    @Override
+    public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
+        CompoundTag tag = saveCustomOnly(registries);
+        tag.putByteArray(PIPS_KEY, pips);
+        return tag;
+    }
+
+    @Override
+    public net.minecraft.network.protocol.Packet<net.minecraft.network.protocol.game.ClientGamePacketListener>
+        getUpdatePacket() {
+        return net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket.create(this);
+    }
+
     @Override
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
@@ -397,6 +488,9 @@ public class WorkbayBlockEntity extends BlockEntity {
             ? UUIDUtil.CODEC.parse(NbtOps.INSTANCE, tag.get(ID_KEY)).result().orElse(null)
             : null;
         energy.receiveEnergy(tag.getInt(ENERGY_KEY), false);
+        // Absent on disk, present on the update tag. getByteArray answers with an empty array for
+        // a key that is not there, which is exactly "no links to show".
+        pips = tag.getByteArray(PIPS_KEY);
     }
 
     // ------------------------------------------------------- item round trip
