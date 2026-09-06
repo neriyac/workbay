@@ -45,6 +45,21 @@ public class BusRunner {
      */
     public static final int MB_PER_RATE = 100;
 
+    /**
+     * The same argument for energy, and it was missing.
+     *
+     * <p>A rate of 8 meaning eight FE per move is not a slow link, it is a broken one: at the
+     * default speed that is 0.4 FE a tick, and a Mekanism machine wants hundreds. Measured in a
+     * live world -- a Metallurgic Infuser with its infusion tank full and its input slot loaded sat
+     * on "Running" with a hazard-striped energy bar, because the link feeding it was two orders of
+     * magnitude short and nothing in the mod said so. Fluids were given a multiplier for exactly
+     * this reason and energy was not.
+     *
+     * <p>A thousand puts the dial's range (1..64) at 1k..64k FE a move, which is a tenth of a Basic
+     * Energy Cube's buffer at the bottom and several cubes' worth at the top.
+     */
+    public static final int FE_PER_RATE = 1000;
+
     private final BooleanSupplier alive;
     private final Map<UUID, BusEndpoint<IItemHandler>> targetItems = new HashMap<>();
     private final Map<UUID, BusEndpoint<IEnergyStorage>> targetEnergy = new HashMap<>();
@@ -348,7 +363,7 @@ public class BusRunner {
         // This is the same fault as trusting `isItemValid` in Bay View, at the other end of the
         // mod, and it is why SPEC.md §9 says to simulate on bind. Measured: pushing FE through a
         // link into a racked Basic Energy Cube moved zero until this line changed.
-        int budget = Math.max(1, bus.rate());
+        int budget = Math.max(1, bus.rate() * FE_PER_RATE);
         IEnergyStorage to = sink.resolve(store -> store.receiveEnergy(budget, true) > 0, sinkFaces);
         if (to == null) {
             // A destination that is merely full is resting, not unreachable, so the two are still

@@ -41,11 +41,47 @@ public class WorkbayCommands {
                         ResourceLocationArgument.getId(context, "block")))))
             .then(Commands.literal("ports")
                 .executes(context -> ports(context.getSource())))
+            .then(Commands.literal("charge")
+                .executes(context -> charge(context.getSource())))
             .then(Commands.literal("remote")
                 .then(Commands.argument("bay", com.mojang.brigadier.arguments.IntegerArgumentType.integer(0))
                     .executes(context -> remote(context.getSource(),
                         com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(context, "bay")))));
         event.getDispatcher().register(root);
+    }
+
+    /**
+     * Fills the looked-at block's energy buffer. A test fixture, not a feature: the mod's own
+     * gametests charge a source through the capability in one line, and without this there is no
+     * way to do the same by hand -- a creative Energy Cube placed from a bare item arrives empty,
+     * and its own screen offers no way to fill it.
+     */
+    private static int charge(CommandSourceStack source) {
+        if (!(source.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) {
+            source.sendFailure(Component.literal("Run this as a player, looking at a block."));
+            return 0;
+        }
+        net.minecraft.world.phys.HitResult hit = player.pick(8.0, 0.0F, false);
+        if (!(hit instanceof net.minecraft.world.phys.BlockHitResult block)) {
+            source.sendFailure(Component.literal("Look at a block first."));
+            return 0;
+        }
+        net.minecraft.core.BlockPos pos = block.getBlockPos();
+        int total = 0;
+        for (net.minecraft.core.Direction side : net.minecraft.core.Direction.values()) {
+            var store = player.serverLevel().getCapability(
+                net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK, pos, side);
+            if (store != null) {
+                total = store.receiveEnergy(Integer.MAX_VALUE, false);
+                if (total > 0) {
+                    break;
+                }
+            }
+        }
+        int stored = total;
+        source.sendSuccess(() -> Component.literal("Pushed " + stored + " FE into "
+            + player.serverLevel().getBlockState(pos).getBlock().getName().getString()), false);
+        return 1;
     }
 
     /**

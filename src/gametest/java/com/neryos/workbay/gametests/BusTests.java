@@ -132,9 +132,12 @@ public class BusTests {
             workbay.addBus(out.withMode(BusConfig.Mode.INSERT).withRate(4).withSpeed(10)
                 .withFilter(Optional.of(ResourceLocation.parse("mekanism:alloy_infused"))));
 
+            // Deliberately left at the rate and speed a link is born with, because that is what a
+            // player gets: a hand-tuned 64-per-tick link proved the plumbing and hid that the
+            // default was two orders of magnitude short of running anything.
             BusConfig power = connect(helper, workbay, cube.above(), Direction.DOWN, player);
             workbay.addBus(power.withResource(BusConfig.Resource.ENERGY)
-                .withMode(BusConfig.Mode.EXTRACT).withRate(64).withSpeed(1));
+                .withMode(BusConfig.Mode.EXTRACT));
 
             helper.startSequence()
                 .thenWaitUntil(() -> {
