@@ -1,0 +1,13 @@
+{
+    "required": true,
+    "package": "com.neryos.workbay.mixin",
+    "compatibilityLevel": "JAVA_17",
+    "plugin": "com.neryos.workbay.mixin.RemoteScreenGate",
+    "minVersion": "0.8",
+    "mixins": [
+        "PlayerMixin"
+    ],
+    "client": [
+        "LevelMixin"
+    ]
+}

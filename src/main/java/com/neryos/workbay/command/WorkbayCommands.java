@@ -40,8 +40,54 @@ public class WorkbayCommands {
                     .executes(context -> why(context.getSource(),
                         ResourceLocationArgument.getId(context, "block")))))
             .then(Commands.literal("ports")
-                .executes(context -> ports(context.getSource())));
+                .executes(context -> ports(context.getSource())))
+            .then(Commands.literal("remote")
+                .then(Commands.argument("bay", com.mojang.brigadier.arguments.IntegerArgumentType.integer(0))
+                    .executes(context -> remote(context.getSource(),
+                        com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(context, "bay")))));
         event.getDispatcher().register(root);
+    }
+
+    /**
+     * Opens the machine in one bay of the Workbay you are looking at, from where you stand.
+     *
+     * <p>The measuring instrument for the remote screen, and deliberately not a button yet: this is
+     * the path SPEC.md §0 ruled out on three counts, and two of them are now patched. Whether the
+     * third -- a mod whose own buttons resolve against the player's level -- still bites is a
+     * question only a real machine can answer, so the cheapest way to ask it is a command.
+     */
+    private static int remote(CommandSourceStack source, int bay) {
+        if (!(source.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) {
+            source.sendFailure(Component.literal("Run this as a player, looking at a Workbay."));
+            return 0;
+        }
+        if (!com.neryos.workbay.remote.RemoteConfig.remoteScreensEnabled()) {
+            source.sendFailure(Component.literal(
+                "Remote screens are off in config/workbay-mixins.properties."));
+            return 0;
+        }
+        net.minecraft.world.phys.HitResult hit = player.pick(8.0, 0.0F, false);
+        if (!(hit instanceof net.minecraft.world.phys.BlockHitResult block)
+            || !(player.serverLevel().getBlockEntity(block.getBlockPos())
+                instanceof com.neryos.workbay.content.workbay.WorkbayBlockEntity workbay)) {
+            source.sendFailure(Component.literal("Look at a Workbay first."));
+            return 0;
+        }
+        var record = workbay.record();
+        net.minecraft.server.level.ServerLevel backshop =
+            player.server.getLevel(com.neryos.workbay.world.WorkbayDimensions.BACKSHOP);
+        if (record.isEmpty() || backshop == null || bay < 0 || bay >= record.get().bayCapacity()) {
+            source.sendFailure(Component.literal("No such bay."));
+            return 0;
+        }
+        net.minecraft.core.BlockPos machine =
+            com.neryos.workbay.world.BayGeometry.machinePos(record.get().bayColumn(), bay);
+        if (!com.neryos.workbay.remote.RemoteScreens.open(player, backshop, machine)) {
+            source.sendFailure(Component.literal(
+                "Bay " + bay + " has nothing with a screen in it."));
+            return 0;
+        }
+        return 1;
     }
 
     /**

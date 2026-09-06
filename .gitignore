@@ -39,3 +39,6 @@ run/
 repo/
 !**/src/**/repo/
 run-gametest/
+
+# Deliberately untracked: tracking it puts the always-read doc set over budget.
+ROADMAP.md
