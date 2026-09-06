@@ -498,8 +498,8 @@ public class WorkbayMenu extends AbstractContainerMenu {
      * accident. Default zero: the mod never takes a cut the player did not ask for.
      */
     private void setSkim(ServerPlayer serverPlayer, WorkbayRecord record, boolean back) {
-        int step = back ? -AssayBlock.RATE_STEP : AssayBlock.RATE_STEP;
-        int rate = Math.clamp(record.assay().rate() + step, 0, AssayBlock.MAX_RATE);
+        int step = back ? -AssayBlock.rateStep() : AssayBlock.rateStep();
+        int rate = Math.clamp(record.assay().rate() + step, 0, AssayBlock.maxRate());
         if (rate == record.assay().rate()) {
             return;
         }

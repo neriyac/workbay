@@ -382,11 +382,12 @@ public class WorkbayBlockEntity extends BlockEntity {
         WorkbayRecord.Assay assay = record.assay();
         int held = assay.skimmed() + skimmed;
         int levy = assay.levy();
-        if (held >= com.neryos.workbay.content.assay.AssayBlock.ITEMS_PER_LEVY
+        int batch = com.neryos.workbay.content.assay.AssayBlock.itemsPerLevy();
+        if (held >= batch
             && com.neryos.workbay.content.assay.AssayBlock.rackedIn(record)
-            && ++assayTicks >= com.neryos.workbay.content.assay.AssayBlock.CONVERT_TICKS) {
+            && ++assayTicks >= com.neryos.workbay.content.assay.AssayBlock.convertTicks()) {
             assayTicks = 0;
-            held -= com.neryos.workbay.content.assay.AssayBlock.ITEMS_PER_LEVY;
+            held -= batch;
             levy++;
         }
         if (held == assay.skimmed() && levy == assay.levy()) {

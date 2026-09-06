@@ -3,6 +3,8 @@ package com.neryos.workbay.content.assay;
 import com.mojang.serialization.MapCodec;
 import com.neryos.workbay.Workbay;
 import com.neryos.workbay.WorkbayLang;
+import com.neryos.workbay.config.WorkbayConfig;
+import com.neryos.workbay.config.WorkbayConfig;
 import com.neryos.workbay.init.WBBlocks;
 import com.neryos.workbay.world.WorkbayRecord;
 import net.minecraft.core.BlockPos;
@@ -41,18 +43,37 @@ public class AssayBlock extends Block {
      */
     public static final TagKey<Item> LEVY_INPUT = TagKey.create(Registries.ITEM, Workbay.rl("levy_input"));
 
-    /** SPEC.md §3, provisional: 64 tagged items become one Levy, and it takes 200 ticks to do it. */
-    public static final int ITEMS_PER_LEVY = 64;
-    public static final int CONVERT_TICKS = 200;
+    /**
+     * SPEC.md §3: tagged items become one Levy, and it takes a while to do it. <b>Both are config
+     * now</b> (defaults 64 and 200), and so is the dial's range below.
+     *
+     * <p>Methods rather than constants, and that is the point: a constant is inlined by javac into
+     * every class that reads it, so a host's edited value would reach the caller that happened to
+     * recompile and nothing else. It also means the number is read where it is <em>used</em> — the
+     * tick that converts, the click that moves the dial — rather than once at class load, which is
+     * the dead-path shape this mod has now found four times.
+     */
+    public static int itemsPerLevy() {
+        return WorkbayConfig.SERVER.itemsPerLevy.get();
+    }
+
+    public static int convertTicks() {
+        return WorkbayConfig.SERVER.levyConvertTicks.get();
+    }
 
     /**
-     * The dial's range. SPEC.md §3 puts the maximum in the Assay's recipe JSON; there is no custom
-     * recipe type in the mod and inventing one to hold a single integer would be the whole point of
-     * §0's "six knobs, everything else is a tag or a recipe" read backwards. It lives here until
-     * something else needs to be recipe-driven too.
+     * The skim dial's range. SPEC.md §3 parked the maximum here "until something else needs to be
+     * recipe-driven too"; what happened instead is that the whole balance surface moved to config
+     * in one go (see {@link WorkbayConfig} for which half went where and why), so this is a knob
+     * on the server's file rather than a field in a recipe type invented to hold one integer.
      */
-    public static final int MAX_RATE = 25;
-    public static final int RATE_STEP = 5;
+    public static int maxRate() {
+        return WorkbayConfig.SERVER.maxSkimPercent.get();
+    }
+
+    public static int rateStep() {
+        return WorkbayConfig.SERVER.skimStepPercent.get();
+    }
 
     public AssayBlock(Properties properties) {
         super(properties);

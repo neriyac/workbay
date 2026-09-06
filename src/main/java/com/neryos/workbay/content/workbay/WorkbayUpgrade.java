@@ -30,9 +30,17 @@ public enum WorkbayUpgrade implements StringRepresentable {
      */
     EXPANSION_PLATE("expansion_plate",
         () -> WorkbayConfig.SERVER.maxBaysPerWorkbay.get() - WorkbayRecord.BASE_BAYS,
-        2, 6, () -> WBItems.EXPANSION_PLATE.get()),
-    RESONATOR("resonator", () -> 1, 24, 0, () -> WBItems.RESONATOR.get()),
-    MULTICHANNEL("multichannel", () -> 1, 24, 0, () -> WBItems.MULTICHANNEL.get()),
+        () -> WorkbayConfig.SERVER.expansionPlateCost.get(),
+        () -> WorkbayConfig.SERVER.expansionPlateCostStep.get(),
+        () -> WBItems.EXPANSION_PLATE.get()),
+    RESONATOR("resonator", () -> 1,
+        () -> WorkbayConfig.SERVER.resonatorCost.get(),
+        () -> WorkbayConfig.SERVER.resonatorCostStep.get(),
+        () -> WBItems.RESONATOR.get()),
+    MULTICHANNEL("multichannel", () -> 1,
+        () -> WorkbayConfig.SERVER.multichannelCost.get(),
+        () -> WorkbayConfig.SERVER.multichannelCostStep.get(),
+        () -> WBItems.MULTICHANNEL.get()),
     /**
      * Throughput, and the only upgrade that changes a number every link already has.
      *
@@ -41,16 +49,24 @@ public enum WorkbayUpgrade implements StringRepresentable {
      * mod that sells space rather than TPS (SPEC.md §0) has no business beating a cable mod at
      * cables. The rate a link is born with is deliberately modest -- an unupgraded link feeds a
      * furnace and starves a Mekanism machine, which is the shape of the ladder.
+     *
+     * <p>Two is now the <em>default</em> of {@code maxImpellers} rather than a number in this
+     * file: the argument above is ours to make and a pack that has played past it is entitled to
+     * disagree, which is the whole reason the ladder moved to config.
      */
-    IMPELLER("impeller", () -> 2, 12, 12, () -> WBItems.IMPELLER.get());
+    IMPELLER("impeller", () -> WorkbayConfig.SERVER.maxImpellers.get(),
+        () -> WorkbayConfig.SERVER.impellerCost.get(),
+        () -> WorkbayConfig.SERVER.impellerCostStep.get(),
+        () -> WBItems.IMPELLER.get());
 
     private final String name;
     private final IntSupplier max;
-    private final int baseCost;
-    private final int costStep;
+    private final IntSupplier baseCost;
+    private final IntSupplier costStep;
     private final Supplier<Item> item;
 
-    WorkbayUpgrade(String name, IntSupplier max, int baseCost, int costStep, Supplier<Item> item) {
+    WorkbayUpgrade(String name, IntSupplier max, IntSupplier baseCost, IntSupplier costStep,
+        Supplier<Item> item) {
         this.name = name;
         this.max = max;
         this.baseCost = baseCost;
@@ -79,7 +95,7 @@ public enum WorkbayUpgrade implements StringRepresentable {
      * minutes is what teaches them the dial is worth turning; everything after it is the game.
      */
     public int levyCost(int installed) {
-        return baseCost + costStep * Math.max(0, installed);
+        return baseCost.getAsInt() + costStep.getAsInt() * Math.max(0, installed);
     }
 
     public Item item() {

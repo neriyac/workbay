@@ -41,7 +41,7 @@ public record WorkbaySnapshot(
     int skimRate,
     /**
      * Tagged items the skim has taken but not yet turned into Levy, out of
-     * {@code AssayBlock.ITEMS_PER_LEVY}. On the screen because a banked total that only moves once
+     * {@code AssayBlock.itemsPerLevy()}. On the screen because a banked total that only moves once
      * every 200 ticks cannot answer "am I earning right now" - this number can, and it is the only
      * part of the economy that visibly moves while the player watches.
      */

@@ -235,7 +235,9 @@ public record WorkbayRecord(
          * throughput (SPEC.md §0) belongs: fast enough to feed what you racked, never the reason
          * to build here.
          */
-        public static final int IMPELLER_STEP = 2;
+        public static int impellerStep() {
+            return com.neryos.workbay.config.WorkbayConfig.SERVER.impellerStep.get();
+        }
 
         public static final Codec<Upgrades> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.INT.optionalFieldOf("ExpansionPlates", 0).forGetter(Upgrades::expansionPlates),
@@ -276,8 +278,9 @@ public record WorkbayRecord(
          */
         public int impellerFactor() {
             int factor = 1;
+            int step = impellerStep();
             for (int i = 0; i < impellers; i++) {
-                factor *= IMPELLER_STEP;
+                factor *= step;
             }
             return factor;
         }

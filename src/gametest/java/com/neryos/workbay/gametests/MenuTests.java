@@ -59,6 +59,38 @@ public class MenuTests {
      * That is not a bug in this and it is why a machine with no IN slot is drawn as one plain grid:
      * a grouping where everything lands in one group says nothing.
      */
+    /**
+     * Where a short machine's slots sit. Four slots pinned to the left of a nine-wide panel read as
+     * a grid that ran out rather than as the whole machine, so an ungrouped row is centred — and
+     * <b>in whole slots</b>, because these are the coordinates real {@code Slot}s are built at on
+     * both sides, and half a slot of indent misaligns every column with the player's own grid
+     * underneath it. A grid that fills the row is not moved at all.
+     *
+     * <p>Arithmetic rather than a screenshot on purpose: this is the one part of the change the
+     * server also computes, and it is what a click lands on.
+     */
+    @GameTest
+    @TestHolder(description = "A machine with fewer slots than the panel is wide is centred in it.")
+    public static void aShortMachineGridIsCentredInWholeSlots(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            var out = com.neryos.workbay.menu.BayViewMenu.SlotRole.OUT;
+            var four = com.neryos.workbay.menu.BayViewMenu.MachineLayout
+                .of(java.util.List.of(out, out, out, out));
+            helper.assertTrue(!four.grouped(), "four output slots are one plain row, not two groups");
+            int indent = four.xs()[0] - com.neryos.workbay.menu.BayViewMenu.GRID_X;
+            helper.assertValueEqual(indent, 36, "the indent of a four-slot row in a nine-wide panel");
+            helper.assertValueEqual(indent % 18, 0, "the indent, in whole slots");
+
+            var nine = com.neryos.workbay.menu.BayViewMenu.MachineLayout
+                .of(java.util.Collections.nCopies(9, out));
+            helper.assertValueEqual(nine.xs()[0], com.neryos.workbay.menu.BayViewMenu.GRID_X,
+                "the first slot of a row that already fills the panel");
+            helper.succeed();
+        });
+    }
+
     @GameTest
     @TestHolder(description = "Bay View reads a furnace's slots as input, fuel and output.")
     public static void bayViewReadsAFurnacesSlotRoles(final DynamicTest test) {

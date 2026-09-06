@@ -58,8 +58,19 @@ public record BusConfig(
      */
     public static final int[] SPEEDS = { 10, 20, 40, 60, 100, 200 };
 
-    public static final int DEFAULT_RATE = 8;
-    public static final int DEFAULT_SPEED = 20;
+    /**
+     * What a link is born with, both from the server's config so a host can set the pace of a
+     * fresh base. The ceiling on the rate is enforced every move in
+     * {@link BusRunner#rate}, not here: a link saved by an older config would otherwise keep a
+     * number the server no longer allows.
+     */
+    public static int defaultRate() {
+        return com.neryos.workbay.config.WorkbayConfig.SERVER.linkDefaultRate.get();
+    }
+
+    public static int defaultSpeed() {
+        return com.neryos.workbay.config.WorkbayConfig.SERVER.linkDefaultSpeed.get();
+    }
 
     public static final Codec<BusConfig> CODEC = RecordCodecBuilder.create(i -> i.group(
         UUIDUtil.CODEC.fieldOf("Id").forGetter(BusConfig::id),
@@ -105,8 +116,8 @@ public record BusConfig(
     public static BusConfig create(UUID id, int bay, Resource resource, Mode mode,
         GlobalPos connector, GlobalPos target) {
         return new BusConfig(id, "", bay, resource, mode, connector, target,
-            Optional.empty(), Optional.empty(), DEFAULT_RATE, DEFAULT_SPEED, DyeColor.WHITE, false,
-            BusFilter.NONE, false);
+            Optional.empty(), Optional.empty(), defaultRate(), defaultSpeed(), DyeColor.WHITE,
+            false, BusFilter.NONE, false);
     }
 
     /**
@@ -117,8 +128,8 @@ public record BusConfig(
      */
     public static BusConfig createInternal(UUID id, int bay, GlobalPos anchor, GlobalPos target) {
         return new BusConfig(id, "", bay, Resource.ITEM, Mode.INSERT, anchor, target,
-            Optional.empty(), Optional.empty(), DEFAULT_RATE, DEFAULT_SPEED, DyeColor.WHITE, false,
-            BusFilter.NONE, true);
+            Optional.empty(), Optional.empty(), defaultRate(), defaultSpeed(), DyeColor.WHITE,
+            false, BusFilter.NONE, true);
     }
 
     /**

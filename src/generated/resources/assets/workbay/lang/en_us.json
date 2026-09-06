@@ -231,6 +231,8 @@
   "gui.workbay.unbuilt": "Not built yet.",
   "gui.workbay.upgrade.expansion_plate": "Expansion Plate",
   "gui.workbay.upgrade.expansion_plate.desc": "+1 bay",
+  "gui.workbay.upgrade.impeller": "Impeller",
+  "gui.workbay.upgrade.impeller.desc": "Faster links",
   "gui.workbay.upgrade.multichannel": "Multichannel",
   "gui.workbay.upgrade.multichannel.desc": "All 3 in one",
   "gui.workbay.upgrade.resonator": "Resonator",

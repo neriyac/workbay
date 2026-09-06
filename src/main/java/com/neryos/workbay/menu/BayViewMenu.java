@@ -165,8 +165,14 @@ public class BayViewMenu extends AbstractContainerMenu {
             boolean grouped = roles.stream().anyMatch(role -> role != SlotRole.OUT)
                 && roles.contains(SlotRole.OUT);
             if (!grouped) {
+                // Centred while it is one short row, in whole slots so the columns still line up
+                // with the player's own grid underneath. Four slots pinned to the left of a
+                // nine-wide panel read as a grid that ran out rather than as the whole machine --
+                // the same fault the filter panel was fixed for, and it took a screenshot at a
+                // real window size to see it here too. A grid that fills the row is not moved.
+                int indent = count >= COLUMNS ? 0 : (COLUMNS - count) / 2 * SLOT_SIZE;
                 for (int i = 0; i < count; i++) {
-                    xs[i] = GRID_X + (i % COLUMNS) * SLOT_SIZE;
+                    xs[i] = GRID_X + indent + (i % COLUMNS) * SLOT_SIZE;
                     ys[i] = GRID_Y + (i / COLUMNS) * SLOT_SIZE;
                 }
                 return new MachineLayout(xs, ys, Math.max(1, (count + COLUMNS - 1) / COLUMNS)

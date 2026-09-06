@@ -1127,7 +1127,7 @@ public class DuplicationTests {
             put(backshop, sourcePos, 0, new ItemStack(Items.IRON_INGOT, 64));
             put(backshop, sourcePos, 1, new ItemStack(Items.IRON_INGOT, 64));
             connect(helper, workbay, 1, targetPos.above(), player);
-            for (int step = 0; step < AssayBlock.MAX_RATE / AssayBlock.RATE_STEP; step++) {
+            for (int step = 0; step < AssayBlock.maxRate() / AssayBlock.rateStep(); step++) {
                 menu.act(WorkbayAction.SET_SKIM, 0, Optional.empty());
             }
 
@@ -1143,9 +1143,9 @@ public class DuplicationTests {
                     WorkbayRecord now = workbay.record().orElseThrow();
                     int arrived = inContainer(level, targetPos, Items.IRON_INGOT);
                     int held = now.assay().skimmed();
-                    int banked = now.assay().levy() * AssayBlock.ITEMS_PER_LEVY;
+                    int banked = now.assay().levy() * AssayBlock.itemsPerLevy();
                     if (held + banked <= 0) {
-                        helper.fail("the skim was at " + AssayBlock.MAX_RATE + "% and the Assay has "
+                        helper.fail("the skim was at " + AssayBlock.maxRate() + "% and the Assay has "
                             + "nothing to show for it, so nothing was actually taken");
                     }
                     helper.assertValueEqual(arrived + held + banked, 128,
@@ -1226,7 +1226,9 @@ public class DuplicationTests {
             // the direction a player uses to charge something they have put away.
             BusConfig link = connect(helper, workbay, 0, sourcePos.above(), player);
             workbay.addBus(link.withResource(BusConfig.Resource.ENERGY)
-                .withMode(BusConfig.Mode.EXTRACT).withRate(20_000).withSpeed(10));
+                // 64 because that is the shipped linkMaxRate, which BusRunner#rate now clamps
+                // every move against; a link asking for 20,000 got 64 and said nothing.
+                .withMode(BusConfig.Mode.EXTRACT).withRate(64).withSpeed(10));
 
             int before = inEnergy(level, sourcePos) + inEnergy(backshop, machinePos);
             helper.startSequence()

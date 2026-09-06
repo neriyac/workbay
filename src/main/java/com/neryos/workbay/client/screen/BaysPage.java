@@ -488,7 +488,7 @@ class BaysPage extends WorkbayPage {
         Component state = !assay ? WorkbayScreen.gui("levy.no_assay")
             : snap.skimRate() == 0 ? WorkbayScreen.gui("levy.dial_off")
             : WorkbayScreen.gui("levy.batch", snap.skimmed(),
-                com.neryos.workbay.content.assay.AssayBlock.ITEMS_PER_LEVY);
+                com.neryos.workbay.content.assay.AssayBlock.itemsPerLevy());
         text(g, state, x(50), y(136), LEVY_W, earning ? Draw.TEXT_DIM : Draw.TEXT_FAINT);
 
         int w = Math.min(LEVY_W, Math.max(font.width(value), font.width(state.getString()))) + 4;
@@ -865,9 +865,7 @@ class BaysPage extends WorkbayPage {
         // The name, and where it comes from when the player has not given one: the bay an internal
         // link points at, or the target block's own name. Four rows all called "Bay link" was the
         // whole list unreadable at a glance.
-        String label = link.label()
-            .orElseGet(() -> link.targetBlock().map(BaysPage::displayName)
-                .orElse(WorkbayScreen.gui("links.unknown")).getString());
+        String label = labelOf(link);
 
         // And what this row is losing, on this row. A tax the player only finds by opening another
         // screen is the best bug-report generator in the mod (SPEC.md §3). Only item links: fluids
@@ -883,38 +881,41 @@ class BaysPage extends WorkbayPage {
             ? WorkbayScreen.gui("skim.row", snapshot().skimRate()).getString() : "";
         int cutW = taxed ? Math.min(font.width(cut), 22) : 0;
         if (taxed) {
-            textRight(g, cut, px + 132, py + 5, cutW, Draw.AMBER);
-            screen.hit(px + 132 - cutW, py + 3, cutW, 12, () -> { },
+            textRight(g, cut, px + 138, py + 5, cutW, Draw.AMBER);
+            screen.hit(px + 138 - cutW, py + 3, cutW, 12, () -> { },
                 WorkbayScreen.gui("skim.name", snapshot().skimRate()),
                 WorkbayScreen.gui("skim.row.tip"));
         }
-        text(g, label, px + 80, py + 5, taxed ? 48 - cutW : 50,
+        // Fifty-six, not fifty. A target with no name to borrow is drawn as its position, and at
+        // fifty pixels two links a thousand blocks apart both read "1005 10..." -- which is the
+        // fault this column was just fixed for, wearing different words. The six came off the
+        // status column, which needs forty-five for its longest word and had sixty.
+        text(g, label, px + 80, py + 5, taxed ? 54 - cutW : 56,
             on ? Draw.TEXT : Draw.TEXT_FAINT);
 
-        // The right-hand column is the status word whenever there is one, for every kind of link.
-        // An internal row used to print "→ Bay 2" in amber and nothing else, so the one broken link
-        // the header was counting never said what was wrong with it anywhere on screen.
+        // The right-hand column is the status, always, for every kind of link.
+        //
+        // It used to be "the target, unless something is wrong with it", which meant a row whose
+        // name was *derived* from the target printed that target twice: "Connect... Connector",
+        // and an internal row "Bay 2 -> Bay 2". The name column is the one that says what a link
+        // points at (SPEC.md §4 lists them as two columns, not two copies of one); this one says
+        // what the link is doing, which is the thing no other text on the row carries -- the
+        // status swatch is a 10px chip a player scanning thirty rows does not read.
         boolean broken = link.status().isProblem();
+        text(g, statusShort(link.status()).getString(), px + 142, py + 5, 54,
+            statusColour(link.status()));
         if (config.internal()) {
-            // Bay to bay: the target is a bay number, not a block, and — unlike every other link —
-            // there is nothing in the world to re-anchor it to, so this is the one target a player
-            // may actually change from the row.
-            String bayTarget = broken ? statusShort(link.status()).getString()
-                : link.targetBay().map(b -> "→ Bay " + (b + 1))
-                    .orElse(WorkbayScreen.gui("links.unknown").getString());
-            text(g, bayTarget, px + 136, py + 5, 60,
-                broken ? statusColour(link.status()) : Draw.BLUE);
-            screen.hit(px + 136, py + 2, 60, ROW_PITCH - 4,
+            // Bay to bay is the one target a player may change from the row: there is no Connector
+            // in the world to move, so the click has to live somewhere and this column is where
+            // the target used to be drawn. The name column still says which bay.
+            screen.hit(px + 142, py + 2, 54, ROW_PITCH - 4,
                 () -> screen.send(WorkbayAction.LINK_CYCLE_TARGET_BAY, config.id()),
-                broken ? statusName(link.status()) : WorkbayScreen.gui("links.internal.retarget"),
+                statusName(link.status()),
                 broken ? statusHelp(link.status())
                     : WorkbayScreen.gui("links.internal.retarget.tip"));
         } else {
-            Component target = broken
-                ? statusShort(link.status())
-                : link.targetBlock().map(BaysPage::displayName).orElse(WorkbayScreen.gui("links.unknown"));
-            text(g, target, px + 136, py + 5, 60,
-                broken ? statusColour(link.status()) : Draw.TEXT_DIM);
+            screen.hit(px + 142, py + 2, 54, ROW_PITCH - 4, () -> { },
+                statusName(link.status()), statusHelp(link.status()));
         }
 
         faceButton(g, mouseX, mouseY, px + 200, py + 3, config);
@@ -1009,9 +1010,7 @@ class BaysPage extends WorkbayPage {
         // Heading and link name as one string. They used to sit at opposite ends of the row with
         // the mode button between them, and the first screenshot of this panel read the middle and
         // the right as one phrase, "Only these Chest", which is a sentence the mod does not mean.
-        String label = link.label()
-            .orElseGet(() -> link.targetBlock().map(BaysPage::displayName)
-                .orElse(WorkbayScreen.gui("links.unknown")).getString());
+        String label = labelOf(link);
         text(g, "FILTER \u00B7 " + label, x(LIST_X + 4), y(linksY + 5), 100, Draw.TEXT);
 
         int modeX = x(LIST_X + 108);
@@ -1273,9 +1272,7 @@ class BaysPage extends WorkbayPage {
                 }
                 checkbox(g, px, py + 3, ticked);
                 resourceIcon(g, config.resource(), px + 18, py + 3, 0.75F);
-                String label = link.label()
-                    .orElseGet(() -> link.targetBlock().map(BaysPage::displayName)
-                        .orElse(WorkbayScreen.gui("links.unknown")).getString());
+                String label = labelOf(link);
                 text(g, label, px + 34, py + 5, 70, ticked ? Draw.TEXT : Draw.TEXT_DIM);
                 // An internal link's target is a machine in the Backshop, which this client has
                 // never loaded, so asking for the block there gets air. Name the bay instead --
@@ -1283,8 +1280,7 @@ class BaysPage extends WorkbayPage {
                 String from = config.internal()
                     ? link.targetBay().map(b -> "\u2192 Bay " + (b + 1))
                         .orElse(WorkbayScreen.gui("links.unknown").getString())
-                    : link.targetBlock().map(BaysPage::displayName)
-                        .orElse(WorkbayScreen.gui("links.unknown")).getString();
+                    : targetName(link);
                 text(g, from, px + 110, py + 5, 90,
                     config.internal() ? Draw.BLUE : Draw.TEXT_DIM);
                 text(g, "B" + (config.bay() + 1), px + 206, py + 5, 20, Draw.TEXT_FAINT);
@@ -1440,6 +1436,38 @@ class BaysPage extends WorkbayPage {
         }
         return bay.hosted().map(BaysPage::displayName).map(Component::getString)
             .orElseGet(() -> WorkbayScreen.gui("bay.n", selected + 1).getString());
+    }
+
+    /**
+     * What a row calls a link: the name the player gave it, an internal link's bay, or the target.
+     * Never the link's <em>state</em> — the status column beside it is already saying that, and the
+     * name column has fifty pixels it can spend on something the row is not otherwise carrying.
+     */
+    private static String labelOf(WorkbaySnapshot.Link link) {
+        return link.label().orElseGet(() -> targetName(link));
+    }
+
+    /**
+     * The target's own name, or — when this client cannot know it — <b>where</b> it is.
+     *
+     * <p>Four rows read "not load..." in the name column beside four status columns reading
+     * "Unloaded": the same fact twice, and the half that was cut off was the redundant one. A
+     * client is told the block only when the chunk happens to be loaded ({@code targetBlockOf}
+     * never loads one to find out), so this is the ordinary case for anything far from the
+     * player, not an edge one.
+     *
+     * <p><b>X and Z, not all three.</b> The column is fifty pixels and three coordinates are
+     * sixty-two of them, so the third would be an ellipsis; Y is the coordinate that distinguishes
+     * two Connectors least and is the one every tooltip and F3 screen already gives back. Air is
+     * treated the same way as an unloaded chunk on purpose: a target that has been broken is one
+     * the status column calls "Gone", and printing "Air" would be a third word for it.
+     */
+    private static String targetName(WorkbaySnapshot.Link link) {
+        return link.targetBlock()
+            .filter(id -> !id.equals(ResourceLocation.withDefaultNamespace("air")))
+            .map(BaysPage::displayName).map(Component::getString)
+            .orElseGet(() -> link.config().target().pos().getX() + " "
+                + link.config().target().pos().getZ());
     }
 
     private static Component displayName(ResourceLocation id) {

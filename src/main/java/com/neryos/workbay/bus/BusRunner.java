@@ -67,9 +67,15 @@ public class BusRunner {
      * Applied here rather than baked into the stored rate so that fitting one lifts every link at
      * once, and losing one lowers them again -- a number written into each row would have to be
      * migrated, and would disagree with the row the moment a plate moved.
+     *
+     * <p><b>The server's ceiling is applied here too</b>, for the same reason and one more: this
+     * is the only place every move passes through, so lowering {@code linkMaxRate} slows links
+     * that are already running rather than only the next one somebody sets. A ceiling enforced
+     * where a number is stored is one that a saved world walks straight past.
      */
     private static int rate(WorkbayRecord record, BusConfig bus) {
-        return Math.max(1, bus.rate()) * record.upgrades().impellerFactor();
+        int ceiling = com.neryos.workbay.config.WorkbayConfig.SERVER.linkMaxRate.get();
+        return Math.clamp(bus.rate(), 1, ceiling) * record.upgrades().impellerFactor();
     }
 
     private final BooleanSupplier alive;

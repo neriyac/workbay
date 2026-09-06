@@ -121,7 +121,7 @@ public class AssayTests {
     }
 
     private static void setSkim(WorkbayMenu menu, int percent) {
-        for (int step = 0; step < percent / AssayBlock.RATE_STEP; step++) {
+        for (int step = 0; step < percent / AssayBlock.rateStep(); step++) {
             menu.act(WorkbayAction.SET_SKIM, 0, Optional.empty(), Optional.empty(), false);
         }
     }
@@ -178,9 +178,9 @@ public class AssayTests {
                         new ItemStack(Items.IRON_INGOT, 64), 8);
 
                     connect(helper, workbay, 1, targetPos.above(), player);
-                    setSkim(menu, AssayBlock.MAX_RATE);
+                    setSkim(menu, AssayBlock.maxRate());
                     helper.assertValueEqual(workbay.record().orElseThrow().assay().rate(),
-                        AssayBlock.MAX_RATE, "the skim rate after turning the dial up");
+                        AssayBlock.maxRate(), "the skim rate after turning the dial up");
                 })
                 .thenWaitUntil(() -> {
                     int levy = workbay.record().orElseThrow().assay().levy();
@@ -248,7 +248,7 @@ public class AssayTests {
                         workbay.record().orElseThrow().bayColumn(), 0),
                         new ItemStack(Items.IRON_INGOT, 64), 1);
                     connect(helper, workbay, 0, targetPos.above(), player);
-                    setSkim(menu, AssayBlock.MAX_RATE);
+                    setSkim(menu, AssayBlock.maxRate());
                 })
                 .thenWaitUntil(() -> {
                     int arrived = countIn(level, targetPos, Items.IRON_INGOT);
@@ -265,6 +265,61 @@ public class AssayTests {
                 .thenExecute(() -> level.setBlock(workbayPos, Blocks.AIR.defaultBlockState(),
                     Block.UPDATE_ALL))
                 .thenSucceed();
+        });
+    }
+
+    /**
+     * <b>A host's edited number reaches the running game, and is read on the click rather than at
+     * startup.</b> Every balance number in the mod is config now, and the failure mode this guards
+     * is the one this project has already found four times: a value loaded once into a constant,
+     * never consulted again, and a screen that goes on drawing the shipped default.
+     *
+     * <p>Two halves, because they are read in two different places and either could rot alone: the
+     * skim ceiling, which the <em>server</em> clamps against inside {@code SET_SKIM}, and the
+     * upgrade ladder, which the <em>screen</em> prices through {@link WorkbayUpgrade#levyCost}. The
+     * assertions before the change are what stop it going vacuous — a test that only checks the
+     * value after would pass against a mod that always answered 40.
+     *
+     * <p>Restored in a finally: a gametest that leaves the server's config edited hands the next
+     * test in the run a world it never asked for.
+     */
+    @GameTest
+    @TestHolder(description = "A host's edited config value changes what the mod does, live.")
+    public static void aHostsEditedBalanceIsReadOnEveryClickNotAtStartup(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
+            WorkbayMenu menu = menuFor(workbay, player);
+
+            var config = com.neryos.workbay.config.WorkbayConfig.SERVER;
+            int wasCeiling = config.maxSkimPercent.get();
+            int wasCost = config.expansionPlateCost.get();
+            try {
+                // The shipped defaults first, so "it changed" cannot mean "it was always this".
+                helper.assertValueEqual(wasCeiling, 25, "the shipped skim ceiling");
+                helper.assertValueEqual(WorkbayUpgrade.EXPANSION_PLATE.levyCost(0), 2,
+                    "the shipped cost of a first Expansion Plate");
+
+                config.maxSkimPercent.set(40);
+                config.expansionPlateCost.set(7);
+
+                // Clicked far past the old ceiling: 25 would be the answer if SET_SKIM were still
+                // clamping against a number read when the class loaded.
+                setSkim(menu, 100);
+                helper.assertValueEqual(workbay.record().orElseThrow().assay().rate(), 40,
+                    "the skim rate after a host raised the ceiling to 40 and the dial was run up");
+                helper.assertValueEqual(WorkbayUpgrade.EXPANSION_PLATE.levyCost(0), 7,
+                    "the cost of a first Expansion Plate after a host set it to 7");
+            } finally {
+                config.maxSkimPercent.set(wasCeiling);
+                config.expansionPlateCost.set(wasCost);
+                level.setBlock(workbayPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            }
+            helper.succeed();
         });
     }
 
@@ -303,7 +358,7 @@ public class AssayTests {
                         workbay.record().orElseThrow().bayColumn(), 1),
                         new ItemStack(Items.COBBLESTONE, 64), 1);
                     connect(helper, workbay, 1, targetPos.above(), player);
-                    setSkim(menu, AssayBlock.MAX_RATE);
+                    setSkim(menu, AssayBlock.maxRate());
                 })
                 .thenWaitUntil(() -> {
                     int arrived = countIn(level, targetPos, Items.COBBLESTONE);

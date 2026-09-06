@@ -24,7 +24,6 @@ import java.util.Map;
 class FlowPage extends WorkbayPage {
 
     private static final int WIDTH = 320;
-    private static final int HEIGHT = 232;
 
     /**
      * Three node columns and two arrow gaps, filling the panel between 12px margins. A node was 70
@@ -39,8 +38,30 @@ class FlowPage extends WorkbayPage {
     private static final int TOP_Y = 60;
     private static final int PITCH = 22;
 
+    /**
+     * <b>This page is as tall as what it draws.</b> A fixed 232 was wrong at both ends: eight bays
+     * at {@link #PITCH} from {@link #TOP_Y} put the last node's bottom edge at 232 and the legend
+     * was drawn at {@code HEIGHT - 34}, <em>under</em> rows seven and eight; three bays left the
+     * bottom two fifths of the panel empty. Both were invisible until the screen was opened at a
+     * real window size.
+     *
+     * <p>Measured once, in the constructor, because {@link #height()} is read by {@code init()}
+     * before anything renders and the two must agree. {@code init()} re-runs on every page change,
+     * so a bay installed on the upgrades screen is counted the next time this one is opened —
+     * which is the only way the count can move.
+     */
+    private final int rows;
+    private final int legendY;
+
     FlowPage(WorkbayScreen screen) {
         super(screen);
+        WorkbaySnapshot snap = screen.snapshot();
+        long bays = snap.bays().stream().filter(bay -> bay.hosted().isPresent()).count();
+        long out = snap.links().stream()
+            .filter(link -> link.config().mode() == BusConfig.Mode.INSERT).count();
+        long in = snap.links().size() - out;
+        this.rows = (int) Math.max(1, Math.max(bays, Math.max(in, out)));
+        this.legendY = TOP_Y + (rows - 1) * PITCH + NODE_H + 10;
     }
 
     @Override
@@ -50,7 +71,8 @@ class FlowPage extends WorkbayPage {
 
     @Override
     int height() {
-        return HEIGHT;
+        // The legend's two lines, then the same bottom margin the top gets.
+        return legendY + 12 + 9 + 8;
     }
 
     @Override
@@ -100,11 +122,11 @@ class FlowPage extends WorkbayPage {
             }
             if (insert) {
                 int py = y(TOP_Y + outRow++ * PITCH);
-                node(g, x(RIGHT_X), py, name(link.targetBlock().orElse(null)), Draw.WELL);
+                node(g, x(RIGHT_X), py, targetName(link), Draw.WELL);
                 arrow(g, x(MID_X) + NODE_W, rowY + NODE_H / 2, x(RIGHT_X), py + NODE_H / 2, colour);
             } else {
                 int py = y(TOP_Y + inRow++ * PITCH);
-                node(g, x(LEFT_X), py, name(link.targetBlock().orElse(null)), Draw.WELL);
+                node(g, x(LEFT_X), py, targetName(link), Draw.WELL);
                 arrow(g, x(LEFT_X) + NODE_W, py + NODE_H / 2, x(MID_X), rowY + NODE_H / 2, colour);
             }
         }
@@ -157,10 +179,11 @@ class FlowPage extends WorkbayPage {
 
     /** Two columns of key, each entry a 16px rule and a label with the rest of its column. */
     private void legend(GuiGraphics g) {
-        int py = y(HEIGHT - 34);
+        int py = y(legendY);
         int right = MID_X + 56;
         int leftRoom = right - LEFT_X - 20 - 8;
         int rightRoom = WIDTH - right - 20 - 12;
+        // Both legend rows sit below every node, whatever the tallest column came to.
 
         g.fill(x(LEFT_X), py + 3, x(LEFT_X + 16), py + 4, Draw.GREEN);
         text(g, WorkbayScreen.gui("flow.legend.out"), x(LEFT_X + 20), py, leftRoom, Draw.TEXT_DIM);
@@ -185,6 +208,20 @@ class FlowPage extends WorkbayPage {
             case TARGET_MISSING, CONNECTOR_GONE -> Draw.RED;
             case TARGET_NOT_LOADED, TARGET_NO_PORT, MACHINE_NO_PORT, MACHINE_NO_FACE -> Draw.AMBER;
         };
+    }
+
+    /**
+     * A node on an outside column. The same rule the LINKS list follows: name the target, and when
+     * this client cannot know the block — the chunk is not loaded, which is the ordinary case for
+     * anything far from the player — say <b>where</b> it is instead. Five nodes all reading "not
+     * loaded" is a map of one place.
+     */
+    private static Component targetName(WorkbaySnapshot.Link link) {
+        return link.targetBlock()
+            .filter(id -> !id.equals(ResourceLocation.withDefaultNamespace("air")))
+            .map(FlowPage::name)
+            .orElseGet(() -> Component.literal(link.config().target().pos().getX() + " "
+                + link.config().target().pos().getZ()));
     }
 
     private static Component name(ResourceLocation id) {

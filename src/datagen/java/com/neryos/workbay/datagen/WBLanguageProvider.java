@@ -374,6 +374,12 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("upgrade.resonator.desc"), "Any dimension");
         add(WorkbayLang.guiKey("upgrade.multichannel"), "Multichannel");
         add(WorkbayLang.guiKey("upgrade.multichannel.desc"), "All 3 in one");
+        // The Impeller shipped with no name at all: its row on the upgrades screen drew
+        // "gui.workbay.upgr..." and "gui.workbay.u...", in red boxes, because the screen builds
+        // this key from the enum and nobody added the row when the enum grew. Found by opening
+        // the screen at a real window size, which nothing else in this mod can do for you.
+        add(WorkbayLang.guiKey("upgrade.impeller"), "Impeller");
+        add(WorkbayLang.guiKey("upgrade.impeller.desc"), "Faster links");
 
         // The skim. SPEC.md §3: goods going missing must be explained exactly where the loss is
         // noticed, so the rate is on the dial, on the bays screen and on every row it applies to.
