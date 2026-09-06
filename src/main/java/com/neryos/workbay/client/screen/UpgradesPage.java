@@ -181,11 +181,19 @@ class UpgradesPage extends WorkbayPage {
                 canInstall ? Draw.TEXT : Draw.TEXT_FAINT);
             screen.hit(addX, addY, 22, 18,
                 canInstall ? () -> screen.send(WorkbayAction.INSTALL_UPGRADE, index) : () -> { },
-                WorkbayScreen.gui(key),
-                maxed ? WorkbayScreen.gui("upgrades.maxed")
-                    : affordable ? WorkbayScreen.gui("upgrades.add", WorkbayScreen.gui(key))
-                    : WorkbayScreen.gui("upgrades.unaffordable", snap.levy(), cost),
-                maxed ? WorkbayScreen.gui("upgrades.maxed") : WorkbayScreen.gui("upgrades.cost", cost));
+                // One line, not two. A maxed row printed "as many as a Workbay takes" twice, and an
+                // unaffordable one gave the price in both halves -- "you have 1 Levy and this costs
+                // 24" followed by "costs 24 Levy". The price line is what is left to say only when
+                // the player can already afford it.
+                maxed ? new net.minecraft.network.chat.Component[] {
+                    WorkbayScreen.gui(key), WorkbayScreen.gui("upgrades.maxed") }
+                    : affordable ? new net.minecraft.network.chat.Component[] {
+                        WorkbayScreen.gui(key),
+                        WorkbayScreen.gui("upgrades.add", WorkbayScreen.gui(key)),
+                        WorkbayScreen.gui("upgrades.cost", cost) }
+                    : new net.minecraft.network.chat.Component[] {
+                        WorkbayScreen.gui(key),
+                        WorkbayScreen.gui("upgrades.unaffordable", snap.levy(), cost) });
         }
     }
 

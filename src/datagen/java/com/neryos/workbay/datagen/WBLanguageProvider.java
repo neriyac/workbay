@@ -127,6 +127,9 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("button.eject"), "Eject");
         add(WorkbayLang.guiKey("button.eject.tip"), "Take this machine out of its bay, with "
             + "everything inside it.");
+        add(WorkbayLang.guiKey("links.rename.tip"), "Right-click to name this link. A name of "
+            + "your own is what the flow map draws instead of the target's coordinates. Return "
+            + "commits it, Escape leaves it alone, and an empty name goes back to the derived one.");
         add(WorkbayLang.guiKey("button.rename"), "Rename");
         add(WorkbayLang.guiKey("button.rename.tip"), "Give this bay a name of your own. Return "
             + "commits it, Escape leaves it alone, and an empty name goes back to the machine's.");
@@ -343,9 +346,15 @@ public class WBLanguageProvider extends LanguageProvider {
 
         add(WorkbayLang.guiKey("flow.empty"), "No machines racked yet.");
         add(WorkbayLang.guiKey("flow.unknown"), "not loaded");
-        add(WorkbayLang.guiKey("flow.legend.out"), "leaves the Workbay");
-        add(WorkbayLang.guiKey("flow.legend.internal"), "bay to bay, never leaves");
+        add(WorkbayLang.guiKey("flow.legend.out"), "crosses the world");
+        add(WorkbayLang.guiKey("flow.legend.resting"), "resting");
+        add(WorkbayLang.guiKey("flow.legend.broken"), "broken");
+        add(WorkbayLang.guiKey("flow.legend.internal"), "stays inside");
+        add(WorkbayLang.guiKey("flow.canvas"), "Flow map");
+        add(WorkbayLang.guiKey("flow.canvas.tip"), "Every link this Workbay has, as the graph it "
+            + "makes. Drag to move the view, scroll to zoom. Hover a box for its full name.");
         add(WorkbayLang.guiKey("flow.legend.stalled"), "stalled");
+        add(WorkbayLang.guiKey("flow.legend.live"), "moving right now");
 
         // Both of these are drawn in a 96-pixel column, so both are written to fit one. The
         // sentence each is short for is the tooltip beside it.

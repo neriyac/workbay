@@ -50,9 +50,21 @@ public final class BusTransfer {
         if (budget <= 0) {
             return 0;
         }
+        // What the destination has already refused during this call. Measured, not guessed: a link
+        // whose destination is full cost four times one that is delivering, and the reason was here
+        // -- a source barrel holding eight stacks of cobblestone asked a full barrel to take
+        // cobblestone eight times, and every ask walks all of the destination's slots twice inside
+        // insertItemStacked. Skipping a repeat is exact rather than a heuristic: nothing has been
+        // inserted since the refusal (a refusal is what `continue` means here), so the destination
+        // is in the same state and can only answer the same way. Usually holds one entry.
+        java.util.List<ItemStack> refusedTypes = null;
         for (int slot = 0; slot < from.getSlots(); slot++) {
             ItemStack available = from.extractItem(slot, budget, true);
             if (available.isEmpty() || !allowed.test(available)) {
+                continue;
+            }
+            if (refusedTypes != null && refusedTypes.stream()
+                .anyMatch(seen -> ItemStack.isSameItemSameComponents(seen, available))) {
                 continue;
             }
             // A handler may hand back more than a stack in one go; clamp so the foreign insert is
@@ -64,6 +76,10 @@ public final class BusTransfer {
             ItemStack refused = ItemHandlerHelper.insertItemStacked(to, offer.copy(), true);
             int accepted = wanted - refused.getCount();
             if (accepted <= 0) {
+                if (refusedTypes == null) {
+                    refusedTypes = new java.util.ArrayList<>(1);
+                }
+                refusedTypes.add(available);
                 continue;
             }
             if (simulate) {

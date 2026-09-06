@@ -890,8 +890,20 @@ class BaysPage extends WorkbayPage {
         // fifty pixels two links a thousand blocks apart both read "1005 10..." -- which is the
         // fault this column was just fixed for, wearing different words. The six came off the
         // status column, which needs forty-five for its longest word and had sixty.
-        text(g, label, px + 80, py + 5, taxed ? 54 - cutW : 56,
-            on ? Draw.TEXT : Draw.TEXT_FAINT);
+        int nameW = taxed ? 54 - cutW : 56;
+        if (!screen.renaming()) {
+            text(g, label, px + 80, py + 5, nameW, on ? Draw.TEXT : Draw.TEXT_FAINT);
+        }
+        // Right-click the name to give the link one of your own. On the name itself rather than on
+        // a seventh control: the row is already at SPEC.md §4's two-controls ceiling, and a name is
+        // the one thing a player edits by pointing at the thing that is wrong. Left-click is left
+        // alone so the row keeps behaving as it did.
+        screen.hit(px + 80, py + 3, nameW, 12, () -> {
+            if (screen.back()) {
+                screen.beginRename(px + 80, py + 2, nameW, 12, config.name(),
+                    typed -> screen.sendText(WorkbayAction.SET_LINK_NAME, typed, config.id()));
+            }
+        }, Component.literal(label), WorkbayScreen.gui("links.rename.tip"));
 
         // The right-hand column is the status, always, for every kind of link.
         //

@@ -195,6 +195,11 @@ public class WorkbayMenu extends AbstractContainerMenu {
                 link -> link.withFilter(link.filter().withDeny(!link.filter().deny())));
             case SET_BAY_NAME -> editBay(serverPlayer, record,
                 bay -> bay.withName(text.orElse("").strip()));
+            // Capped where every other player-typed name in this mod is capped. The packet already
+            // limits the string to 64 bytes on the wire; this is the second half of that, because
+            // a name is drawn on a fifty-six pixel column and stored in the registry forever.
+            case SET_LINK_NAME -> editLink(linkId,
+                link -> link.withName(text.orElse("").strip()));
             case CYCLE_REDSTONE -> editBay(serverPlayer, record,
                 bay -> bay.withRedstone(bay.redstone().step(back)));
             case SET_SKIM -> setSkim(serverPlayer, record, back);

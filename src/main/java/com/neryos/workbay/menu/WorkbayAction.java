@@ -49,6 +49,13 @@ public enum WorkbayAction {
     LINK_CYCLE_TARGET_FACE,
     /** {@code text} is the selected bay's new name; empty falls back to the machine's own. */
     SET_BAY_NAME,
+    /**
+     * {@code link} names the row and {@code text} its new name; empty falls back to what the row
+     * derives from its target. Appended at the end of this enum on purpose -- {@link
+     * com.neryos.workbay.network.ActionPacket} puts an action on the wire as its ordinal, so
+     * inserting one in the middle would silently rename every action after it.
+     */
+    SET_LINK_NAME,
     /** Cycles the selected bay's {@link com.neryos.workbay.world.RedstoneMode}. */
     CYCLE_REDSTONE,
     /** Steps the Assay's skim rate up by five, or down by five on a right-click. SPEC.md §3. */

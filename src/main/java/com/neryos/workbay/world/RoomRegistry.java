@@ -93,6 +93,11 @@ public class RoomRegistry extends SavedData {
         return byId.values().stream().filter(r -> r.owner().equals(owner)).toList();
     }
 
+    /** Every Workbay this server knows about, in no particular order. */
+    public java.util.Collection<WorkbayRecord> all() {
+        return java.util.List.copyOf(byId.values());
+    }
+
     public int size() {
         return byId.size();
     }

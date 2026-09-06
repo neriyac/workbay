@@ -163,6 +163,17 @@ public final class RemoteScreens {
         if (OPEN.isEmpty() || event.getServer().getTickCount() % REFRESH != 0) {
             return;
         }
+        // Named for the profiler: this is one getUpdateTag per viewer per five ticks, and it is
+        // the only per-tick cost a screen anywhere in the mod adds to the server.
+        event.getServer().getProfiler().push("workbay:remoteScreens");
+        try {
+            resend(event);
+        } finally {
+            event.getServer().getProfiler().pop();
+        }
+    }
+
+    private static void resend(ServerTickEvent.Post event) {
         for (Map.Entry<UUID, Open> entry : OPEN.entrySet()) {
             ServerPlayer player = event.getServer().getPlayerList().getPlayer(entry.getKey());
             if (player == null) {

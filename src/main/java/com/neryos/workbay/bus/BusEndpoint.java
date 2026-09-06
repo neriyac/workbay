@@ -66,6 +66,19 @@ public final class BusEndpoint<T> {
      */
     @Nullable
     public T resolve(java.util.function.Predicate<T> accepts, java.util.Set<Direction> allowed) {
+        // Named for the profiler so `/perf start` can say how much of a link's tick is finding the
+        // handler rather than moving anything through it. try/finally because the body has five
+        // returns and an unbalanced pop corrupts every other reading in the report.
+        level.getProfiler().push("resolve");
+        try {
+            return resolveNow(accepts, allowed);
+        } finally {
+            level.getProfiler().pop();
+        }
+    }
+
+    @Nullable
+    private T resolveNow(java.util.function.Predicate<T> accepts, java.util.Set<Direction> allowed) {
         if (allowed.isEmpty()) {
             bound = null;
             return null;

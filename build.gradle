@@ -131,6 +131,17 @@ neoForge {
             // sets no filter either.
         }
 
+        // The same headless server, with the performance bench switched on. Everything in
+        // PerfBench checks this property and passes without it, so the ordinary gametest run
+        // never pays for a measurement that takes minutes.
+        benchmark {
+            type = "gameTestServer"
+            sourceSet = sourceSets.gametest
+            loadedMods = [mods.getByName(mod_id), mods.getByName("${mod_id}_tests")]
+            gameDirectory = project.file('run-gametest')
+            systemProperty 'workbay.bench', 'true'
+        }
+
         data {
             data()
             sourceSet = sourceSets.datagen
@@ -274,6 +285,14 @@ var cleanGameTestWorld = tasks.register('cleanGameTestWorld', Delete) {
 }
 tasks.named('runGameTestServer') {
     dependsOn cleanGameTestWorld
+}
+
+// The bench appends one file per window, so last run's numbers must not still be in them.
+var cleanBenchmark = tasks.register('cleanBenchmark', Delete) {
+    delete project.file('run-gametest/perf')
+}
+tasks.named('runBenchmark') {
+    dependsOn cleanGameTestWorld, cleanBenchmark
 }
 
 tasks.withType(JavaCompile).configureEach {

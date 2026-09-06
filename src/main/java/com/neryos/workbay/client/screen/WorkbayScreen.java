@@ -418,6 +418,11 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         send(action, 0, Optional.empty(), Optional.of(text));
     }
 
+    /** A name for one row rather than for the screen's own selection. */
+    public void sendText(WorkbayAction action, String text, UUID link) {
+        send(action, 0, Optional.of(link), Optional.of(text));
+    }
+
     private void send(WorkbayAction action, long arg, Optional<UUID> link, Optional<String> text) {
         PacketDistributor.sendToServer(
             new ActionPacket(menu.containerId, action, arg, link, text, back));

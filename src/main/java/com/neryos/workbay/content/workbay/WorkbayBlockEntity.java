@@ -267,11 +267,17 @@ public class WorkbayBlockEntity extends BlockEntity {
         if (!(level instanceof ServerLevel server)) {
             return;
         }
+        // The game's own profiler, so `/perf start` breaks this tick down by name instead of
+        // reporting one lump called workbay:workbay. Free when nothing is recording -- the
+        // inactive filler's push/pop are empty methods, the same bet vanilla makes everywhere.
+        net.minecraft.util.profiling.ProfilerFiller profiler = server.getProfiler();
         // Before the links, and whether or not there are any: a hosted machine has to tick even
         // with nothing pointed at it.
+        profiler.push("mirror");
         workbay.mirror(server);
         // Every tick, not only on a wheel step: a rising edge between two steps still has to be
         // seen, or a fast clock on PULSE would be silently ignored.
+        profiler.popPush("buses");
         workbay.runner.power(server.hasNeighborSignal(pos));
         workbay.record().ifPresent(record -> {
             if (record.buses().isEmpty()) {
@@ -281,18 +287,23 @@ public class WorkbayBlockEntity extends BlockEntity {
                 Math.floorMod(pos.hashCode(), BusRunner.WHEEL));
         });
 
+        profiler.popPush("assay");
         workbay.settleAssay(server);
+        profiler.popPush("state");
         workbay.refreshLitState(server, pos, state);
         // After the lit state, not before: refreshLitState may have replaced the block, and a
         // sendBlockUpdated with the stale state would tell the client to draw the old variant.
+        profiler.popPush("pips");
         workbay.refreshPips(server, pos, server.getBlockState(pos));
 
         // A Connector broken while this Workbay was unloaded could not tell it, so the runner spots
         // the gap instead and the link is swept here, outside the iteration that found it.
+        profiler.popPush("sweep");
         var orphaned = workbay.runner.orphaned();
         if (!orphaned.isEmpty()) {
             orphaned.forEach(workbay::removeBus);
         }
+        profiler.pop();
     }
 
     /**

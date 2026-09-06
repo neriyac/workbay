@@ -485,6 +485,61 @@ public class BusTests {
     }
 
     /**
+     * The guard on {@link com.neryos.workbay.bus.BusTransfer}'s refusal memo. A destination that
+     * says no to one item must still be offered the next one, and the memo is what could break
+     * that: it exists because a full destination was being asked to take the same cobblestone once
+     * per source slot, which measured four times the cost of a link that was delivering.
+     *
+     * <p>A brewing stand is the cheapest destination there is that refuses one thing and takes
+     * another — its ingredient slot accepts nether wart and no face of it accepts cobblestone — so
+     * the source offers the refused item first and the wanted one second, in that order.
+     */
+    @GameTest(timeoutTicks = 900)
+    @TestHolder(description = "A destination that refuses one item is still offered the next one.")
+    public static void aDestinationThatRefusesOneItemIsStillOfferedTheNext(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos targetPos = helper.absolutePos(new BlockPos(4, 1, 4));
+
+            level.setBlock(targetPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            if (level.getBlockEntity(targetPos) instanceof Container source) {
+                // Slot order is the whole test: the refused item has to be asked about first.
+                source.setItem(0, new ItemStack(Blocks.COBBLESTONE, 64));
+                source.setItem(1, new ItemStack(Items.NETHER_WART, 16));
+            }
+            WorkbayBlockEntity workbay =
+                setUp(helper, workbayPos, player, new ItemStack(Blocks.BREWING_STAND));
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+
+            BusConfig link = connect(helper, workbay, targetPos.above(), Direction.DOWN, player);
+            workbay.addBus(link.withMode(BusConfig.Mode.EXTRACT).withRate(8).withSpeed(10));
+
+            helper.startSequence()
+                .thenWaitUntil(() -> {
+                    if (countIn(backshop, machinePos, Items.NETHER_WART) <= 0) {
+                        throw new GameTestAssertException("no nether wart has reached the brewing "
+                            + "stand; the cobblestone in the slot before it is being taken as an "
+                            + "answer for the whole source");
+                    }
+                })
+                .thenExecute(() -> {
+                    // The other half: the refused item must still be refused, or the memo would be
+                    // hiding a destination that quietly accepts anything.
+                    helper.assertValueEqual(countIn(backshop, machinePos, Items.COBBLESTONE), 0,
+                        "cobblestone in a brewing stand");
+                    tearDown(helper, workbayPos);
+                })
+                .thenSucceed();
+        });
+    }
+
+    /**
      * The whole thing in one test. A chest in a bay in the Backshop, a chest on the floor in the
      * overworld, and a bus that moves iron from one to the other across a dimension boundary with
      * nothing physical connecting them.
