@@ -27,8 +27,15 @@ public enum WorkbayAction {
     INSTALL_UPGRADE,
     /** {@code arg} is a whole {@link com.neryos.workbay.world.FaceConfig} in bits. */
     PASTE_BAY,
-    /** {@code arg} is an item's registry id, or -1 to clear. {@code link} names the row. */
+    /**
+     * One entry of a link's filter. {@code link} names the row; {@code arg} packs the slot in its
+     * high 32 bits and, in the low 32, the network id of the item or fluid plus one — zero clears
+     * that slot. Which registry the id belongs to is the link's own resource, the same way
+     * {@link com.neryos.workbay.bus.BusFilter} reads its entries.
+     */
     SET_FILTER,
+    /** Whitelist or blacklist, for the link {@code link} names. */
+    TOGGLE_FILTER_DENY,
     /**
      * Bay to bay, no Connector. {@code arg} is the bay to point at; an arg that names the source
      * bay itself, or a bay this Workbay does not have, falls back to the next other bay.
@@ -52,9 +59,10 @@ public enum WorkbayAction {
      */
     OPEN_BAY_VIEW,
     /**
-     * Puts the player inside the selected bay, next to the real block (SPEC.md §5). The only way to
-     * reach a hosted machine's own screen: opening it remotely disconnects the client, and Bay View
-     * can only ever show what a capability exposes.
+     * Gets the player to the selected machine's own screen (SPEC.md §5). <b>Where they stand if
+     * both sides can</b>, and a trip into the bay if either cannot — {@code arg} is 1 when the
+     * <em>client</em> has the mixins on, because a client without them cannot find a machine in a
+     * chunk it was never sent, and only the client knows its own file.
      */
     ENTER_BAY
 }

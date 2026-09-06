@@ -619,17 +619,39 @@ public class MenuTests {
             BusConfig link = workbay.buses().get(0);
             WorkbayMenu menu = menuFor(workbay, player);
 
+            // Slot 0, and the id plus one, which is how the packet says "clear" with a zero.
             menu.act(WorkbayAction.SET_FILTER,
-                net.minecraft.core.registries.BuiltInRegistries.ITEM.getId(Items.REDSTONE),
+                net.minecraft.core.registries.BuiltInRegistries.ITEM.getId(Items.REDSTONE) + 1L,
                 Optional.of(link.id()));
-            helper.assertValueEqual(workbay.bus(link.id()).orElseThrow().filter(),
-                Optional.of(net.minecraft.core.registries.BuiltInRegistries.ITEM
+            helper.assertValueEqual(workbay.bus(link.id()).orElseThrow().filter().entries(),
+                java.util.List.of(net.minecraft.core.registries.BuiltInRegistries.ITEM
                     .getKey(Items.REDSTONE)),
                 "the filter after dropping redstone on the slot");
 
-            menu.act(WorkbayAction.SET_FILTER, -1, Optional.of(link.id()));
-            helper.assertValueEqual(workbay.bus(link.id()).orElseThrow().filter(), Optional.empty(),
-                "the filter after clicking the slot to clear it");
+            // A second entry goes in beside the first rather than replacing it. That is the whole
+            // difference between this filter and the one item the row used to hold.
+            menu.act(WorkbayAction.SET_FILTER, (1L << 32)
+                | (net.minecraft.core.registries.BuiltInRegistries.ITEM.getId(Items.COAL) + 1L),
+                Optional.of(link.id()));
+            helper.assertValueEqual(workbay.bus(link.id()).orElseThrow().filter().entries().size(),
+                2, "entries after listing a second item");
+
+            menu.act(WorkbayAction.TOGGLE_FILTER_DENY, 0, Optional.of(link.id()));
+            helper.assertTrue(workbay.bus(link.id()).orElseThrow().filter().deny(),
+                "the filter did not turn into a deny list");
+
+            menu.act(WorkbayAction.SET_FILTER, 0, Optional.of(link.id()));
+            helper.assertValueEqual(workbay.bus(link.id()).orElseThrow().filter().entries(),
+                java.util.List.of(net.minecraft.core.registries.BuiltInRegistries.ITEM
+                    .getKey(Items.COAL)),
+                "the filter after clicking slot 0 to clear it");
+
+            // Changing what the link carries drops the list: those ids name items, and an item id
+            // read as a fluid id is a filter that quietly refuses everything.
+            workbay.addBus(workbay.bus(link.id()).orElseThrow()
+                .withResource(BusConfig.Resource.FLUID));
+            helper.assertTrue(workbay.bus(link.id()).orElseThrow().filter().isEmpty(),
+                "the filter survived a change of resource");
             helper.succeed();
         });
     }

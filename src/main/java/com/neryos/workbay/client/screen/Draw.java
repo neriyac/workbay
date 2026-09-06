@@ -188,6 +188,28 @@ public final class Draw {
      * whole one squashed. The tube's inside is sixteen pixels wide for that reason: at fourteen,
      * every tile lost two columns of the sprite.
      */
+    /**
+     * One fluid, filling a square. The filter panel's answer to "which fluid is this slot", where
+     * an item slot would draw an item.
+     *
+     * <p>The still texture, tinted, exactly as {@link #fluidGauge} draws it — a fluid a player
+     * recognises in a gauge and does not recognise in a filter slot is two names for one thing.
+     */
+    public static void fluidIcon(GuiGraphics g, int x, int y, int size,
+        net.minecraft.world.level.material.Fluid fluid) {
+        var stack = new net.neoforged.neoforge.fluids.FluidStack(fluid, 1000);
+        var extensions = net.neoforged.neoforge.client.extensions.common.IClientFluidTypeExtensions
+            .of(fluid);
+        var sprite = Minecraft.getInstance()
+            .getTextureAtlas(net.minecraft.world.inventory.InventoryMenu.BLOCK_ATLAS)
+            .apply(extensions.getStillTexture(stack));
+        int tint = extensions.getTintColor(stack);
+        g.setColor((tint >> 16 & 0xFF) / 255.0F, (tint >> 8 & 0xFF) / 255.0F,
+            (tint & 0xFF) / 255.0F, 1.0F);
+        g.blit(x, y, 0, size, size, sprite);
+        g.setColor(1.0F, 1.0F, 1.0F, 1.0F);
+    }
+
     public static void fluidGauge(GuiGraphics g, int x, int y, int w, int h,
         net.neoforged.neoforge.fluids.FluidStack fluid, int capacity) {
         gaugeTube(g, x, y, w, h);

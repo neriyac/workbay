@@ -152,6 +152,14 @@ class BaysPage extends WorkbayPage {
     private static final java.util.Set<UUID> pickedLinks = new java.util.LinkedHashSet<>();
     private static final java.util.Set<Integer> pickedBays = new java.util.LinkedHashSet<>();
 
+    /**
+     * Which link's filter is open over the list, if any. The picker's idiom, for the picker's
+     * reason: the panel reuses the well, its geometry and its hit testing whole, and a floating
+     * window would cover the row it belongs to. Client-side, like every other view state here.
+     */
+    @org.jetbrains.annotations.Nullable
+    private static UUID editingFilter;
+
     BaysPage(WorkbayScreen screen) {
         super(screen);
         height = Math.clamp(screen.availableHeight() - 8, MIN_HEIGHT, MAX_HEIGHT);
@@ -440,15 +448,21 @@ class BaysPage extends WorkbayPage {
             () -> screen.send(WorkbayAction.OPEN_BAY_VIEW),
             WorkbayScreen.gui("button.bayview"), WorkbayScreen.gui("button.bayview.tip"));
 
-        // Enter bay. The other half of §5, and the half a player asks for first: Bay View can only
-        // show what a capability exposes, and a machine's recipe mode, side config and upgrade
-        // slots are exposed by nothing. Standing next to the block is the only way to its own
-        // screen - opening that screen remotely disconnects the client - so this opens that screen
-        // by way of the bay. Disabled on an empty bay: nobody stays in the Backshop without a
-        // screen open, and an empty bay has none to open.
+        // The machine's own screen. The other half of §5, and the half a player asks for first:
+        // Bay View can only show what a capability exposes, and a machine's recipe mode, side
+        // config and upgrade slots are exposed by nothing.
+        //
+        // Two ways there, and the button says which one this click gives. Where the player stands
+        // when both sides have the mixins on (SPEC.md §0); a trip into the bay when either does
+        // not - still here, and still the answer for a host who wants nothing patched. Both sides,
+        // because the client is the half that has to find a machine in a chunk it was never sent,
+        // and it is the only one that knows its own file.
+        boolean here = snapshot().remoteScreens()
+            && com.neryos.workbay.remote.RemoteConfig.remoteScreensEnabled();
         actionButton(g, mouseX, mouseY, x(194), WBIcons.ENTER, !empty, false,
-            () -> screen.send(WorkbayAction.ENTER_BAY),
-            WorkbayScreen.gui("button.enter"), WorkbayScreen.gui("button.enter.tip"));
+            () -> screen.send(WorkbayAction.ENTER_BAY, here ? 1 : 0),
+            WorkbayScreen.gui(here ? "button.open" : "button.enter"),
+            WorkbayScreen.gui(here ? "button.open.tip" : "button.enter.tip"));
     }
 
     /**
@@ -650,6 +664,18 @@ class BaysPage extends WorkbayPage {
         int pairX = x(LIST_X + LIST_W - 46);
         int addX = pairX - 40;
 
+        if (editingFilter != null) {
+            // The link may have been removed, or handed to another bay, while its filter was open.
+            // Falling back to the list beats drawing a panel for a row that is not there.
+            Optional<WorkbaySnapshot.Link> editing = snap.links().stream()
+                .filter(l -> l.config().id().equals(editingFilter)).findFirst();
+            if (editing.isPresent()) {
+                filterPanel(g, mouseX, mouseY, editing.get());
+                return;
+            }
+            editingFilter = null;
+        }
+
         if (adding) {
             text(g, WorkbayScreen.gui("links.adding", snap.selectedBay() + 1),
                 x(LIST_X + 4), y(linksY + 4), 48, Draw.TEXT);
@@ -735,6 +761,7 @@ class BaysPage extends WorkbayPage {
         text(g, "Add", addX + 15, y(linksY + 5), 18, Draw.TEXT);
         screen.hit(addX, y(linksY), 36, 18, () -> {
             adding = true;
+            editingFilter = null;
             scroll = 0;
         }, WorkbayScreen.gui("links.add"), WorkbayScreen.gui("links.add.tip"));
 
@@ -924,49 +951,176 @@ class BaysPage extends WorkbayPage {
     }
 
     /**
-     * The row's ghost slot. One item, dragged in from JEI or EMI or picked off the cursor, and
-     * clicked to clear. SPEC.md §5's filter <em>items</em> hold nine to thirty-six entries and know
-     * about components; this is the one-item form the row has always drawn a slot for.
+     * The row's filter, in sixteen pixels: what the first entry is, and which way round the list
+     * is read.
      *
-     * <p>The item is washed white at pose Z+300 so it never reads as a real stack sitting in a
-     * slot, which is the anti-dupe convention §5 requires of every ghost slot in the mod.
+     * <p>Clicking it <b>opens the filter</b> rather than setting one. It used to be a one-item
+     * ghost slot that set on click and cleared on the next -- two meanings for one control, and it
+     * could only ever say one thing. Nine entries and a deny mode need somewhere to live, and this
+     * is the row's way in to it.
+     *
+     * <p>Energy links draw it unlit and refuse the click. A filter matches an identity and energy
+     * has none, so a lit slot that silently ignored everything dropped on it would be the dead
+     * control the bay grid's unlit slots exist to avoid (SPEC.md §5).
      */
     private void filterSlot(GuiGraphics g, int px, int py, BusConfig config) {
         Draw.slot(g, px, py, 16, 16);
-        Optional<ResourceLocation> filter = config.filter();
+        if (config.resource() == BusConfig.Resource.ENERGY) {
+            WBIcons.draw(g, WBIcons.FILTER, px + 2, py + 2, Draw.EDGE_DARK);
+            screen.hit(px, py, 16, 16, () -> { },
+                WorkbayScreen.gui("filter.energy"), WorkbayScreen.gui("filter.energy.tip"));
+            return;
+        }
+        com.neryos.workbay.bus.BusFilter filter = config.filter();
         if (filter.isEmpty()) {
             WBIcons.draw(g, WBIcons.FILTER, px + 2, py + 2, Draw.TEXT_FAINT);
-            screen.hit(px, py, 16, 16, () -> setFilterFromCursor(config),
-                WorkbayScreen.gui("links.filterslot"), WorkbayScreen.gui("links.filterslot.tip"));
         } else {
-            ItemStack ghost = new ItemStack(BuiltInRegistries.ITEM.get(filter.get()));
-            g.renderItem(ghost, px, py);
-            g.pose().pushPose();
-            g.pose().translate(0, 0, 300);
-            g.fill(px, py, px + 16, py + 16, 0x60FFFFFF);
-            g.pose().popPose();
-            screen.hit(px, py, 16, 16,
-                () -> screen.send(WorkbayAction.SET_FILTER, -1L, config.id()),
-                WorkbayScreen.gui("links.filterslot.set", ghost.getHoverName()),
-                WorkbayScreen.gui("links.filterslot.clear"));
+            entryIcon(g, config.resource(), filter.entries().get(0), px, py);
+            // Which way round the list is read, on the row. A blacklist drawn exactly like a
+            // whitelist is the one way a filter can be understood backwards, and the row is where
+            // it is read. Not amber-as-warning but amber-as-the-other-mode, the same pair the
+            // direction arrow beside it already uses for insert and extract.
+            g.fill(px, py + 16, px + 16, py + 17, filter.deny() ? Draw.AMBER : Draw.BLUE);
         }
-        screen.ghost(px, py, 16, 16, dropped -> setFilter(config, dropped));
+        screen.hit(px, py, 16, 16, () -> editingFilter = config.id(),
+            filter.isEmpty()
+                ? WorkbayScreen.gui("filter.none")
+                : WorkbayScreen.gui(filter.deny() ? "filter.some.deny" : "filter.some.allow",
+                    filter.entries().size()),
+            WorkbayScreen.gui("filter.tip"));
     }
 
-    /** Clicking an empty slot while holding something is the no-recipe-viewer way in. */
-    private void setFilterFromCursor(BusConfig config) {
+    /**
+     * The filter itself, over the list. Nine ghost slots, one mode button, one way back.
+     *
+     * <p>Nine because that is one row of the well, and because a link is one source and one target
+     * (SPEC.md §0): a list long enough to need a second row is a routing table, which is XNet's
+     * mod and not this one.
+     */
+    private void filterPanel(GuiGraphics g, int mouseX, int mouseY, WorkbaySnapshot.Link link) {
+        BusConfig config = link.config();
+        com.neryos.workbay.bus.BusFilter filter = config.filter();
+
+        text(g, "FILTER", x(LIST_X + 4), y(linksY + 4), 44, Draw.TEXT);
+
+        // Which link this is. The panel covers the row it came from, so without the name the
+        // player is configuring one of thirty rows with nothing on screen saying which.
+        String label = link.label()
+            .orElseGet(() -> link.targetBlock().map(BaysPage::displayName)
+                .orElse(WorkbayScreen.gui("links.unknown")).getString());
+        text(g, label, x(LIST_X + 166), y(linksY + 5), 52, Draw.TEXT_DIM);
+
+        int modeX = x(LIST_X + 52);
+        boolean modeHover = screen.hovered(modeX, y(linksY), 110, 18, mouseX, mouseY);
+        Draw.button(g, modeX, y(linksY), 110, 18, modeHover, false);
+        textCentre(g, WorkbayScreen.gui(filter.deny() ? "filter.deny" : "filter.allow").getString(),
+            modeX + 55, y(linksY + 5), 106, filter.deny() ? Draw.AMBER : Draw.BLUE);
+        screen.hit(modeX, y(linksY), 110, 18,
+            () -> screen.send(WorkbayAction.TOGGLE_FILTER_DENY, config.id()),
+            WorkbayScreen.gui(filter.deny() ? "filter.deny" : "filter.allow"),
+            WorkbayScreen.gui("filter.mode.tip"));
+
+        int backX = x(LIST_X + LIST_W - 46);
+        boolean backHover = screen.hovered(backX, y(linksY), 46, 18, mouseX, mouseY);
+        Draw.button(g, backX, y(linksY), 46, 18, backHover, false);
+        textCentre(g, "Back", backX + 23, y(linksY + 5), 42, Draw.TEXT);
+        screen.hit(backX, y(linksY), 46, 18, () -> editingFilter = null,
+            WorkbayScreen.gui("filter.close"), WorkbayScreen.gui("filter.close.tip"));
+
+        Draw.well(g, x(LIST_X), y(rowY - 4), LIST_W, rows * ROW_PITCH + 8);
+        for (int slot = 0; slot < com.neryos.workbay.bus.BusFilter.MAX; slot++) {
+            filterEntry(g, x(LIST_X + 8 + slot * 20), y(rowY + 2), config, slot);
+        }
+        // The one sentence a filter needs at rest, and only where there is room for it: an empty
+        // filter carrying everything is the opposite of what an empty box usually means.
+        if (rows >= 3) {
+            text(g, WorkbayScreen.gui("filter.empty"), x(LIST_X + 8), y(rowY + 26), LIST_W - 20,
+                Draw.TEXT_FAINT);
+        }
+    }
+
+    /** One ghost slot: click to add what you are holding, click again to take it back out. */
+    private void filterEntry(GuiGraphics g, int px, int py, BusConfig config, int slot) {
+        Draw.slot(g, px, py, 18, 18);
+        Optional<ResourceLocation> entry = config.filter().at(slot);
+        if (entry.isPresent()) {
+            entryIcon(g, config.resource(), entry.get(), px + 1, py + 1);
+            screen.hit(px, py, 18, 18,
+                () -> screen.send(WorkbayAction.SET_FILTER, (long) slot << 32, config.id()),
+                entryName(config.resource(), entry.get()), WorkbayScreen.gui("filter.entry.tip"));
+        } else {
+            screen.hit(px, py, 18, 18, () -> setFilterFromHand(config, slot),
+                WorkbayScreen.gui("filter.slot"),
+                WorkbayScreen.gui(config.resource() == BusConfig.Resource.FLUID
+                    ? "filter.slot.tip.fluid" : "filter.slot.tip.item"));
+        }
+        screen.ghost(px + 1, py + 1, 16, 16, dropped -> setFilterEntry(config, slot, dropped));
+    }
+
+    /**
+     * An entry drawn where an item would be. Washed white at pose Z+300 so it never reads as a real
+     * stack sitting in a slot, which is the anti-dupe convention SPEC.md §5 requires of every ghost
+     * slot in the mod.
+     */
+    private static void entryIcon(GuiGraphics g, BusConfig.Resource resource, ResourceLocation id,
+        int px, int py) {
+        if (resource == BusConfig.Resource.FLUID) {
+            Draw.fluidIcon(g, px, py, 16, BuiltInRegistries.FLUID.get(id));
+        } else {
+            g.renderItem(new ItemStack(BuiltInRegistries.ITEM.get(id)), px, py);
+        }
+        g.pose().pushPose();
+        g.pose().translate(0, 0, 300);
+        g.fill(px, py, px + 16, py + 16, 0x60FFFFFF);
+        g.pose().popPose();
+    }
+
+    private static Component entryName(BusConfig.Resource resource, ResourceLocation id) {
+        return resource == BusConfig.Resource.FLUID
+            ? new net.neoforged.neoforge.fluids.FluidStack(BuiltInRegistries.FLUID.get(id), 1)
+                .getHoverName()
+            : new ItemStack(BuiltInRegistries.ITEM.get(id)).getHoverName();
+    }
+
+    /**
+     * Clicking an empty slot with something in hand is the way in for a player with no recipe
+     * viewer installed. This menu has no slots of its own (SPEC.md §4), so there is no cursor stack
+     * to take it from -- the main hand is what a player is holding here.
+     */
+    private void setFilterFromHand(BusConfig config, int slot) {
         var minecraft = net.minecraft.client.Minecraft.getInstance();
         if (minecraft.player != null) {
-            setFilter(config, minecraft.player.getMainHandItem());
+            setFilterEntry(config, slot, minecraft.player.getMainHandItem());
         }
     }
 
-    private void setFilter(BusConfig config, ItemStack stack) {
+    /**
+     * What a dropped item names, in the registry this link filters on.
+     *
+     * <p>A fluid link takes <b>the fluid inside whatever was dropped</b> -- a bucket, a tank, a
+     * mod's own cell -- read through the item fluid capability. That is EnderIO's
+     * {@code FluidFilterSlot#getResourceFrom}, and it is the only way to name a fluid without
+     * typing one: a fluid has no item of its own to drag.
+     */
+    private void setFilterEntry(BusConfig config, int slot, ItemStack stack) {
         if (stack.isEmpty()) {
             return;
         }
-        screen.send(WorkbayAction.SET_FILTER,
-            BuiltInRegistries.ITEM.getId(stack.getItem()), config.id());
+        long plusOne = switch (config.resource()) {
+            case ITEM -> BuiltInRegistries.ITEM.getId(stack.getItem()) + 1L;
+            case FLUID -> {
+                var handler = stack.getCapability(
+                    net.neoforged.neoforge.capabilities.Capabilities.FluidHandler.ITEM);
+                var held = handler == null || handler.getTanks() == 0
+                    ? net.neoforged.neoforge.fluids.FluidStack.EMPTY : handler.getFluidInTank(0);
+                yield held.isEmpty() ? 0L : BuiltInRegistries.FLUID.getId(held.getFluid()) + 1L;
+            }
+            case ENERGY -> 0L;
+        };
+        if (plusOne <= 0) {
+            return;
+        }
+        screen.send(WorkbayAction.SET_FILTER, ((long) slot << 32) | plusOne, config.id());
     }
 
     /** One of the picker's two tabs, drawn as a button that stays pressed while it is the one shown. */

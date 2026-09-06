@@ -266,11 +266,30 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("links.bay"), "Bay %s");
         add(WorkbayLang.guiKey("links.bay.tip"), "The bay this link moves to and from. Every link "
             + "belongs to exactly one.");
-        add(WorkbayLang.guiKey("links.filterslot"), "Filter");
-        add(WorkbayLang.guiKey("links.filterslot.tip"), "Drag an item here from the recipe list, "
-            + "or click while holding one, and this link moves only that item.");
-        add(WorkbayLang.guiKey("links.filterslot.set"), "Filter: %s");
-        add(WorkbayLang.guiKey("links.filterslot.clear"), "Click to clear it.");
+        // The filter. SPEC.md §5: it matches on what a thing is and nothing else, so every string
+        // here names an item or a fluid and none of them mentions a mode, a tag or a count.
+        add(WorkbayLang.guiKey("filter.none"), "No filter");
+        add(WorkbayLang.guiKey("filter.some.allow"), "Carries only %s things");
+        add(WorkbayLang.guiKey("filter.some.deny"), "Carries everything but %s things");
+        add(WorkbayLang.guiKey("filter.tip"), "Click to choose what this link may carry. With "
+            + "nothing listed it carries everything.");
+        add(WorkbayLang.guiKey("filter.energy"), "Energy has nothing to filter");
+        add(WorkbayLang.guiKey("filter.energy.tip"), "A filter names an item or a fluid. Energy is "
+            + "a number, so there is nothing here to name.");
+        add(WorkbayLang.guiKey("filter.allow"), "Only these");
+        add(WorkbayLang.guiKey("filter.deny"), "All but these");
+        add(WorkbayLang.guiKey("filter.mode.tip"), "Click to swap between carrying only what is "
+            + "listed and carrying everything except it.");
+        add(WorkbayLang.guiKey("filter.slot"), "Empty");
+        add(WorkbayLang.guiKey("filter.slot.tip.item"), "Click while holding an item to list it, "
+            + "or drag one here from the recipe list.");
+        add(WorkbayLang.guiKey("filter.slot.tip.fluid"), "Click while holding a bucket or tank to "
+            + "list the fluid inside it, or drag one here from the recipe list.");
+        add(WorkbayLang.guiKey("filter.entry.tip"), "Click to take this off the list.");
+        add(WorkbayLang.guiKey("filter.empty"), "Nothing listed. This link carries everything.");
+        add(WorkbayLang.guiKey("filter.close"), "Back to the links");
+        add(WorkbayLang.guiKey("filter.close.tip"), "The filter is saved as you change it. There "
+            + "is nothing to confirm.");
         add(WorkbayLang.guiKey("links.unknown"), "not loaded");
 
         // The row's column is 60 pixels. The long names above are tooltip titles and do not fit
@@ -399,10 +418,14 @@ public class WBLanguageProvider extends LanguageProvider {
             + "A machine with no slots, tanks or power is reached by a link or not at all.");
         // Entering the bay. SPEC.md §5: the machine's own screen is reachable only by standing in
         // front of it, so this is the one control that answers "how do I upgrade the thing".
+        add(WorkbayLang.guiKey("button.open"), "Open its screen");
+        add(WorkbayLang.guiKey("button.open.tip"), "Opens the machine's own screen - recipe modes, "
+            + "side configuration and upgrade slots, drawn by the mod that made it - without "
+            + "leaving where you stand.");
         add(WorkbayLang.guiKey("button.enter"), "Enter bay");
-        add(WorkbayLang.guiKey("button.enter.tip"), "Opens the machine's own screen - recipe "
-            + "modes, side configuration and upgrade slots, drawn by the mod that made it. "
-            + "Close it and you are back here.");
+        add(WorkbayLang.guiKey("button.enter.tip"), "Takes you into the bay, next to the machine, "
+            + "and opens its own screen - recipe modes, side configuration and upgrade slots, "
+            + "drawn by the mod that made it. Close it and you are back here.");
         add(WorkbayLang.messageKey("bay_enter_failed"), "That bay cannot be entered.");
         add(WorkbayLang.messageKey("bay_no_screen"), "%s has no screen of its own.");
         add(WorkbayLang.messageKey("bay_load_timeout"),

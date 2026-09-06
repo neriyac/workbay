@@ -189,7 +189,10 @@ public class WorkbayMenu extends AbstractContainerMenu {
             case LINK_REMOVE -> linkId.ifPresent(workbay::removeBus);
             case LINK_CYCLE_TARGET_FACE -> editLink(linkId,
                 link -> link.withTargetFace(BusConfig.stepFace(link.targetFace(), back)));
-            case SET_FILTER -> editLink(linkId, link -> link.withFilter(filterItem(arg)));
+            case SET_FILTER -> editLink(linkId, link -> link.withFilter(
+                link.filter().with((int) (arg >>> 32), filterEntry(link, (int) arg))));
+            case TOGGLE_FILTER_DENY -> editLink(linkId,
+                link -> link.withFilter(link.filter().withDeny(!link.filter().deny())));
             case SET_BAY_NAME -> editBay(serverPlayer, record,
                 bay -> bay.withName(text.orElse("").strip()));
             case CYCLE_REDSTONE -> editBay(serverPlayer, record,
@@ -202,6 +205,15 @@ public class WorkbayMenu extends AbstractContainerMenu {
                 }
             }
             case ENTER_BAY -> {
+                // The screen where the player stands first, and the trip only if that cannot
+                // happen: a host with the mixins off (SPEC.md §0), a client with them off (arg),
+                // or a machine that opens no screen at all. Entering is the fallback, not the
+                // way in, and it is deliberately still here — it is the only path that needs
+                // nothing patched.
+                if (arg == 1 && com.neryos.workbay.remote.RemoteConfig.remoteScreensEnabled()
+                    && openRemote(serverPlayer, record)) {
+                    return;
+                }
                 // Closing first: the player is about to be somewhere this menu's stillValid would
                 // refuse anyway, and a screen left open over a teleport is how you get a ghost.
                 serverPlayer.closeContainer();
@@ -238,17 +250,46 @@ public class WorkbayMenu extends AbstractContainerMenu {
     }
 
     /**
-     * An item's registry id, the way every vanilla packet carries one, or nothing for -1 and for an
-     * id this server does not know. Never trusted into an array index.
+     * A registry id, the way every vanilla packet carries one: the network id plus one, so zero can
+     * mean "clear this slot". Which registry is the link's own resource — an item link filters
+     * items, a fluid link fluids — and an id this server does not know clears the slot rather than
+     * being trusted into an array index.
      */
-    private static Optional<ResourceLocation> filterItem(long networkId) {
-        if (networkId < 0 || networkId > Integer.MAX_VALUE) {
+    private static Optional<ResourceLocation> filterEntry(BusConfig link, int plusOne) {
+        if (plusOne <= 0) {
             return Optional.empty();
         }
-        var item = BuiltInRegistries.ITEM.byId((int) networkId);
-        return item == net.minecraft.world.item.Items.AIR
-            ? Optional.empty()
-            : Optional.ofNullable(BuiltInRegistries.ITEM.getKey(item));
+        return switch (link.resource()) {
+            case ITEM -> {
+                var item = BuiltInRegistries.ITEM.byId(plusOne - 1);
+                yield item == net.minecraft.world.item.Items.AIR
+                    ? Optional.empty() : Optional.ofNullable(BuiltInRegistries.ITEM.getKey(item));
+            }
+            case FLUID -> {
+                var fluid = BuiltInRegistries.FLUID.byId(plusOne - 1);
+                yield fluid == net.minecraft.world.level.material.Fluids.EMPTY
+                    ? Optional.empty() : Optional.ofNullable(BuiltInRegistries.FLUID.getKey(fluid));
+            }
+            // Nothing to match on, so nothing to put in a slot. SPEC.md §5.
+            case ENERGY -> Optional.empty();
+        };
+    }
+
+    /**
+     * Opens the selected bay's machine where the player is standing. SPEC.md §0.
+     *
+     * <p>False for an empty bay and for a machine with no screen of its own, both of which fall
+     * through to the trip into the bay rather than leaving the player with a button that did
+     * nothing.
+     */
+    private boolean openRemote(ServerPlayer viewer, WorkbayRecord record) {
+        ServerLevel backshop = viewer.server.getLevel(WorkbayDimensions.BACKSHOP);
+        if (backshop == null || selectedBay >= record.bayCapacity()
+            || record.bay(selectedBay).hosted().isEmpty()) {
+            return false;
+        }
+        return com.neryos.workbay.remote.RemoteScreens.open(viewer, backshop,
+            BayGeometry.machinePos(record.bayColumn(), selectedBay));
     }
 
     private void editLink(Optional<UUID> linkId, java.util.function.UnaryOperator<BusConfig> edit) {
@@ -551,7 +592,8 @@ public class WorkbayMenu extends AbstractContainerMenu {
             workbay.energy().getEnergyStored(), workbay.energy().getMaxEnergyStored(),
             bays, links, record.upgrades(), record.assay().levy(), record.assay().rate(),
             record.assay().skimmed(), record.deployedCount(),
-            com.neryos.workbay.config.WorkbayConfig.SERVER.maxDeployedWorkbaysPerNetwork.get());
+            com.neryos.workbay.config.WorkbayConfig.SERVER.maxDeployedWorkbaysPerNetwork.get(),
+            com.neryos.workbay.remote.RemoteConfig.remoteScreensEnabled());
     }
 
     private static WorkbaySnapshot.Bay readBay(WorkbayRecord record, int index,

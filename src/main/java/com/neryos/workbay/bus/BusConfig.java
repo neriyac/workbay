@@ -49,7 +49,7 @@ public record BusConfig(
     int speed,
     DyeColor channel,
     boolean enabled,
-    Optional<net.minecraft.resources.ResourceLocation> filter,
+    BusFilter filter,
     boolean internal) {
 
     /**
@@ -75,8 +75,7 @@ public record BusConfig(
         Codec.INT.fieldOf("Speed").forGetter(BusConfig::speed),
         DyeColor.CODEC.optionalFieldOf("Channel", DyeColor.WHITE).forGetter(BusConfig::channel),
         Codec.BOOL.optionalFieldOf("Enabled", true).forGetter(BusConfig::enabled),
-        net.minecraft.resources.ResourceLocation.CODEC.optionalFieldOf("Filter")
-            .forGetter(BusConfig::filter),
+        BusFilter.CODEC.optionalFieldOf("Filter", BusFilter.NONE).forGetter(BusConfig::filter),
         // True for a bay-to-bay link with no Connector at all. SPEC.md §0 closed "a link with no
         // physical anchor cannot be found, broken or audited in the world" against links that leave
         // the Workbay; that rationale does not reach a link whose both ends are bays in the same
@@ -107,7 +106,7 @@ public record BusConfig(
         GlobalPos connector, GlobalPos target) {
         return new BusConfig(id, "", bay, resource, mode, connector, target,
             Optional.empty(), Optional.empty(), DEFAULT_RATE, DEFAULT_SPEED, DyeColor.WHITE, false,
-            Optional.empty(), false);
+            BusFilter.NONE, false);
     }
 
     /**
@@ -119,15 +118,15 @@ public record BusConfig(
     public static BusConfig createInternal(UUID id, int bay, GlobalPos anchor, GlobalPos target) {
         return new BusConfig(id, "", bay, Resource.ITEM, Mode.INSERT, anchor, target,
             Optional.empty(), Optional.empty(), DEFAULT_RATE, DEFAULT_SPEED, DyeColor.WHITE, false,
-            Optional.empty(), true);
+            BusFilter.NONE, true);
     }
 
     /**
-     * One item, or nothing. SPEC.md §5's filter <em>items</em> hold nine, eighteen or thirty-six
-     * and know about components; this is the ghost slot SPEC.md §4 already draws on every row, and
-     * it is what a drag out of JEI or EMI lands in.
+     * What this link may carry. {@link BusFilter} says what it matches on and why that is all it
+     * matches on; the row's ghost slot and the panel behind it are what a drag out of JEI or EMI
+     * lands in.
      */
-    public BusConfig withFilter(Optional<net.minecraft.resources.ResourceLocation> nowFilter) {
+    public BusConfig withFilter(BusFilter nowFilter) {
         return new BusConfig(id, name, bay, resource, mode, connector, target, targetFace,
             machineFace, rate, speed, channel, enabled, nowFilter, internal);
     }
@@ -152,9 +151,15 @@ public record BusConfig(
             machineFace, rate, speed, channel, enabled, filter, internal);
     }
 
+    /**
+     * <b>And drops the filter.</b> Its entries are ids in whichever registry the old resource named,
+     * so keeping them across a change to fluids leaves a link matching nine item ids against fluids
+     * and refusing everything, with a row of items still drawn in the panel to say it should work.
+     */
     public BusConfig withResource(Resource newResource) {
         return new BusConfig(id, name, bay, newResource, mode, connector, target, targetFace,
-            machineFace, rate, speed, channel, enabled, filter, internal);
+            machineFace, rate, speed, channel, enabled,
+            newResource == resource ? filter : BusFilter.NONE, internal);
     }
 
     public BusConfig withName(String newName) {

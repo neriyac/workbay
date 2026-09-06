@@ -124,13 +124,13 @@ public class BusTests {
 
             BusConfig dust = connect(helper, workbay, dustChest.above(), Direction.DOWN, player);
             workbay.addBus(dust.withMode(BusConfig.Mode.EXTRACT).withRate(4).withSpeed(10)
-                .withFilter(Optional.of(ResourceLocation.parse("minecraft:redstone"))));
+                .withFilter(com.neryos.workbay.bus.BusFilter.only(ResourceLocation.parse("minecraft:redstone"))));
             BusConfig copper = connect(helper, workbay, ingotChest.above(), Direction.DOWN, player);
             workbay.addBus(copper.withMode(BusConfig.Mode.EXTRACT).withRate(4).withSpeed(10)
-                .withFilter(Optional.of(ResourceLocation.parse("minecraft:copper_ingot"))));
+                .withFilter(com.neryos.workbay.bus.BusFilter.only(ResourceLocation.parse("minecraft:copper_ingot"))));
             BusConfig out = connect(helper, workbay, outChest.above(), Direction.DOWN, player);
             workbay.addBus(out.withMode(BusConfig.Mode.INSERT).withRate(4).withSpeed(10)
-                .withFilter(Optional.of(ResourceLocation.parse("mekanism:alloy_infused"))));
+                .withFilter(com.neryos.workbay.bus.BusFilter.only(ResourceLocation.parse("mekanism:alloy_infused"))));
 
             // Deliberately left at the rate and speed a link is born with, because that is what a
             // player gets: a hand-tuned 64-per-tick link proved the plumbing and hid that the
@@ -619,11 +619,11 @@ public class BusTests {
     }
 
     /**
-     * The row's ghost slot, doing its job. SPEC.md §5: one item per link today, nine to thirty-six
-     * once the filter items exist, and they widen at exactly the predicate this asserts.
+     * The filter doing its job, in the sense a player means: <b>only iron goes here</b>. SPEC.md §5.
      *
-     * <p>The hosted chest holds two items and the link is filtered to one, so a filter that is read
-     * but not applied — or applied to the destination rather than the source — cannot pass.
+     * <p>The hosted chest holds two items and the link lists one, so a filter that is read but not
+     * applied — or applied to the destination rather than the source — cannot pass.
+     * {@link #aDenyFilterCarriesEverythingElse} is the same fixture with the list inverted.
      */
     @GameTest(timeoutTicks = 900)
     @TestHolder(description = "A filtered link moves its item and leaves everything else behind.")
@@ -648,8 +648,8 @@ public class BusTests {
 
             BusConfig link = connect(helper, workbay, targetPos.above(), Direction.DOWN, player);
             workbay.addBus(link.withRate(8).withSpeed(10).withFilter(
-                java.util.Optional.of(net.minecraft.core.registries.BuiltInRegistries.ITEM
-                    .getKey(Items.IRON_INGOT))));
+                com.neryos.workbay.bus.BusFilter.only(
+                    net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(Items.IRON_INGOT))));
 
             helper.startSequence()
                 .thenWaitUntil(() -> {
@@ -1266,13 +1266,13 @@ public class BusTests {
             // Three links, made the way a player makes them, and told apart only by their filters.
             BusConfig coal = connect(helper, workbay, fuelChest.above(), Direction.DOWN, player);
             workbay.addBus(coal.withMode(BusConfig.Mode.EXTRACT).withRate(4).withSpeed(10)
-                .withFilter(Optional.of(ResourceLocation.parse("minecraft:coal"))));
+                .withFilter(com.neryos.workbay.bus.BusFilter.only(ResourceLocation.parse("minecraft:coal"))));
             BusConfig raw = connect(helper, workbay, foodChest.above(), Direction.DOWN, player);
             workbay.addBus(raw.withMode(BusConfig.Mode.EXTRACT).withRate(4).withSpeed(10)
-                .withFilter(Optional.of(ResourceLocation.parse("minecraft:chicken"))));
+                .withFilter(com.neryos.workbay.bus.BusFilter.only(ResourceLocation.parse("minecraft:chicken"))));
             BusConfig cooked = connect(helper, workbay, outChest.above(), Direction.DOWN, player);
             workbay.addBus(cooked.withMode(BusConfig.Mode.INSERT).withRate(4).withSpeed(10)
-                .withFilter(Optional.of(ResourceLocation.parse("minecraft:cooked_chicken"))));
+                .withFilter(com.neryos.workbay.bus.BusFilter.only(ResourceLocation.parse("minecraft:cooked_chicken"))));
 
             helper.startSequence()
                 .thenWaitUntil(() -> {
@@ -1310,6 +1310,135 @@ public class BusTests {
     }
 
     /** Fills a block's tank through whichever face accepts, never the null side alone. */
+    /**
+     * The same filter read the other way round: <b>everything except gold</b>.
+     *
+     * <p>EnderIO's {@code EnderItemFilter} is one list and one {@code isDenyList} flag, and this is
+     * the second half of that flag. Its own test because "the list is inverted" is exactly the kind
+     * of thing that stays green while being applied to the wrong side of the comparison: with one
+     * entry listed, {@link #aFilteredLinkMovesOnlyItsItem} passes either way round.
+     */
+    @GameTest(timeoutTicks = 900)
+    @TestHolder(description = "A link denying gold carries everything but the gold.")
+    public static void aDenyFilterCarriesEverythingElse(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos targetPos = helper.absolutePos(new BlockPos(4, 1, 4));
+
+            level.setBlock(targetPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.CHEST));
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+            if (!(backshop.getBlockEntity(machinePos) instanceof Container hosted)) {
+                helper.fail("the bay does not hold a container after racking a chest");
+                return;
+            }
+            hosted.setItem(0, new ItemStack(Items.GOLD_INGOT, 16));
+            hosted.setItem(1, new ItemStack(Items.IRON_INGOT, 16));
+
+            BusConfig link = connect(helper, workbay, targetPos.above(), Direction.DOWN, player);
+            workbay.addBus(link.withRate(8).withSpeed(10).withFilter(
+                new com.neryos.workbay.bus.BusFilter(java.util.List.of(
+                    BuiltInRegistries.ITEM.getKey(Items.GOLD_INGOT)), true)));
+
+            helper.startSequence()
+                .thenWaitUntil(() -> {
+                    if (countIn(level, targetPos, Items.IRON_INGOT) < 16) {
+                        throw new GameTestAssertException("the link has moved "
+                            + countIn(level, targetPos, Items.IRON_INGOT) + " of 16 iron and reads "
+                            + workbay.busStatus(link.id())
+                            + "; a deny list must carry everything it does not name");
+                    }
+                })
+                // The iron is through and the link is still running, so it has had every step
+                // since to move the gold too.
+                .thenIdle(40)
+                .thenExecute(() -> {
+                    helper.assertValueEqual(countIn(level, targetPos, Items.GOLD_INGOT), 0,
+                        "gold carried by a link that denies it");
+                    helper.assertValueEqual(hosted.getItem(0).getCount(), 16, "gold left in the bay");
+                })
+                .thenExecute(() -> tearDown(helper, workbayPos))
+                .thenSucceed();
+        });
+    }
+
+    /**
+     * Fluids have a filter too, and it is the same filter. OPEN_ISSUES had the fluid link carrying
+     * everything with no way to say otherwise.
+     *
+     * <p><b>The test names the wrong fluid first.</b> A hosted tank full of water, a link told
+     * lava: nothing may move. Then the same link is told water, and it must all move -- which is
+     * what makes the first half mean something. A filter that is never consulted passes the first
+     * assertion by moving the water immediately, and one that refuses everything passes it by
+     * refusing forever; only the pair can be satisfied by a filter that actually reads its list.
+     */
+    @GameTest(timeoutTicks = 900)
+    @TestHolder(description = "A fluid link carries only the fluid its filter lists.")
+    public static void aFluidLinkCarriesOnlyTheFluidItsFilterLists(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos targetPos = helper.absolutePos(new BlockPos(4, 1, 4));
+
+            Block tank = BuiltInRegistries.BLOCK
+                .get(ResourceLocation.parse("mekanism:basic_fluid_tank"));
+            if (tank == Blocks.AIR) {
+                helper.fail("mekanism:basic_fluid_tank is not registered. This test is about a real "
+                    + "mod's fluid handler, so a missing partner mod is a failure, never a skip.");
+            }
+            BlockState state = tank.defaultBlockState();
+            level.setBlock(targetPos, state, Block.UPDATE_ALL);
+            tank.setPlacedBy(level, targetPos, state, player, new ItemStack(tank));
+            level.invalidateCapabilities(targetPos);
+
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(tank));
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+
+            var water = net.minecraft.world.level.material.Fluids.WATER;
+            int filled = fill(backshop, machinePos, new FluidStack(water, 8_000));
+            if (filled <= 0) {
+                helper.fail("could not fill the hosted tank, so the link has nothing to carry");
+            }
+
+            BusConfig link = connect(helper, workbay, targetPos.above(), Direction.DOWN, player)
+                .withResource(BusConfig.Resource.FLUID).withRate(20).withSpeed(10);
+            // Lava, into a tank holding only water. The entries are fluid ids on a fluid link.
+            workbay.addBus(link.withFilter(new com.neryos.workbay.bus.BusFilter(
+                java.util.List.of(BuiltInRegistries.FLUID.getKey(
+                    net.minecraft.world.level.material.Fluids.LAVA)), false)));
+
+            helper.startSequence()
+                .thenIdle(60)
+                .thenExecute(() -> helper.assertValueEqual(inTanks(level, targetPos, water), 0,
+                    "water carried by a link whose filter lists only lava"))
+                // Same link, same tank, water listed instead. Everything else is unchanged, so the
+                // only thing that can move it now is the filter.
+                .thenExecute(() -> workbay.addBus(link.withFilter(
+                    new com.neryos.workbay.bus.BusFilter(java.util.List.of(
+                        BuiltInRegistries.FLUID.getKey(water)), false))))
+                .thenWaitUntil(() -> {
+                    if (inTanks(level, targetPos, water) < filled) {
+                        throw new GameTestAssertException("the link has moved "
+                            + inTanks(level, targetPos, water) + " of " + filled
+                            + " mB with water listed and reads " + workbay.busStatus(link.id()));
+                    }
+                })
+                .thenExecute(() -> tearDown(helper, workbayPos))
+                .thenSucceed();
+        });
+    }
+
     private static int fill(ServerLevel level, BlockPos pos, FluidStack what) {
         for (Direction side : Direction.values()) {
             var handler = level.getCapability(Capabilities.FluidHandler.BLOCK, pos, side);

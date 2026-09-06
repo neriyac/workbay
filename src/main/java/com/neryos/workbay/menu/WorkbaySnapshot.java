@@ -52,10 +52,18 @@ public record WorkbaySnapshot(
      * Workbay, carrying it somewhere and having the placement refused. SPEC.md §14.
      */
     int deployed,
-    int maxDeployed) {
+    int maxDeployed,
+    /**
+     * Whether <b>this server</b> will open a hosted machine's own screen where the player stands
+     * (SPEC.md §0). On the snapshot rather than read from the client's own config file because the
+     * two installations can disagree, and the button has to name the trip the player is actually
+     * about to get: a button reading "open its screen" that teleports you into a bay is the mod
+     * lying about what it just did.
+     */
+    boolean remoteScreens) {
 
     public static final WorkbaySnapshot EMPTY = new WorkbaySnapshot("", false, 1, 0, 0, 1,
-        List.of(), List.of(), WorkbayRecord.Upgrades.NONE, 0, 0, 0, 1, 1);
+        List.of(), List.of(), WorkbayRecord.Upgrades.NONE, 0, 0, 0, 1, 1, false);
 
     public static final Codec<WorkbaySnapshot> CODEC = RecordCodecBuilder.create(i -> i.group(
         Codec.STRING.fieldOf("Code").forGetter(WorkbaySnapshot::code),
@@ -71,7 +79,8 @@ public record WorkbaySnapshot(
         Codec.INT.fieldOf("SkimRate").forGetter(WorkbaySnapshot::skimRate),
         Codec.INT.fieldOf("Skimmed").forGetter(WorkbaySnapshot::skimmed),
         Codec.INT.fieldOf("Deployed").forGetter(WorkbaySnapshot::deployed),
-        Codec.INT.fieldOf("MaxDeployed").forGetter(WorkbaySnapshot::maxDeployed)
+        Codec.INT.fieldOf("MaxDeployed").forGetter(WorkbaySnapshot::maxDeployed),
+        Codec.BOOL.optionalFieldOf("RemoteScreens", false).forGetter(WorkbaySnapshot::remoteScreens)
     ).apply(i, WorkbaySnapshot::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, WorkbaySnapshot> STREAM_CODEC =

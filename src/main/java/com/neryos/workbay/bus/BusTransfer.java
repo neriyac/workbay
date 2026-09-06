@@ -124,14 +124,46 @@ public final class BusTransfer {
      *                 destination on. SPEC.md §9.
      */
     public static int moveFluid(IFluidHandler from, IFluidHandler to, int budget) {
-        return moveFluid(from, to, budget, false);
+        return moveFluid(from, to, budget, stack -> true, false);
     }
 
-    public static int moveFluid(IFluidHandler from, IFluidHandler to, int budget, boolean simulate) {
+    /**
+     * The most this source would hand over of something the filter allows, or empty.
+     *
+     * <p><b>Tank by tank, not {@code drain(budget, ...)}.</b> An amount-drain takes from whichever
+     * tank the handler feels like, so on a machine holding water in one tank and lava in another a
+     * filter asking for water gets offered lava and the link reads as empty. This is the fluid
+     * spelling of the item path's per-slot loop, and it is the same reason.
+     */
+    public static FluidStack offer(IFluidHandler from, int budget,
+        java.util.function.Predicate<FluidStack> allowed) {
+        for (int tank = 0; tank < from.getTanks(); tank++) {
+            FluidStack held = from.getFluidInTank(tank);
+            if (held.isEmpty() || !allowed.test(held)) {
+                continue;
+            }
+            FluidStack available = from.drain(
+                held.copyWithAmount(Math.min(budget, held.getAmount())),
+                IFluidHandler.FluidAction.SIMULATE);
+            if (!available.isEmpty()) {
+                return available;
+            }
+        }
+        return FluidStack.EMPTY;
+    }
+
+    /**
+     * @param allowed the link's filter, applied to what the source is offering before anything is
+     *                committed. SPEC.md §5: whatever decides a match runs before the move, never
+     *                after it, or a refused fluid has to be pushed back into a handler that may not
+     *                take it.
+     */
+    public static int moveFluid(IFluidHandler from, IFluidHandler to, int budget,
+        java.util.function.Predicate<FluidStack> allowed, boolean simulate) {
         if (budget <= 0) {
             return 0;
         }
-        FluidStack available = from.drain(budget, IFluidHandler.FluidAction.SIMULATE);
+        FluidStack available = offer(from, budget, allowed);
         if (available.isEmpty()) {
             return 0;
         }

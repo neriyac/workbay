@@ -338,17 +338,21 @@ public class BusRunner {
     }
 
     /**
-     * The link's ghost item, as a predicate. One item is the whole filter today; SPEC.md §5's
-     * filter items widen this to nine, eighteen or thirty-six entries with component matching, and
-     * they widen exactly here.
+     * The link's filter, as a predicate over items. Applied to what the <em>source</em> is
+     * offering, in the simulation the bind is made on, so a filtered link never has to put anything
+     * back — the same rule the census below runs by. {@link BusFilter} says what it matches on.
      */
     private static java.util.function.Predicate<net.minecraft.world.item.ItemStack> allowed(
         BusConfig bus) {
-        if (bus.filter().isEmpty()) {
-            return stack -> true;
-        }
-        var wanted = net.minecraft.core.registries.BuiltInRegistries.ITEM.get(bus.filter().get());
-        return stack -> stack.is(wanted);
+        BusFilter filter = bus.filter();
+        return filter.isEmpty() ? stack -> true : filter::allows;
+    }
+
+    /** The same filter over fluids. Its entries are fluid ids on a fluid link. */
+    private static java.util.function.Predicate<net.neoforged.neoforge.fluids.FluidStack> allowedFluid(
+        BusConfig bus) {
+        BusFilter filter = bus.filter();
+        return filter.isEmpty() ? stack -> true : filter::allows;
     }
 
     private BusStatus runEnergy(WorkbayRecord record, BusConfig bus, ServerLevel targetLevel, BlockPos targetPos,
@@ -405,8 +409,8 @@ public class BusRunner {
      * perfectly and then swallows the fill — and there is nothing to simulate a fill <em>of</em>
      * until the source has been asked.
      *
-     * <p>No skim and no filter. The Assay converts goods, and the link's filter is a ghost
-     * <em>item</em>; SPEC.md §5's filter items are where a fluid filter would go.
+     * <p>No skim: the Assay converts goods, and a fluid is not one. The filter is honoured, and
+     * for the same reason the item path honours it — on what the source offers, before the commit.
      */
     private BusStatus runFluid(WorkbayRecord record, BusConfig bus, ServerLevel targetLevel, BlockPos targetPos,
         ServerLevel backshop, BlockPos machinePos, java.util.Set<Direction> faces) {
@@ -427,8 +431,10 @@ public class BusRunner {
         java.util.Set<Direction> sinkFaces = insert ? EVERY_FACE : faces;
 
         int budget = Math.max(1, rate(record, bus) * MB_PER_RATE);
+        java.util.function.Predicate<net.neoforged.neoforge.fluids.FluidStack> allowed =
+            allowedFluid(bus);
         IFluidHandler from = source.resolve(
-            h -> !h.drain(budget, IFluidHandler.FluidAction.SIMULATE).isEmpty(), sourceFaces);
+            h -> !BusTransfer.offer(h, budget, allowed).isEmpty(), sourceFaces);
         if (from == null) {
             // Empty and unreachable are different things, and one message for both is how a dead
             // link spends a session looking like a resting one.
@@ -437,13 +443,14 @@ public class BusRunner {
                 : insert ? BusStatus.MACHINE_NO_PORT : BusStatus.TARGET_NO_PORT;
         }
         IFluidHandler to = sink.resolve(
-            h -> BusTransfer.moveFluid(from, h, budget, true) > 0, sinkFaces);
+            h -> BusTransfer.moveFluid(from, h, budget, allowed, true) > 0, sinkFaces);
         if (to == null) {
             boolean anyHandler = sink.resolve(h -> h.getTanks() > 0, sinkFaces) != null;
             return anyHandler ? BusStatus.IDLE
                 : insert ? BusStatus.TARGET_NO_PORT : BusStatus.MACHINE_NO_PORT;
         }
-        return BusTransfer.moveFluid(from, to, budget) > 0 ? BusStatus.RUNNING : BusStatus.IDLE;
+        return BusTransfer.moveFluid(from, to, budget, allowed, false) > 0
+            ? BusStatus.RUNNING : BusStatus.IDLE;
     }
 
     /**
