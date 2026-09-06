@@ -10,6 +10,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
@@ -17,6 +18,7 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.player.PlayerContainerEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.Map;
@@ -39,16 +41,26 @@ public final class RemoteScreens {
     /** Where a machine really is: the bay's level, and its position in it. */
     public record Open(ServerLevel bay, BlockPos pos) {}
 
+    /**
+     * How often the viewer's copy is brought up to date, in ticks.
+     *
+     * <p>A machine tells its watchers about a change by sending to whoever tracks its chunk
+     * <em>in its own level</em>, and a player looking from another dimension tracks nothing. So the
+     * change lands on the machine and the screen keeps drawing the moment it was opened, which is
+     * indistinguishable from a button that does nothing. This is the missing half of the chunk a
+     * remote viewer never got.
+     */
+    private static final int REFRESH = 5;
+
     private static final Map<UUID, Open> OPEN = new ConcurrentHashMap<>();
+
+    /** The last tag each viewer was sent, so an unchanged machine costs one comparison. */
+    private static final Map<UUID, CompoundTag> SENT = new ConcurrentHashMap<>();
 
     private RemoteScreens() {}
 
     public static void opened(Player player, ServerLevel bay, BlockPos machine) {
         OPEN.put(player.getUUID(), new Open(bay, machine));
-    }
-
-    public static void closed(Player player) {
-        OPEN.remove(player.getUUID());
     }
 
     /**
@@ -125,8 +137,9 @@ public final class RemoteScreens {
         if (hosted.isAir() || entity == null) {
             return false;
         }
-        PacketDistributor.sendToPlayer(player, new RemoteMachinePacket(machine, hosted,
-            entity.saveWithFullMetadata(bay.registryAccess())));
+        CompoundTag tag = entity.saveWithFullMetadata(bay.registryAccess());
+        SENT.put(player.getUUID(), tag);
+        PacketDistributor.sendToPlayer(player, new RemoteMachinePacket(machine, hosted, tag));
 
         opened(player, bay, machine);
         opening = true;
@@ -144,13 +157,43 @@ public final class RemoteScreens {
         return true;
     }
 
+    /** Sends the copy again whenever the machine differs from what that viewer was last sent. */
+    @SubscribeEvent
+    public static void onTick(ServerTickEvent.Post event) {
+        if (OPEN.isEmpty() || event.getServer().getTickCount() % REFRESH != 0) {
+            return;
+        }
+        for (Map.Entry<UUID, Open> entry : OPEN.entrySet()) {
+            ServerPlayer player = event.getServer().getPlayerList().getPlayer(entry.getKey());
+            if (player == null) {
+                continue;
+            }
+            Open machine = entry.getValue();
+            BlockEntity live = machine.bay().getBlockEntity(machine.pos());
+            if (live == null) {
+                continue;
+            }
+            // getUpdateTag, not the full save: this is the packet a chunk-tracking client would be
+            // sent, and mods wire their client-visible state into that pair on purpose. Mekanism's
+            // side config arrives through TileComponentConfig#readFromUpdateTag and through
+            // nothing else -- its container sync carries only the eject flag, which is exactly why
+            // Eject worked here and the faces did not.
+            CompoundTag tag = live.getUpdateTag(machine.bay().registryAccess());
+            if (!tag.equals(SENT.get(entry.getKey()))) {
+                SENT.put(entry.getKey(), tag);
+                PacketDistributor.sendToPlayer(player, new RemoteMachinePacket(machine.pos(),
+                    machine.bay().getBlockState(machine.pos()), tag));
+            }
+        }
+    }
+
     /** Ends the reach and takes the client's copy back. */
     public static void close(ServerPlayer player) {
+        SENT.remove(player.getUUID());
         Open machine = OPEN.remove(player.getUUID());
         if (machine != null) {
-            PacketDistributor.sendToPlayer(player,
-                new RemoteMachinePacket(machine.pos(), net.minecraft.world.level.block.Blocks.AIR
-                    .defaultBlockState(), new CompoundTag()));
+            PacketDistributor.sendToPlayer(player, new RemoteMachinePacket(machine.pos(),
+                Blocks.AIR.defaultBlockState(), new CompoundTag()));
         }
     }
 

@@ -45,12 +45,12 @@ public final class RemoteMachines {
             // screen keeps a reference to that object, and a fresh one would leave it drawing a
             // copy nothing updates any more.
             //
-            // loadWithComponents, not handleUpdateTag. The latter is a mod's own *sync* path and
-            // is entitled to ignore most of a tag -- Mekanism's says so in as many words and calls
-            // only BlockEntity's loadAdditional, so a side config fed through it never arrives.
-            // This is the method a chunk load calls, which is what this copy stands in for. Public
-            // by access transformer; there is no other door.
-            open.loadWithComponents(data, level.registryAccess());
+            // handleUpdateTag paired with the server's getUpdateTag: the exact two methods a
+            // chunk-tracking client uses, which is what this copy stands in for. A full save tag
+            // through this door arrives nowhere -- Mekanism's handleUpdateTag deliberately calls
+            // only BlockEntity's own loadAdditional -- and a save tag through loadWithComponents
+            // carries no side config either, because that rides the update tag.
+            open.handleUpdateTag(data, level.registryAccess());
             return;
         }
 
