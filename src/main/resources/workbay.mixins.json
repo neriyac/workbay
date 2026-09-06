@@ -5,7 +5,9 @@
     "plugin": "com.neryos.workbay.mixin.RemoteScreenGate",
     "minVersion": "0.8",
     "mixins": [
-        "PlayerMixin"
+        "PlayerMixin",
+        "LevelMixin",
+        "ServerChunkCacheMixin"
     ],
     "client": [
         "ClientChunkCacheMixin"
