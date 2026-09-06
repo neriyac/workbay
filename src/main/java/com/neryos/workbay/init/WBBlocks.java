@@ -67,6 +67,16 @@ public class WBBlocks {
                 .mapColor(MapColor.COLOR_BLACK)
                 .sound(SoundType.METAL)
                 .strength(3.5F)
+                // The other half of SPEC.md §7's "distinguishable in the dark". A texture is only
+                // as visible as the light falling on it, so an unlit base would hide all three
+                // readings equally well; the block lights itself instead, the way a furnace does.
+                // Never 15: a Workbay is furniture, not a lamp, and a wall of them should not
+                // light a base for free.
+                .lightLevel(state -> switch (state.getValue(WorkbayBlock.STATE)) {
+                    case IDLE -> 3;
+                    case RUNNING -> 10;
+                    case STUCK -> 8;
+                })
                 .noOcclusion());
         ITEMS.register("workbay", () -> new WorkbayItem(holder.get(), new net.minecraft.world.item.Item.Properties()));
         return holder;

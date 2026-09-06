@@ -133,7 +133,7 @@ public class BayViewScreen extends AbstractContainerScreen<BayViewMenu> {
         if (state.energyCapacity() > 0) {
             int y = gaugeY(row);
             Draw.gauge(g, leftPos + 8, y, BayViewMenu.GAUGE_W, BayViewMenu.GAUGE_H, state.energy(),
-                state.energyCapacity(), Draw.AMBER);
+                state.energyCapacity(), Draw.ENERGY);
             label(g, y, WorkbayScreen.gui("bayview.energy").getString());
         }
     }

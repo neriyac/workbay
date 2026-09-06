@@ -175,6 +175,16 @@ public class BusRunner {
         return statuses.getOrDefault(busId, BusStatus.IDLE);
     }
 
+    /** True while any link needs the player to do something about it. Drives the block lit state. */
+    public boolean anyProblem() {
+        return statuses.values().stream().anyMatch(BusStatus::isProblem);
+    }
+
+    /** True on the ticks a link reported a move. The block entity is what turns that into "recently". */
+    public boolean anyRunning() {
+        return statuses.containsValue(BusStatus.RUNNING);
+    }
+
     /**
      * Items the skim has taken since this was last called, handed to the block entity to bank on
      * the record. Collected rather than written here: the runner must not rewrite the record it is

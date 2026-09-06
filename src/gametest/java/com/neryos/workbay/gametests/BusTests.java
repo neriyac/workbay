@@ -5,6 +5,7 @@ import com.neryos.workbay.bus.BusRunner;
 import com.neryos.workbay.content.connector.ConnectorBlock;
 import com.neryos.workbay.content.workbay.WorkbayBlock;
 import com.neryos.workbay.content.workbay.WorkbayBlockEntity;
+import com.neryos.workbay.content.workbay.WorkbayState;
 import com.neryos.workbay.init.WBBlocks;
 import com.neryos.workbay.world.BayGeometry;
 import com.neryos.workbay.world.BayHosting;
@@ -242,6 +243,88 @@ public class BusTests {
             }
         }
         return out + ", energy=" + (energy == null ? "none" : energy.getEnergyStored());
+    }
+
+    /**
+     * SPEC.md §7. The block is the only thing in the mod that answers "is something wrong?" without
+     * being opened, and until this test the {@code state} property existed, generated twenty-four
+     * blockstate variants, and was <b>never written by anything</b>: every Workbay in every world
+     * was {@code idle} forever.
+     *
+     * <p>Two Workbays, so both readings are asserted against each other in one run rather than one
+     * of them being asserted against a default that happens to match. Breaking
+     * {@code refreshLitState} to write one constant turns exactly one of the two red whatever the
+     * constant is.
+     */
+    @GameTest(timeoutTicks = 900)
+    @TestHolder(description = "A Workbay whose link is moving reads running; one whose link cannot reach reads stuck.")
+    public static void theBlockSaysRunningOrStuckWithoutBeingOpened(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(7, 5, 7));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+
+            BlockPos workingPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos stuckPos = helper.absolutePos(new BlockPos(4, 1, 0));
+            BlockPos chestPos = helper.absolutePos(new BlockPos(0, 1, 4));
+            // A block with no item capability on any face. The Connector still attaches to it, so
+            // the link exists and reports TARGET_NO_PORT -- the live case a player hits by pairing
+            // a Connector onto the wrong block, which is what stuck is for.
+            BlockPos deadPos = helper.absolutePos(new BlockPos(4, 1, 4));
+
+            level.setBlock(chestPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            level.setBlock(deadPos, Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+
+            WorkbayBlockEntity working = setUp(helper, workingPos, player, new ItemStack(Blocks.CHEST));
+            WorkbayBlockEntity stuck = setUp(helper, stuckPos, player, new ItemStack(Blocks.CHEST));
+
+            BlockPos sourcePos = BayGeometry.machinePos(working.record().orElseThrow().bayColumn(), 0);
+            if (!(backshop.getBlockEntity(sourcePos) instanceof Container hosted)) {
+                helper.fail("the bay does not hold a container after racking a chest");
+                return;
+            }
+            // Enough iron that the link is still moving when the assertion runs: a link that has
+            // finished reports IDLE, and this test would then be measuring the hold rather than
+            // the reading.
+            hosted.setItem(0, new ItemStack(Items.IRON_INGOT, 64));
+
+            working.addBus(connect(helper, working, chestPos.above(), Direction.DOWN, player)
+                .withRate(1).withSpeed(5));
+            stuck.addBus(connect(helper, stuck, deadPos.above(), Direction.DOWN, player)
+                .withRate(1).withSpeed(5));
+
+            helper.startSequence()
+                .thenWaitUntil(() -> {
+                    WorkbayState lit = level.getBlockState(workingPos).getValue(WorkbayBlock.STATE);
+                    if (lit != WorkbayState.RUNNING) {
+                        throw new GameTestAssertException("a Workbay whose link is moving iron "
+                            + "still reads " + lit.getSerializedName() + ". Nothing writes "
+                            + "WorkbayBlock.STATE, so the block cannot say anything across a room.");
+                    }
+                })
+                .thenWaitUntil(() -> {
+                    WorkbayState lit = level.getBlockState(stuckPos).getValue(WorkbayBlock.STATE);
+                    if (lit != WorkbayState.STUCK) {
+                        throw new GameTestAssertException("a Workbay whose link cannot reach its "
+                            + "target reads " + lit.getSerializedName() + ", not stuck");
+                    }
+                })
+                .thenExecute(() -> {
+                    // The pair, together: a driver that wrote one constant would pass one of the
+                    // two waits above and hang on the other, and this says which reading is which.
+                    helper.assertValueEqual(
+                        level.getBlockState(workingPos).getValue(WorkbayBlock.STATE),
+                        WorkbayState.RUNNING, "the lit state of the Workbay that is moving items");
+                    helper.assertValueEqual(
+                        level.getBlockState(stuckPos).getValue(WorkbayBlock.STATE),
+                        WorkbayState.STUCK, "the lit state of the Workbay that cannot reach");
+                })
+                .thenExecute(() -> tearDown(helper, workingPos))
+                .thenExecute(() -> tearDown(helper, stuckPos))
+                .thenSucceed();
+        });
     }
 
     private static WorkbayBlockEntity setUp(ExtendedGameTestHelper helper, BlockPos workbayPos,

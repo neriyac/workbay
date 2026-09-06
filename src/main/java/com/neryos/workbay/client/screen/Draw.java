@@ -57,6 +57,13 @@ public final class Draw {
     public static final int AMBER = 0xFFD8A33A;
     public static final int RED = 0xFFD65C4C;
     public static final int GREY = 0xFF565C66;
+    /**
+     * Power, and only power. Mekanism's own bar green (#3BFB98, sampled off
+     * {@code gui/bar/horizontal_power.png}), because a player coming from that mod already reads
+     * this colour as a charge level. Deliberately mintier than {@link #GREEN}, which means "in" on
+     * a face and "running" on a row — one shade for two ideas is how a swatch stops answering.
+     */
+    public static final int ENERGY = 0xFF3BFB98;
     public static final int SELECT = 0xFF5AA9E6;
 
     /**

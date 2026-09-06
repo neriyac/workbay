@@ -54,6 +54,14 @@ public class WorkbayBlockEntity extends BlockEntity {
      */
     private int assayTicks;
 
+    /** Ticks of {@link WorkbayState#RUNNING} left to show since the last move. Not saved: a Workbay
+     * that just loaded has moved nothing yet, and one tick of {@code idle} is the truth. */
+    private int runningHold;
+
+    /** Four seconds. Long enough to bridge a link on the slowest wheel step, short enough that a
+     * base that has actually stopped says so before the player has walked the length of it. */
+    private static final int RUNNING_HOLD = 80;
+
     /**
      * SPEC.md §9's buffer, accepted on any face and never handing energy back out of the block.
      * The three-layer spend model and round-robin sharing to bays are not built yet, so this is a
@@ -242,6 +250,7 @@ public class WorkbayBlockEntity extends BlockEntity {
         });
 
         workbay.settleAssay(server);
+        workbay.refreshLitState(server, pos, state);
 
         // A Connector broken while this Workbay was unloaded could not tell it, so the runner spots
         // the gap instead and the link is swept here, outside the iteration that found it.
@@ -249,6 +258,39 @@ public class WorkbayBlockEntity extends BlockEntity {
         if (!orphaned.isEmpty()) {
             orphaned.forEach(workbay::removeBus);
         }
+    }
+
+    /**
+     * SPEC.md §7: the block answers "is something wrong?" from across the room. The property has
+     * existed since the block was written and <b>nothing ever wrote it</b> — every Workbay in every
+     * world has been {@code state=idle} since the mod started, which is why three models pointing
+     * at one picture never looked like a fault.
+     *
+     * <p>{@code RUNNING} is held for {@link #RUNNING_HOLD} ticks after the last move rather than
+     * read live. A link on the wheel moves something every few seconds and reports IDLE in between,
+     * so the live reading would flicker the blockstate — and a blockstate write is a lighting
+     * recalculation and a packet to every player tracking the chunk. §7 says "moved something
+     * recently", and this is what recently means.
+     */
+    private void refreshLitState(ServerLevel server, BlockPos pos, BlockState state) {
+        if (!state.hasProperty(WorkbayBlock.STATE)) {
+            return;
+        }
+        if (runner.anyRunning()) {
+            runningHold = RUNNING_HOLD;
+        } else if (runningHold > 0) {
+            runningHold--;
+        }
+        WorkbayState want = runner.anyProblem() ? WorkbayState.STUCK
+            : runningHold > 0 ? WorkbayState.RUNNING
+            : WorkbayState.IDLE;
+        boolean powered = server.hasNeighborSignal(pos);
+        if (state.getValue(WorkbayBlock.STATE) == want
+            && state.getValue(WorkbayBlock.POWERED) == powered) {
+            return;
+        }
+        server.setBlock(pos, state.setValue(WorkbayBlock.STATE, want)
+            .setValue(WorkbayBlock.POWERED, powered), net.minecraft.world.level.block.Block.UPDATE_ALL);
     }
 
     /**

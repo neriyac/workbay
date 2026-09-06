@@ -269,23 +269,31 @@ public class WBLanguageProvider extends LanguageProvider {
         // The filter. SPEC.md §5: it matches on what a thing is and nothing else, so every string
         // here names an item or a fluid and none of them mentions a mode, a tag or a count.
         add(WorkbayLang.guiKey("filter.none"), "No filter");
-        add(WorkbayLang.guiKey("filter.some.allow"), "Carries only %s things");
-        add(WorkbayLang.guiKey("filter.some.deny"), "Carries everything but %s things");
+        add(WorkbayLang.guiKey("filter.some.allow"), "Whitelist, %s listed");
+        add(WorkbayLang.guiKey("filter.some.deny"), "Blacklist, %s listed");
         add(WorkbayLang.guiKey("filter.tip"), "Click to choose what this link may carry. With "
             + "nothing listed it carries everything.");
         add(WorkbayLang.guiKey("filter.energy"), "Energy has nothing to filter");
         add(WorkbayLang.guiKey("filter.energy.tip"), "A filter names an item or a fluid. Energy is "
             + "a number, so there is nothing here to name.");
-        add(WorkbayLang.guiKey("filter.allow"), "Only these");
-        add(WorkbayLang.guiKey("filter.deny"), "All but these");
-        add(WorkbayLang.guiKey("filter.mode.tip"), "Click to swap between carrying only what is "
-            + "listed and carrying everything except it.");
+        // "Whitelist" and "Blacklist", not "Only these" and "All but these". The genre settled
+        // this vocabulary years ago -- XNet, EnderIO and LaserIO all use it -- and a player who
+        // already knows the words does not have to read a button to find out it is the same idea
+        // under a nicer name. The sentence explaining which is which lives in the tooltip.
+        add(WorkbayLang.guiKey("filter.allow"), "Whitelist");
+        add(WorkbayLang.guiKey("filter.deny"), "Blacklist");
+        add(WorkbayLang.guiKey("filter.mode.tip"), "Whitelist carries only what is listed. "
+            + "Blacklist carries everything except it. Click to swap.");
         add(WorkbayLang.guiKey("filter.slot"), "Empty");
-        add(WorkbayLang.guiKey("filter.slot.tip.item"), "Click while holding an item to list it, "
-            + "or drag one here from the recipe list.");
-        add(WorkbayLang.guiKey("filter.slot.tip.fluid"), "Click while holding a bucket or tank to "
-            + "list the fluid inside it, or drag one here from the recipe list.");
-        add(WorkbayLang.guiKey("filter.entry.tip"), "Click to take this off the list.");
+        add(WorkbayLang.guiKey("filter.slot.tip.item"), "Click to drop what you are carrying here. "
+            + "With empty hands it lists what you are holding, and a recipe-list drag works too.");
+        add(WorkbayLang.guiKey("filter.slot.tip.fluid"), "Click to drop what you are carrying here. "
+            + "A bucket or tank lists the fluid inside it; a recipe-list drag works too.");
+        add(WorkbayLang.guiKey("filter.entry.tip"), "Click to lift this off the list. "
+            + "Right-click to take it off without picking it up.");
+        add(WorkbayLang.guiKey("filter.carrying"), "Click a slot to list it, anywhere else to drop it.");
+        add(WorkbayLang.guiKey("filter.listed.allow"), "Only what is listed goes through.");
+        add(WorkbayLang.guiKey("filter.listed.deny"), "Everything except what is listed goes through.");
         add(WorkbayLang.guiKey("filter.empty"), "Nothing listed. This link carries everything.");
         add(WorkbayLang.guiKey("filter.close"), "Back to the links");
         add(WorkbayLang.guiKey("filter.close.tip"), "The filter is saved as you change it. There "

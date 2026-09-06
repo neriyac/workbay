@@ -52,6 +52,8 @@ class BaysPage extends WorkbayPage {
 
     private static final int LINKS_Y_FROM_BOTTOM = 146;
     private static final int ROW_PITCH = 20;
+    /** The filter panel nine slots. Its own name, because it is not the list row pitch. */
+    private static final int SLOT_PITCH = 20;
     private static final int LIST_X = 40;
     private static final int LIST_W = 268;
 
@@ -248,7 +250,7 @@ class BaysPage extends WorkbayPage {
         // player sees. The room between the problem count and the bar was there all along.
         textRight(g, power, x(POWER_X), y(31), POWER_W, powered ? Draw.TEXT_DIM : Draw.TEXT_FAINT);
         if (powered) {
-            Draw.bar(g, x(250), y(29), 44, 9, snap.energy(), snap.energyCapacity(), Draw.AMBER);
+            Draw.bar(g, x(250), y(29), 44, 9, snap.energy(), snap.energyCapacity(), Draw.ENERGY);
             screen.hit(x(250), y(29), 44, 9, () -> { },
                 WorkbayScreen.gui("power", Draw.exact(snap.energy()),
                     Draw.exact(snap.energyCapacity())),
@@ -382,7 +384,7 @@ class BaysPage extends WorkbayPage {
             // inside, and plain the moment the empty part got its tint.
             String power = Draw.compact(bay.energy()) + " / " + Draw.compact(bay.energyCapacity());
             int barW = Math.max(20, FACES_X - 4 - font.width(power) - 6 - 98);
-            Draw.bar(g, x(98), y(68), barW, 9, bay.energy(), bay.energyCapacity(), Draw.AMBER);
+            Draw.bar(g, x(98), y(68), barW, 9, bay.energy(), bay.energyCapacity(), Draw.ENERGY);
             textRight(g, power, x(FACES_X - 4), y(69), room - barW - 6, Draw.TEXT_DIM);
             screen.hit(x(98), y(68), barW, 9, () -> { },
                 WorkbayScreen.gui("power", Draw.exact(bay.energy()),
@@ -673,8 +675,11 @@ class BaysPage extends WorkbayPage {
                 filterPanel(g, mouseX, mouseY, editing.get());
                 return;
             }
-            editingFilter = null;
+            closeFilter();
         }
+        // Nothing outside the filter panel can be carrying: the carry is a picture of one of its
+        // entries, and a cursor still holding one over the links list has no slot to put it in.
+        screen.carry(net.minecraft.world.item.ItemStack.EMPTY);
 
         if (adding) {
             text(g, WorkbayScreen.gui("links.adding", snap.selectedBay() + 1),
@@ -1001,16 +1006,15 @@ class BaysPage extends WorkbayPage {
         BusConfig config = link.config();
         com.neryos.workbay.bus.BusFilter filter = config.filter();
 
-        text(g, "FILTER", x(LIST_X + 4), y(linksY + 4), 44, Draw.TEXT);
-
-        // Which link this is. The panel covers the row it came from, so without the name the
-        // player is configuring one of thirty rows with nothing on screen saying which.
+        // Heading and link name as one string. They used to sit at opposite ends of the row with
+        // the mode button between them, and the first screenshot of this panel read the middle and
+        // the right as one phrase, "Only these Chest", which is a sentence the mod does not mean.
         String label = link.label()
             .orElseGet(() -> link.targetBlock().map(BaysPage::displayName)
                 .orElse(WorkbayScreen.gui("links.unknown")).getString());
-        text(g, label, x(LIST_X + 166), y(linksY + 5), 52, Draw.TEXT_DIM);
+        text(g, "FILTER \u00B7 " + label, x(LIST_X + 4), y(linksY + 5), 100, Draw.TEXT);
 
-        int modeX = x(LIST_X + 52);
+        int modeX = x(LIST_X + 108);
         boolean modeHover = screen.hovered(modeX, y(linksY), 110, 18, mouseX, mouseY);
         Draw.button(g, modeX, y(linksY), 110, 18, modeHover, false);
         textCentre(g, WorkbayScreen.gui(filter.deny() ? "filter.deny" : "filter.allow").getString(),
@@ -1024,37 +1028,98 @@ class BaysPage extends WorkbayPage {
         boolean backHover = screen.hovered(backX, y(linksY), 46, 18, mouseX, mouseY);
         Draw.button(g, backX, y(linksY), 46, 18, backHover, false);
         textCentre(g, "Back", backX + 23, y(linksY + 5), 42, Draw.TEXT);
-        screen.hit(backX, y(linksY), 46, 18, () -> editingFilter = null,
+        screen.hit(backX, y(linksY), 46, 18, this::closeFilter,
             WorkbayScreen.gui("filter.close"), WorkbayScreen.gui("filter.close.tip"));
 
-        Draw.well(g, x(LIST_X), y(rowY - 4), LIST_W, rows * ROW_PITCH + 8);
+        // A well the size of what is in it. SPEC.md section 7 draws empty rows as empty rows, but
+        // that is about the links list, which is a list; nine slots and a sentence are not, and
+        // stretching the box to the list height gave this panel four fifths of a void, which is
+        // exactly what the first screenshot of it showed.
+        Draw.well(g, x(LIST_X), y(rowY - 4), LIST_W, SLOT_PITCH + 26);
+        // Centred, for the same reason. Nine slots pinned to the left edge of a 268-wide box read
+        // as a list that ran out rather than as the whole of the filter.
+        int slotsW = (com.neryos.workbay.bus.BusFilter.MAX - 1) * SLOT_PITCH + 18;
+        int slotsX = LIST_X + (LIST_W - slotsW) / 2;
         for (int slot = 0; slot < com.neryos.workbay.bus.BusFilter.MAX; slot++) {
-            filterEntry(g, x(LIST_X + 8 + slot * 20), y(rowY + 2), config, slot);
+            filterEntry(g, x(slotsX + slot * SLOT_PITCH), y(rowY + 2), config, slot);
         }
-        // The one sentence a filter needs at rest, and only where there is room for it: an empty
-        // filter carrying everything is the opposite of what an empty box usually means.
-        if (rows >= 3) {
-            text(g, WorkbayScreen.gui("filter.empty"), x(LIST_X + 8), y(rowY + 26), LIST_W - 20,
-                Draw.TEXT_FAINT);
-        }
+        // One sentence, and it has to be true of what is on screen. It said "Nothing listed. This
+        // link carries everything." over a slot with something in it -- caught on the first
+        // screenshot of the panel with an entry, which is exactly what reading the geometry in an
+        // editor cannot catch. Three readings, one per state the panel can be in.
+        boolean carrying = !screen.carried().isEmpty();
+        String said = carrying ? "filter.carrying"
+            : filter.isEmpty() ? "filter.empty"
+            : filter.deny() ? "filter.listed.deny" : "filter.listed.allow";
+        textCentre(g, WorkbayScreen.gui(said).getString(),
+            x(LIST_X + LIST_W / 2), y(rowY + SLOT_PITCH + 6), LIST_W - 16,
+            carrying ? Draw.SELECT : Draw.TEXT_FAINT);
     }
 
-    /** One ghost slot: click to add what you are holding, click again to take it back out. */
+    /** Leaving the panel puts down whatever the cursor was carrying: it belonged to this panel. */
+    private void closeFilter() {
+        screen.carry(ItemStack.EMPTY);
+        editingFilter = null;
+    }
+
+    /**
+     * One ghost slot. EnderIO gesture, which is the one the genre already teaches: a left-click
+     * <b>lifts</b> the entry onto the cursor and the next left-click puts it down. Right-click
+     * deletes outright, and an empty-handed click on an empty slot still lists whatever the player
+     * is holding.
+     *
+     * <p><b>Which slot it lands in is not the player's to choose</b>, and the strings say so.
+     * {@link com.neryos.workbay.bus.BusFilter#with} keeps the list without holes on purpose, so a
+     * drop onto an empty slot appends and a drop onto a filled one replaces it. A first draft
+     * promised "pick this up and move it", which read as "move it to that column" and is not what
+     * happens -- seen on the first screenshot where an entry dropped on slot six arrived in slot
+     * one.
+     */
     private void filterEntry(GuiGraphics g, int px, int py, BusConfig config, int slot) {
         Draw.slot(g, px, py, 18, 18);
         Optional<ResourceLocation> entry = config.filter().at(slot);
+        // Carrying makes every slot a destination, filled or not: dropping onto a filled slot
+        // replaces it, which is what somebody who has just picked something up expects.
+        boolean carrying = !screen.carried().isEmpty();
+        if (carrying) {
+            Draw.bevel(g, px, py, 18, 18, true, Draw.SELECT, Draw.SELECT);
+        }
         if (entry.isPresent()) {
             entryIcon(g, config.resource(), entry.get(), px + 1, py + 1);
-            screen.hit(px, py, 18, 18,
-                () -> screen.send(WorkbayAction.SET_FILTER, (long) slot << 32, config.id()),
-                entryName(config.resource(), entry.get()), WorkbayScreen.gui("filter.entry.tip"));
+            ItemStack lifted = new ItemStack(BuiltInRegistries.ITEM.get(entry.get()));
+            screen.hit(px, py, 18, 18, () -> {
+                boolean lift = !carrying && !screen.back();
+                if (carrying) {
+                    dropCarried(config, slot);
+                    return;
+                }
+                screen.send(WorkbayAction.SET_FILTER, (long) slot << 32, config.id());
+                if (lift) {
+                    // The slot is cleared and the thing follows the cursor. What the cursor draws
+                    // is the item even for a fluid entry, because a fluid on a filter is named by
+                    // the container it arrived in (SPEC.md section 5) and there is nothing else to
+                    // draw there.
+                    screen.carry(lifted);
+                }
+            }, entryName(config.resource(), entry.get()), WorkbayScreen.gui("filter.entry.tip"));
         } else {
-            screen.hit(px, py, 18, 18, () -> setFilterFromHand(config, slot),
-                WorkbayScreen.gui("filter.slot"),
+            screen.hit(px, py, 18, 18, () -> {
+                if (carrying) {
+                    dropCarried(config, slot);
+                } else {
+                    setFilterFromHand(config, slot);
+                }
+            }, WorkbayScreen.gui("filter.slot"),
                 WorkbayScreen.gui(config.resource() == BusConfig.Resource.FLUID
                     ? "filter.slot.tip.fluid" : "filter.slot.tip.item"));
         }
         screen.ghost(px + 1, py + 1, 16, 16, dropped -> setFilterEntry(config, slot, dropped));
+    }
+
+    private void dropCarried(BusConfig config, int slot) {
+        ItemStack carried = screen.carried();
+        screen.carry(ItemStack.EMPTY);
+        setFilterEntry(config, slot, carried);
     }
 
     /**

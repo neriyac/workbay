@@ -2,6 +2,8 @@ package com.neryos.workbay.datagen;
 
 import com.neryos.workbay.Workbay;
 import com.neryos.workbay.content.connector.ConnectorBlock;
+import com.neryos.workbay.content.workbay.WorkbayBlock;
+import com.neryos.workbay.content.workbay.WorkbayState;
 import com.neryos.workbay.init.WBBlocks;
 import net.minecraft.core.Direction;
 import net.minecraft.data.PackOutput;
@@ -20,17 +22,26 @@ public class WBBlockStateProvider extends BlockStateProvider {
 
     @Override
     protected void registerStatesAndModels() {
-        // Placeholder art on vanilla textures. SPEC.md §7 wants a dark cabinet with a glass front
-        // and three lit states; that is Phase 3, and every state currently draws the same model.
-        ModelFile model = models().orientable("workbay",
-            mcBlock("polished_deepslate"), mcBlock("blast_furnace_front"), mcBlock("polished_deepslate"));
+        // One model per lit state, all three orientable, all three sharing the top. SPEC.md §7
+        // wants three readings distinguishable at distance and in the dark; the textures carry the
+        // first half (tools/make-block-art.py draws them) and WBBlocks' lightLevel the second.
+        // POWERED is not in the key: §7 says it may share art with idle, and a fourth axis of
+        // twenty-four variants would be twenty-four ways to draw the same three pictures.
+        java.util.Map<WorkbayState, ModelFile> models = new java.util.EnumMap<>(WorkbayState.class);
+        for (WorkbayState lit : WorkbayState.values()) {
+            String suffix = lit == WorkbayState.IDLE ? "" : "_" + lit.getSerializedName();
+            models.put(lit, models().orientable("workbay" + suffix,
+                blockTexture("workbay_side" + suffix),
+                blockTexture("workbay_front" + suffix),
+                blockTexture("workbay_top")));
+        }
 
         // toYRot() + 180, not toYRot(). toYRot is the yaw of a player *looking* that way, which is
         // the opposite of the angle a north-facing model has to be turned by, so the bare value puts
         // the front of every block in this mod on its back. Vanilla's furnace blockstate is the
         // reference: facing=east is y=90, and Direction.EAST.toYRot() is 270.
         getVariantBuilder(WBBlocks.WORKBAY.get()).forAllStates(state -> ConfiguredModel.builder()
-            .modelFile(model)
+            .modelFile(models.get(state.getValue(WorkbayBlock.STATE)))
             .rotationY(((int) state.getValue(HorizontalDirectionalBlock.FACING).toYRot() + 180) % 360)
             .build());
 
@@ -65,5 +76,10 @@ public class WBBlockStateProvider extends BlockStateProvider {
 
     private static ResourceLocation mcBlock(String path) {
         return ResourceLocation.withDefaultNamespace("block/" + path);
+    }
+
+    /** One of ours, under {@code assets/workbay/textures/block}. */
+    private static ResourceLocation blockTexture(String path) {
+        return ResourceLocation.fromNamespaceAndPath(Workbay.MOD_ID, "block/" + path);
     }
 }

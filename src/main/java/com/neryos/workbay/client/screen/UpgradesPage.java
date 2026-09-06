@@ -89,7 +89,7 @@ class UpgradesPage extends WorkbayPage {
             y(WELL_Y + WELL_H + 3), WELL_W, Draw.TEXT_FAINT);
 
         Draw.bar(g, x(WELL_X), y(WELL_Y + WELL_H + 16), WELL_W, 12,
-            snap.energy(), snap.energyCapacity(), Draw.AMBER);
+            snap.energy(), snap.energyCapacity(), Draw.ENERGY);
         // Compact, like every other energy figure in the mod: "0 / 100000 FE" is 74 pixels in a
         // column 96 wide before the capacity grows a digit, and the exact figure is in the tooltip.
         text(g, Draw.compact(snap.energy()) + " / " + Draw.compact(snap.energyCapacity()) + " FE",

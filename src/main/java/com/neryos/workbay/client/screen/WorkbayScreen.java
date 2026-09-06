@@ -234,6 +234,25 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         ghosts.add(new Ghost(x, y, w, h, accept));
     }
 
+    /**
+     * What the cursor is carrying, EnderIO's idiom: one click lifts a filter entry, one click puts
+     * it down. It is a <b>picture</b>, never a stack — nothing here is in an inventory, nothing is
+     * sent to the server on pick-up, and losing it on a screen close loses nothing.
+     *
+     * <p>JEI's own drag is untouched and still works. JEI owns that gesture start to finish
+     * ({@code GhostIngredientDragManager} begins on the press and ends on the release), so it
+     * cannot be turned into click-then-click from a plugin; this is the half that is ours.
+     */
+    private ItemStack carried = ItemStack.EMPTY;
+
+    public ItemStack carried() {
+        return carried;
+    }
+
+    public void carry(ItemStack stack) {
+        carried = stack.isEmpty() ? ItemStack.EMPTY : stack.copyWithCount(1);
+    }
+
     public List<Ghost> ghostTargets() {
         return ghosts;
     }
@@ -271,6 +290,16 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partial) {
         super.render(graphics, mouseX, mouseY, partial);
+        if (!carried.isEmpty()) {
+            // Centred on the cursor and drawn over everything, exactly where a vanilla carried
+            // stack goes. No tooltip while carrying: the answer to "what is this?" is under the
+            // mouse already, and a tooltip there covers the slots being aimed at.
+            graphics.pose().pushPose();
+            graphics.pose().translate(0, 0, 400);
+            graphics.renderItem(carried, mouseX - 8, mouseY - 8);
+            graphics.pose().popPose();
+            return;
+        }
         for (Hit hit : hits) {
             if (hit.tooltip() != null && hit.contains(mouseX, mouseY)) {
                 graphics.renderTooltip(font, wrapTooltip(hit.tooltip()), mouseX, mouseY);
@@ -294,6 +323,7 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
     @Override
     public void removed() {
         super.removed();
+        carried = ItemStack.EMPTY;
         com.neryos.workbay.client.LinkHighlight.clear();
     }
 
@@ -323,6 +353,13 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
                 }
             }
             back = false;
+            // A click that hit nothing, while carrying, puts the thing down. Without this the
+            // only way out of a carry is closing the screen, which is how a cursor gets stuck.
+            if (!carried.isEmpty()) {
+                carry(ItemStack.EMPTY);
+                playClick();
+                return true;
+            }
         }
         return super.mouseClicked(mouseX, mouseY, button);
     }
