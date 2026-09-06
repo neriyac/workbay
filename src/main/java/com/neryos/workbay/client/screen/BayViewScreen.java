@@ -62,7 +62,16 @@ public class BayViewScreen extends AbstractContainerScreen<BayViewMenu> {
 
         BayViewMenu.MachineLayout layout = menu.layout();
         for (int index = 0; index < menu.machineSlots(); index++) {
-            Draw.slot(g, leftPos + layout.xs()[index] - 1, topPos + layout.ys()[index] - 1, 18, 18);
+            int x = leftPos + layout.xs()[index] - 1;
+            int y = topPos + layout.ys()[index] - 1;
+            Draw.slot(g, x, y, 18, 18);
+            if (!menu.slotInfo().get(index).writable()) {
+                // A slot nothing can go into is drawn unlit, the same way a disabled button is
+                // (SPEC.md §7). It reads as unavailable at a glance instead of only on hover —
+                // a grid that looks ordinary and silently refuses every click is the same fault as
+                // a dead link reading IDLE.
+                Draw.disabled(g, x + 1, y + 1, 16, 16);
+            }
         }
         if (layout.grouped()) {
             // Item flow, left to right: what the machine will take on the left, what it will only

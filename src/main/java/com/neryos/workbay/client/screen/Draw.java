@@ -100,6 +100,14 @@ public final class Draw {
         g.fill(x + 1, y + 1, x + 2, y + h - 1, 0x33000000);
     }
 
+    /**
+     * The wash over something present but not usable. One colour, one call, so "unavailable" looks
+     * the same everywhere — SPEC.md §7's rule that a disabled thing must not read as an enabled one.
+     */
+    public static void disabled(GuiGraphics g, int x, int y, int w, int h) {
+        g.fill(x, y, x + w, y + h, 0x66101216);
+    }
+
     public static void button(GuiGraphics g, int x, int y, int w, int h, boolean hovered, boolean active) {
         button(g, x, y, w, h, hovered, active, true);
     }
