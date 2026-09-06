@@ -179,9 +179,9 @@ public class BusTests {
     }
 
     @GameTest
-    @TestHolder(description = "An Impeller multiplies what every link on the Workbay moves in one "
-        + "step, so the same link at the same rate carries four times as much.")
-    public static void anImpellerMultipliesWhatALinkMovesInOneStep(final DynamicTest test) {
+    @TestHolder(description = "An Impeller doubles what every link on the Workbay moves in a step "
+        + "and halves the wait between steps, so the same link carries four times as much.")
+    public static void anImpellerRaisesBothHalvesOfWhatALinkCarries(final DynamicTest test) {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(7, 5, 7));
 
         test.onGameTest(ExtendedGameTestHelper.class, helper -> {
@@ -207,16 +207,17 @@ public class BusTests {
             workbay.addBus(link.withMode(BusConfig.Mode.EXTRACT).withRate(1).withSpeed(10));
 
             helper.startSequence()
-                // One step at this speed, with room for the tick the link starts on.
-                .thenIdle(15)
+                // Long enough for several steps, because half of what an Impeller buys is how
+                // often a step comes round -- a window, not a single move.
+                .thenIdle(21)
                 .thenExecute(() -> {
+                    // Unfitted this link moves one a step every ten ticks: three in this window.
+                    // Fitted it moves two every five: ten. Eight is clear of both.
                     int moved = countIn(backshop, machinePos, Items.IRON_INGOT);
-                    helper.assertTrue(moved >= WorkbayRecord.Upgrades.IMPELLER_STEP,
-                        "one step moved " + moved + " iron with an Impeller fitted, which is what "
-                            + "it would have moved with none: the upgrade is not reaching the link");
-                    helper.assertTrue(moved <= 2 * WorkbayRecord.Upgrades.IMPELLER_STEP,
-                        "one step moved " + moved + " iron, far past one step's worth - the test "
-                            + "waited through more steps than it meant to");
+                    helper.assertTrue(moved >= 8,
+                        "the link carried " + moved + " iron with an Impeller fitted, which is "
+                            + "what it would have carried with none: the upgrade is not reaching "
+                            + "the link");
                 })
                 .thenExecute(() -> tearDown(helper, workbayPos))
                 .thenSucceed();

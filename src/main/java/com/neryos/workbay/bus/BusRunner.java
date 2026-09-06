@@ -69,7 +69,7 @@ public class BusRunner {
      * migrated, and would disagree with the row the moment a plate moved.
      */
     private static int rate(WorkbayRecord record, BusConfig bus) {
-        return Math.max(1, bus.rate()) * record.upgrades().throughput();
+        return Math.max(1, bus.rate()) * record.upgrades().impellerFactor();
     }
 
     private final BooleanSupplier alive;
@@ -140,7 +140,10 @@ public class BusRunner {
                 statuses.put(bus.id(), BusStatus.DISABLED);
                 continue;
             }
-            if (step % Math.max(1, bus.speed() / STEP_TICKS) != 0) {
+            // The other half of an Impeller: the same factor taken off the wait, floored at one
+            // step so the fastest a link can ever be is the wheel itself.
+            int wait = Math.max(STEP_TICKS, bus.speed() / record.upgrades().impellerFactor());
+            if (step % Math.max(1, wait / STEP_TICKS) != 0) {
                 continue;
             }
             RedstoneMode gate = record.bay(bus.bay()).redstone();

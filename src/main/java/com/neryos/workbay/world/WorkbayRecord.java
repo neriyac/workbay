@@ -223,14 +223,19 @@ public record WorkbayRecord(
         public static final Upgrades NONE = new Upgrades(0, 0, 0, 0, 0, 0, 0);
 
         /**
-         * What one Impeller multiplies a link's rate by. Four, so the ladder is 1x, 4x, 16x.
+         * What one Impeller is worth, on both halves of what a link does.
+         *
+         * <p>It doubles how much moves in a step <b>and</b> halves the wait between steps, so a
+         * level is worth four and the two-level ladder is worth sixteen. Split rather than all on
+         * the rate because a link that moves a bigger pile once every twenty ticks still looks
+         * stalled; the wait is the half a player watches.
          *
          * <p>The top of that ladder puts an item link at EnderIO's enhanced conduit and an energy
          * link just under its plain one, which is where a mod whose promise is space rather than
          * throughput (SPEC.md §0) belongs: fast enough to feed what you racked, never the reason
          * to build here.
          */
-        public static final int IMPELLER_STEP = 4;
+        public static final int IMPELLER_STEP = 2;
 
         public static final Codec<Upgrades> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.INT.optionalFieldOf("ExpansionPlates", 0).forGetter(Upgrades::expansionPlates),
@@ -265,8 +270,11 @@ public record WorkbayRecord(
             };
         }
 
-        /** What every link on this Workbay multiplies its rate by. One with no Impeller fitted. */
-        public int throughput() {
+        /**
+         * What every link on this Workbay multiplies its rate by, and divides its wait by. One
+         * with no Impeller fitted, and the same number for both halves.
+         */
+        public int impellerFactor() {
             int factor = 1;
             for (int i = 0; i < impellers; i++) {
                 factor *= IMPELLER_STEP;
