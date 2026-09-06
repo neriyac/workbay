@@ -84,9 +84,6 @@ public final class RemoteScreens {
         }
         for (Open machine : OPEN.values()) {
             if (machine.pos().equals(pos) && level != machine.bay()) {
-                org.slf4j.LoggerFactory.getLogger("WORKBAY-PROBE").info(
-                    "machineAt asked by {} for {} -> {}", level.dimension().location(), pos,
-                    machine.bay().getBlockEntity(pos));
                 return machine.bay().getBlockEntity(pos);
             }
         }
@@ -105,8 +102,6 @@ public final class RemoteScreens {
         for (Open machine : OPEN.values()) {
             if (SectionPos.blockToSectionCoord(machine.pos().getX()) == chunkX
                 && SectionPos.blockToSectionCoord(machine.pos().getZ()) == chunkZ) {
-                org.slf4j.LoggerFactory.getLogger("WORKBAY-PROBE").info(
-                    "chunkHasOpenMachine {} {} -> true", chunkX, chunkZ);
                 return true;
             }
         }

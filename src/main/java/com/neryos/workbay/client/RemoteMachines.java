@@ -37,6 +37,23 @@ public final class RemoteMachines {
             clear();
             return;
         }
+
+        LevelChunk held = chunk;
+        BlockEntity open = held == null ? null : held.getBlockEntity(pos);
+        if (open != null) {
+            // Feed the machine the open screen is already holding, rather than replacing it: the
+            // screen keeps a reference to that object, and a fresh one would leave it drawing a
+            // copy nothing updates any more.
+            //
+            // loadWithComponents, not handleUpdateTag. The latter is a mod's own *sync* path and
+            // is entitled to ignore most of a tag -- Mekanism's says so in as many words and calls
+            // only BlockEntity's loadAdditional, so a side config fed through it never arrives.
+            // This is the method a chunk load calls, which is what this copy stands in for. Public
+            // by access transformer; there is no other door.
+            open.loadWithComponents(data, level.registryAccess());
+            return;
+        }
+
         LevelChunk copy = new LevelChunk(level, new ChunkPos(pos));
         copy.setBlockState(pos, state, false);
         BlockEntity machine = BlockEntity.loadStatic(pos, state, data, level.registryAccess());
