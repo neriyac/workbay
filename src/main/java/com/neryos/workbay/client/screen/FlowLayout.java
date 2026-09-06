@@ -8,30 +8,42 @@ import java.util.List;
 /**
  * Where the flow map's boxes go and how its arrows get there. No drawing, no Minecraft.
  *
- * <p>This is the <b>layered algorithm</b> — Sugiyama, Tagawa and Toda, and the same five phases
- * Eclipse ELK, Graphviz's {@code dot} and every flow editor run: <b>break cycles, assign layers,
- * minimise crossings, place nodes, route edges</b>. It replaces a force-directed relaxation, which
- * is a method for graphs that have no direction and was the wrong tool: it left arrows lying on top
- * of arrows, because nothing in it has any idea what an arrow is.
+ * <p>The <b>layered algorithm</b> — Sugiyama, Tagawa and Toda — in the five phases Eclipse ELK and
+ * Graphviz's {@code dot} run it in: <b>break cycles, assign layers, minimise crossings, place
+ * nodes, route edges</b>. Phase five is written against ELK's own
+ * {@code OrthogonalRoutingGenerator}, which follows Sander's <i>Layout of directed hypergraphs with
+ * orthogonal hyperedges</i> (GD '03).
  *
- * <p>Two of those phases are what stop lines overlapping, and both were missing before.
- * <b>Ports</b>: several edges leaving or arriving at one box get their own point on that box's
- * side, spread along it and ordered by where the far end sits, so they neither share a pixel nor
- * cross each other on the way in. <b>Tracks</b>: the gap between two layers is a channel, every
- * vertical run in it gets its own track, and the channel widens to hold them. Long edges get the
- * standard dummy chain, so an edge crossing a layer is routed around that layer's boxes rather
- * than through them.
+ * <p>Two things in that phase were guessed at first, and both are why arrows used to sit on arrows.
+ *
+ * <p><b>A vertical run belongs to a source, not to an edge.</b> Everything leaving one box shares
+ * one vertical line and branches off it — Sander's <i>hyperedge segment</i>. A line per edge put
+ * six near-identical verticals in one channel: six things to tell apart instead of one fork to
+ * read.
+ *
+ * <p><b>Which run goes in which slot is decided by a dependency graph, not by sorting.</b> Each
+ * pair is costed both ways round: a <i>conflict</i> is two horizontals at the same height, which
+ * would overlap in the gap between the verticals; a <i>crossing</i> is a horizontal ending inside
+ * the other run's vertical span. ELK weighs a crossing sixteen times a conflict. The cheaper order
+ * becomes "A is left of B", cycles are broken, and a topological numbering turns what is left into
+ * slot numbers. A run that is already straight takes no slot at all.
  */
 final class FlowLayout {
 
     /** Every box is this tall; only the width is the caller's business. */
     static final int NODE_H = 18;
-    /** Clear air between two boxes in the same layer, and between two tracks in a channel. */
-    private static final int ROW_GAP = 8;
-    private static final int TRACK_STEP = 6;
-    private static final int CHANNEL_MIN = 26;
+    /** Clear air between two boxes in the same layer. */
+    private static final int ROW_GAP = 10;
+    /** Between two routing slots in a channel, and its margin either side. ELK's edge spacing. */
+    private static final int SPACING = 8;
     /** A dummy is a point, so a long edge crossing a layer costs a sliver rather than a row. */
     private static final int DUMMY_H = 2;
+
+    /** ELK's own weights: a crossing is sixteen times worse than a near miss. */
+    private static final int CONFLICT_PENALTY = 1;
+    private static final int CROSSING_PENALTY = 16;
+    /** Two horizontals closer than this count as overlapping. Half the spacing, as ELK has it. */
+    private static final int CONFLICT_THRESHOLD = SPACING / 2;
 
     private final int nodeW;
 
@@ -46,11 +58,42 @@ final class FlowLayout {
     final int width;
     final int height;
 
-    // Vertices are the real nodes first, then one dummy per layer a long edge crosses.
-    private final int[] layer;
     private final int[] vy;
-    private final int[] height1;
+    private final int[] size;
     private final List<List<Integer>> layers = new ArrayList<>();
+
+    /** One vertical run: everything leaving one box into one channel, and where it branches to. */
+    private static final class Run {
+        int from;
+        int start;
+        int[] ends = new int[0];
+        int slot;
+        final List<Run> before = new ArrayList<>();
+        int incoming;
+
+        boolean straight() {
+            return ends.length == 1 && ends[0] == start;
+        }
+
+        int low() {
+            int lo = start;
+            for (int e : ends) {
+                lo = Math.min(lo, e);
+            }
+            return lo;
+        }
+
+        int high() {
+            int hi = start;
+            for (int e : ends) {
+                hi = Math.max(hi, e);
+            }
+            return hi;
+        }
+    }
+
+    /** What order two runs would rather be in, and by how much. */
+    private record Want(Run left, Run right, int weight) { }
 
     /**
      * @param count how many real boxes there are
@@ -63,19 +106,23 @@ final class FlowLayout {
 
         // ---------------------------------------------------------------- 1. break the cycles
         // Two bays feeding each other is a cycle, and every later phase needs a graph without one.
-        // The standard answer is to reverse an edge rather than drop it: the layout is done on the
-        // reversed version and the arrow is drawn pointing the way it really goes.
+        // Reversed rather than dropped: the layout is done on the reversed version and the arrow is
+        // drawn pointing the way it really goes.
         boolean[] flipped = new boolean[wires.size()];
-        breakCycles(count, wires, flipped);
+        int[] state = new int[count];
+        for (int start = 0; start < count; start++) {
+            if (state[start] == 0) {
+                visit(start, wires, flipped, state);
+            }
+        }
 
         // ---------------------------------------------------------------- 2. assign the layers
-        // Longest path: a box sits one layer after everything that feeds it.
-        this.layer = new int[count];
+        int[] layer = new int[count];
         for (int pass = 0; pass < count; pass++) {
             boolean moved = false;
             for (int e = 0; e < wires.size(); e++) {
-                int from = source(wires.get(e), flipped[e]);
-                int to = target(wires.get(e), flipped[e]);
+                int from = end(wires.get(e), flipped[e], 0);
+                int to = end(wires.get(e), flipped[e], 1);
                 if (layer[to] <= layer[from]) {
                     layer[to] = layer[from] + 1;
                     moved = true;
@@ -90,12 +137,12 @@ final class FlowLayout {
             layerCount = Math.max(layerCount, l + 1);
         }
 
-        // ------------------------------------------------- the dummy chains for long edges
+        // -------------------------------------------- dummy chains, so long edges pass between
         List<int[]> chains = new ArrayList<>();
         List<Integer> dummyLayer = new ArrayList<>();
         for (int e = 0; e < wires.size(); e++) {
-            int from = source(wires.get(e), flipped[e]);
-            int to = target(wires.get(e), flipped[e]);
+            int from = end(wires.get(e), flipped[e], 0);
+            int to = end(wires.get(e), flipped[e], 1);
             List<Integer> chain = new ArrayList<>();
             chain.add(from);
             for (int l = layer[from] + 1; l < layer[to]; l++) {
@@ -111,9 +158,9 @@ final class FlowLayout {
         for (int d = 0; d < dummyLayer.size(); d++) {
             vertexLayer[count + d] = dummyLayer.get(d);
         }
-        this.height1 = new int[total];
-        Arrays.fill(height1, DUMMY_H);
-        Arrays.fill(height1, 0, count, NODE_H);
+        this.size = new int[total];
+        Arrays.fill(size, DUMMY_H);
+        Arrays.fill(size, 0, count, NODE_H);
 
         for (int l = 0; l < layerCount; l++) {
             layers.add(new ArrayList<>());
@@ -122,9 +169,6 @@ final class FlowLayout {
             layers.get(vertexLayer[v]).add(v);
         }
 
-        // ---------------------------------------------------------- 3. minimise the crossings
-        // The median heuristic, swept down and up four times and the best ordering kept. It is
-        // what dot uses, and it is the phase that decides whether the picture is readable at all.
         List<List<int[]>> segments = new ArrayList<>();
         for (int l = 0; l < layerCount; l++) {
             segments.add(new ArrayList<>());
@@ -134,6 +178,8 @@ final class FlowLayout {
                 segments.get(vertexLayer[chain[i]]).add(new int[] {chain[i], chain[i + 1]});
             }
         }
+
+        // ---------------------------------------------------------- 3. minimise the crossings
         reorder(segments, layerCount);
 
         // ------------------------------------------------------------------ 4. place the nodes
@@ -141,24 +187,19 @@ final class FlowLayout {
         place(segments, layerCount);
 
         // ------------------------------------------------------------------ 5. route the edges
-        int[] layerX = new int[layerCount];
-        int[][] ports = ports(segments, layerCount, total);
-        int[] base = new int[layerCount];
-        for (int l = 1; l < layerCount; l++) {
-            base[l] = base[l - 1] + segments.get(l - 1).size();
-        }
-        int[] channel = new int[Math.max(1, layerCount - 1)];
+        List<List<Run>> runs = new ArrayList<>();
+        int[] channel = new int[Math.max(1, layerCount)];
         for (int l = 0; l + 1 < layerCount; l++) {
-            // As wide as the number of vertical runs it has to hold, so no two share an x. A
-            // segment whose two ports are already level needs no run and no track.
-            int tracks = 0;
-            for (int i = 0; i < segments.get(l).size(); i++) {
-                if (ports[0][base[l] + i] != ports[1][base[l] + i]) {
-                    tracks++;
-                }
+            List<Run> here = build(segments.get(l));
+            slots(here);
+            int most = 0;
+            for (Run run : here) {
+                most = Math.max(most, run.straight() ? 0 : run.slot + 1);
             }
-            channel[l] = Math.max(CHANNEL_MIN, (tracks + 1) * TRACK_STEP);
+            channel[l] = (most + 1) * SPACING;
+            runs.add(here);
         }
+        int[] layerX = new int[layerCount];
         for (int l = 1; l < layerCount; l++) {
             layerX[l] = layerX[l - 1] + nodeW + channel[l - 1];
         }
@@ -166,7 +207,7 @@ final class FlowLayout {
             nodeX[v] = layerX[layer[v]];
             nodeY[v] = vy[v];
         }
-        route(chains, flipped, segments, layerX, channel, vertexLayer, ports, base);
+        draw(chains, flipped, vertexLayer, layerX, runs);
 
         int right = 0;
         int bottom = 0;
@@ -174,33 +215,14 @@ final class FlowLayout {
             right = Math.max(right, nodeX[v] + nodeW);
             bottom = Math.max(bottom, nodeY[v] + NODE_H);
         }
-        for (int[] xs : edgeXs) {
-            for (int px : xs) {
-                right = Math.max(right, px);
-            }
-        }
-        for (int[] ys : edgeYs) {
-            for (int py : ys) {
-                bottom = Math.max(bottom, py);
-            }
-        }
         this.width = Math.max(1, right);
         this.height = Math.max(1, bottom);
     }
 
     // ------------------------------------------------------------------------------- phase 1
 
-    private static void breakCycles(int count, List<int[]> wires, boolean[] flipped) {
-        int[] state = new int[count];
-        for (int start = 0; start < count; start++) {
-            if (state[start] == 0) {
-                visit(start, count, wires, flipped, state);
-            }
-        }
-    }
-
-    /** Depth-first, marking a back edge as one to reverse. Iterative would not be shorter. */
-    private static void visit(int at, int count, List<int[]> wires, boolean[] flipped, int[] state) {
+    /** Depth-first, marking a back edge as one to reverse. */
+    private static void visit(int at, List<int[]> wires, boolean[] flipped, int[] state) {
         state[at] = 1;
         for (int e = 0; e < wires.size(); e++) {
             if (flipped[e] || wires.get(e)[0] != at) {
@@ -210,22 +232,19 @@ final class FlowLayout {
             if (state[to] == 1) {
                 flipped[e] = true;
             } else if (state[to] == 0) {
-                visit(to, count, wires, flipped, state);
+                visit(to, wires, flipped, state);
             }
         }
         state[at] = 2;
     }
 
-    private static int source(int[] wire, boolean flipped) {
-        return flipped ? wire[1] : wire[0];
-    }
-
-    private static int target(int[] wire, boolean flipped) {
-        return flipped ? wire[0] : wire[1];
+    private static int end(int[] wire, boolean flipped, int which) {
+        return flipped ? wire[1 - which] : wire[which];
     }
 
     // ------------------------------------------------------------------------------- phase 3
 
+    /** The median heuristic, swept down and up, the ordering with fewest crossings kept. */
     private void reorder(List<List<int[]>> segments, int layerCount) {
         List<List<Integer>> best = copy();
         int fewest = crossings(segments, layerCount);
@@ -233,29 +252,23 @@ final class FlowLayout {
             boolean down = sweep % 2 == 0;
             for (int step = 0; step < layerCount; step++) {
                 int l = down ? step : layerCount - 1 - step;
-                int from = down ? l - 1 : l + 1;
-                if (from < 0 || from >= layerCount) {
+                if ((down && l == 0) || (!down && l == layerCount - 1)) {
                     continue;
                 }
-                double[] median = new double[layers.get(l).size()];
                 List<Integer> here = layers.get(l);
+                List<int[]> across = down ? segments.get(l - 1) : segments.get(l);
+                double[] key = new double[here.size()];
                 for (int i = 0; i < here.size(); i++) {
-                    median[i] = median(here.get(i), down ? segments.get(from) : segments.get(l),
-                        down, here, i);
+                    key[i] = median(here.get(i), across, down, i);
                 }
-                Integer[] sorted = here.toArray(new Integer[0]);
-                Double[] keys = new Double[sorted.length];
-                for (int i = 0; i < sorted.length; i++) {
-                    keys[i] = median[i];
-                }
-                Integer[] index = new Integer[sorted.length];
+                Integer[] index = new Integer[here.size()];
                 for (int i = 0; i < index.length; i++) {
                     index[i] = i;
                 }
-                Arrays.sort(index, Comparator.comparingDouble(i -> keys[i]));
+                Arrays.sort(index, Comparator.comparingDouble(i -> key[i]));
                 List<Integer> next = new ArrayList<>();
                 for (int i : index) {
-                    next.add(sorted[i]);
+                    next.add(here.get(i));
                 }
                 layers.set(l, next);
             }
@@ -277,19 +290,14 @@ final class FlowLayout {
         return out;
     }
 
-    /**
-     * The median position of a vertex's neighbours in the layer being swept from. A vertex with no
-     * neighbours there keeps where it is, which is the rule that stops the heuristic shuffling
-     * boxes it has no opinion about.
-     */
-    private double median(int vertex, List<int[]> across, boolean down, List<Integer> here,
-        int at) {
+    /** A vertex with no neighbours in the layer being swept from keeps where it is. */
+    private double median(int vertex, List<int[]> across, boolean down, int at) {
         List<Integer> seen = new ArrayList<>();
         for (int[] seg : across) {
             if (down && seg[1] == vertex) {
-                seen.add(indexIn(seg[0]));
+                seen.add(placeOf(seg[0]));
             } else if (!down && seg[0] == vertex) {
-                seen.add(indexIn(seg[1]));
+                seen.add(placeOf(seg[1]));
             }
         }
         if (seen.isEmpty()) {
@@ -300,7 +308,7 @@ final class FlowLayout {
             : (seen.get(seen.size() / 2 - 1) + seen.get(seen.size() / 2)) / 2.0;
     }
 
-    private int indexIn(int vertex) {
+    private int placeOf(int vertex) {
         for (List<Integer> l : layers) {
             int at = l.indexOf(vertex);
             if (at >= 0) {
@@ -310,18 +318,14 @@ final class FlowLayout {
         return 0;
     }
 
-    /** Every pair of segments between two layers that would cross, counted the obvious way. */
     private int crossings(List<List<int[]>> segments, int layerCount) {
         int total = 0;
         for (int l = 0; l + 1 < layerCount; l++) {
             List<int[]> here = segments.get(l);
             for (int a = 0; a < here.size(); a++) {
                 for (int b = a + 1; b < here.size(); b++) {
-                    int a0 = indexIn(here.get(a)[0]);
-                    int a1 = indexIn(here.get(a)[1]);
-                    int b0 = indexIn(here.get(b)[0]);
-                    int b1 = indexIn(here.get(b)[1]);
-                    if ((a0 - b0) * (a1 - b1) < 0) {
+                    if ((placeOf(here.get(a)[0]) - placeOf(here.get(b)[0]))
+                        * (placeOf(here.get(a)[1]) - placeOf(here.get(b)[1])) < 0) {
                         total++;
                     }
                 }
@@ -332,29 +336,25 @@ final class FlowLayout {
 
     // ------------------------------------------------------------------------------- phase 4
 
-    /**
-     * Rows first, then four passes pulling every vertex towards the middle of what it is joined to
-     * and pushing apart anything that then overlaps. Not Brandes and Koepf — that is the good
-     * version — but the same idea, and on a graph of a dozen boxes the difference does not show.
-     */
+    /** Rows, then passes pulling each vertex to the median of what it joins, then separated. */
     private void place(List<List<int[]>> segments, int layerCount) {
         for (List<Integer> here : layers) {
             int at = 0;
             for (int v : here) {
                 vy[v] = at;
-                at += height1[v] + ROW_GAP;
+                at += size[v] + ROW_GAP;
             }
         }
         for (int pass = 0; pass < 4; pass++) {
             for (int l = 0; l < layerCount; l++) {
                 for (int v : layers.get(l)) {
                     List<Integer> joined = new ArrayList<>();
-                    for (int side = 0; side < layerCount; side++) {
-                        for (int[] seg : segments.get(side)) {
+                    for (List<int[]> side : segments) {
+                        for (int[] seg : side) {
                             if (seg[0] == v) {
-                                joined.add(vy[seg[1]] + height1[seg[1]] / 2);
+                                joined.add(anchor(seg[1]));
                             } else if (seg[1] == v) {
-                                joined.add(vy[seg[0]] + height1[seg[0]] / 2);
+                                joined.add(anchor(seg[0]));
                             }
                         }
                     }
@@ -364,7 +364,7 @@ final class FlowLayout {
                     joined.sort(Comparator.naturalOrder());
                     int mid = joined.size() % 2 == 1 ? joined.get(joined.size() / 2)
                         : (joined.get(joined.size() / 2 - 1) + joined.get(joined.size() / 2)) / 2;
-                    vy[v] = mid - height1[v] / 2;
+                    vy[v] = mid - size[v] / 2;
                 }
                 spread(layers.get(l));
             }
@@ -382,136 +382,172 @@ final class FlowLayout {
         }
     }
 
-    /** Keeps a layer in its decided order and never closer than the gap. */
     private void spread(List<Integer> here) {
         for (int i = 1; i < here.size(); i++) {
-            int above = here.get(i - 1);
-            int below = here.get(i);
-            int least = vy[above] + height1[above] + ROW_GAP;
-            if (vy[below] < least) {
-                vy[below] = least;
+            int least = vy[here.get(i - 1)] + size[here.get(i - 1)] + ROW_GAP;
+            if (vy[here.get(i)] < least) {
+                vy[here.get(i)] = least;
             }
         }
+    }
+
+    /** Where an edge meets a box: the middle of its side. Everything arriving meets it there. */
+    private int anchor(int vertex) {
+        return vy[vertex] + size[vertex] / 2;
     }
 
     // ------------------------------------------------------------------------------- phase 5
 
-    /**
-     * A point per edge on each side of a box, spread down that side and ordered by where the other
-     * end of the edge sits. This is what stops three arrows arriving at one box on top of each
-     * other, and what stops the three of them crossing on the way in.
-     */
-    private int[][] ports(List<List<int[]>> segments, int layerCount, int total) {
-        int count = 0;
-        for (List<int[]> here : segments) {
-            count += here.size();
-        }
-        int[] out = new int[count];
-        int[] in = new int[count];
-        int at = 0;
-        for (int l = 0; l < layerCount; l++) {
-            List<int[]> here = segments.get(l);
-            for (int side = 0; side < 2; side++) {
-                for (int v = 0; v < total; v++) {
-                    List<Integer> mine = new ArrayList<>();
-                    for (int i = 0; i < here.size(); i++) {
-                        if (here.get(i)[side] == v) {
-                            mine.add(i);
-                        }
-                    }
-                    if (mine.isEmpty()) {
-                        continue;
-                    }
-                    int far = 1 - side;
-                    mine.sort(Comparator.comparingInt(i -> vy[here.get(i)[far]]));
-                    for (int slot = 0; slot < mine.size(); slot++) {
-                        int y = height1[v] <= DUMMY_H ? vy[v] + height1[v] / 2
-                            : vy[v] + (slot + 1) * height1[v] / (mine.size() + 1);
-                        (side == 0 ? out : in)[at + mine.get(slot)] = y;
-                    }
+    /** One run per source box in this channel, carrying every edge that leaves it. */
+    private List<Run> build(List<int[]> segments) {
+        List<Run> runs = new ArrayList<>();
+        for (int[] seg : segments) {
+            Run mine = null;
+            for (Run run : runs) {
+                if (run.from == seg[0]) {
+                    mine = run;
+                    break;
                 }
             }
-            at += here.size();
+            if (mine == null) {
+                mine = new Run();
+                mine.from = seg[0];
+                mine.start = anchor(seg[0]);
+                runs.add(mine);
+            }
+            int[] grown = Arrays.copyOf(mine.ends, mine.ends.length + 1);
+            grown[grown.length - 1] = anchor(seg[1]);
+            Arrays.sort(grown);
+            mine.ends = grown;
         }
-        return new int[][] {out, in};
+        return runs;
     }
 
     /**
-     * The polyline for every edge: out of its port, along its own track in the channel, in at the
-     * far port. A track per vertical run, so two runs in one channel never share an x — which is
-     * the other half of the overlapping-arrows fix, and the reason a channel is as wide as it is.
+     * Which slot each run gets. Every pair is costed both ways round, the cheaper order becomes a
+     * dependency, and a topological numbering turns the dependencies into slot numbers. The
+     * dependencies are taken greedily by weight so the graph cannot cycle — ELK detects cycles and
+     * reverses the weakest instead, which on a graph this size reaches the same answer with a great
+     * deal more code.
      */
-    private void route(List<int[]> chains, boolean[] flipped, List<List<int[]>> segments,
-        int[] layerX, int[] channel, int[] vertexLayer, int[][] ports, int[] base) {
-        int[][] track = new int[segments.size()][];
-        for (int l = 0; l < segments.size(); l++) {
-            List<int[]> here = segments.get(l);
-            Integer[] index = new Integer[here.size()];
-            for (int i = 0; i < index.length; i++) {
-                index[i] = i;
-            }
-            final int layerBase = base[l];
-            // Ordered by where the run starts, which is the metro-line rule: two runs in a channel
-            // that keep their entry order cannot cross inside it.
-            Arrays.sort(index, Comparator.comparingInt(i -> ports[0][layerBase + i]));
-            track[l] = new int[here.size()];
-            int next = 0;
-            for (int i : index) {
-                track[l][i] = ports[0][layerBase + i] == ports[1][layerBase + i] ? -1 : next++;
+    private static void slots(List<Run> runs) {
+        List<Want> wants = new ArrayList<>();
+        for (int a = 0; a < runs.size(); a++) {
+            for (int b = a + 1; b < runs.size(); b++) {
+                Run one = runs.get(a);
+                Run two = runs.get(b);
+                if (one.straight() || two.straight()) {
+                    continue;
+                }
+                int cost1 = cost(one, two);
+                int cost2 = cost(two, one);
+                if (cost1 < cost2) {
+                    wants.add(new Want(one, two, cost2 - cost1));
+                } else if (cost2 < cost1) {
+                    wants.add(new Want(two, one, cost1 - cost2));
+                }
             }
         }
+        wants.sort(Comparator.comparingInt(Want::weight).reversed());
+        for (Want want : wants) {
+            if (!reaches(want.right(), want.left())) {
+                want.left().before.add(want.right());
+                want.right().incoming++;
+            }
+        }
+        List<Run> ready = new ArrayList<>();
+        for (Run run : runs) {
+            if (run.incoming == 0) {
+                ready.add(run);
+            }
+        }
+        while (!ready.isEmpty()) {
+            Run run = ready.remove(0);
+            for (Run next : run.before) {
+                next.slot = Math.max(next.slot, run.slot + 1);
+                if (--next.incoming == 0) {
+                    ready.add(next);
+                }
+            }
+        }
+    }
 
+    /**
+     * What it costs to put {@code left} left of {@code right}: one per conflict — two horizontals
+     * at the same height, which would overlap in the gap between the two verticals — and sixteen
+     * per crossing, a horizontal that ends inside the other run's vertical span.
+     */
+    private static int cost(Run left, Run right) {
+        int conflicts = 0;
+        int crossings = 0;
+        for (int end : left.ends) {
+            if (Math.abs(end - right.start) < CONFLICT_THRESHOLD) {
+                conflicts++;
+            }
+            if (end >= right.low() && end <= right.high()) {
+                crossings++;
+            }
+        }
+        if (right.start >= left.low() && right.start <= left.high()) {
+            crossings++;
+        }
+        return CONFLICT_PENALTY * conflicts + CROSSING_PENALTY * crossings;
+    }
+
+    private static boolean reaches(Run from, Run to) {
+        if (from == to) {
+            return true;
+        }
+        for (Run next : from.before) {
+            if (reaches(next, to)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * The polyline for each edge: out of its box, along its source's own vertical run, in at the
+     * middle of the far box's side. An edge whose two ends are already level skips the vertical
+     * altogether — one fewer thing to follow and one fewer slot to pay for.
+     */
+    private void draw(List<int[]> chains, boolean[] flipped, int[] vertexLayer, int[] layerX,
+        List<List<Run>> runs) {
         for (int e = 0; e < chains.size(); e++) {
             int[] chain = chains.get(e);
             List<Integer> xs = new ArrayList<>();
             List<Integer> ys = new ArrayList<>();
             for (int i = 0; i + 1 < chain.length; i++) {
                 int l = vertexLayer[chain[i]];
-                List<int[]> here = segments.get(l);
-                int seg = -1;
-                for (int s = 0; s < here.size(); s++) {
-                    if (here.get(s)[0] == chain[i] && here.get(s)[1] == chain[i + 1]) {
-                        seg = s;
+                Run run = null;
+                for (Run candidate : runs.get(l)) {
+                    if (candidate.from == chain[i]) {
+                        run = candidate;
                         break;
                     }
                 }
-                int startY = ports[0][base[l] + seg];
-                int endY = ports[1][base[l] + seg];
-                int startX = layerX[l] + nodeW;
-                int endX = layerX[l + 1];
+                int startY = anchor(chain[i]);
+                int endY = anchor(chain[i + 1]);
                 if (i > 0) {
-                    // Across the dummy's own layer, so a long edge passes between the boxes there
-                    // instead of over them.
                     add(xs, ys, layerX[l], startY);
                 }
-                add(xs, ys, startX, startY);
-                if (track[l][seg] >= 0) {
-                    int slot = layerX[l] + nodeW
-                        + (track[l][seg] + 1) * channel[l] / (tracksIn(track[l]) + 1);
-                    add(xs, ys, slot, startY);
-                    add(xs, ys, slot, endY);
+                add(xs, ys, layerX[l] + nodeW, startY);
+                if (run != null && startY != endY) {
+                    int slotX = layerX[l] + nodeW + (run.slot + 1) * SPACING;
+                    add(xs, ys, slotX, startY);
+                    add(xs, ys, slotX, endY);
                 }
-                add(xs, ys, endX, endY);
+                add(xs, ys, layerX[l + 1], endY);
             }
             int[] px = xs.stream().mapToInt(Integer::intValue).toArray();
             int[] py = ys.stream().mapToInt(Integer::intValue).toArray();
             if (flipped[e]) {
-                // Laid out backwards to break a cycle, so it is drawn backwards too and the head
-                // lands where the goods actually go.
                 reverse(px);
                 reverse(py);
             }
             edgeXs.add(px);
             edgeYs.add(py);
         }
-    }
-
-    private static int tracksIn(int[] track) {
-        int most = 0;
-        for (int t : track) {
-            most = Math.max(most, t + 1);
-        }
-        return most;
     }
 
     private static void add(List<Integer> xs, List<Integer> ys, int px, int py) {
