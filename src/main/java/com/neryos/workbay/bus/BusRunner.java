@@ -60,6 +60,18 @@ public class BusRunner {
      */
     public static final int FE_PER_RATE = 1000;
 
+    /**
+     * What one move of this link is worth, Impellers included.
+     *
+     * <p>The dial on the link says how much; the Workbay's Impellers say how much that is worth.
+     * Applied here rather than baked into the stored rate so that fitting one lifts every link at
+     * once, and losing one lowers them again -- a number written into each row would have to be
+     * migrated, and would disagree with the row the moment a plate moved.
+     */
+    private static int rate(WorkbayRecord record, BusConfig bus) {
+        return Math.max(1, bus.rate()) * record.upgrades().throughput();
+    }
+
     private final BooleanSupplier alive;
     private final Map<UUID, BusEndpoint<IItemHandler>> targetItems = new HashMap<>();
     private final Map<UUID, BusEndpoint<IEnergyStorage>> targetEnergy = new HashMap<>();
@@ -233,8 +245,8 @@ public class BusRunner {
 
         return switch (bus.resource()) {
             case ITEM -> runItems(record, bus, targetLevel, target.pos(), backshop, machinePos, faces);
-            case ENERGY -> runEnergy(bus, targetLevel, target.pos(), backshop, machinePos, faces);
-            case FLUID -> runFluid(bus, targetLevel, target.pos(), backshop, machinePos, faces);
+            case ENERGY -> runEnergy(record, bus, targetLevel, target.pos(), backshop, machinePos, faces);
+            case FLUID -> runFluid(record, bus, targetLevel, target.pos(), backshop, machinePos, faces);
         };
     }
 
@@ -278,7 +290,7 @@ public class BusRunner {
             return anyHandler ? BusStatus.IDLE
                 : insert ? BusStatus.MACHINE_NO_PORT : BusStatus.TARGET_NO_PORT;
         }
-        int budget = bus.rate();
+        int budget = rate(record, bus);
         IItemHandler to = sink.resolve(h -> BusTransfer.moveItems(from, h, budget, allowed, true) > 0,
             sinkFaces);
         if (to == null) {
@@ -336,7 +348,7 @@ public class BusRunner {
         return stack -> stack.is(wanted);
     }
 
-    private BusStatus runEnergy(BusConfig bus, ServerLevel targetLevel, BlockPos targetPos,
+    private BusStatus runEnergy(WorkbayRecord record, BusConfig bus, ServerLevel targetLevel, BlockPos targetPos,
         ServerLevel backshop, BlockPos machinePos, java.util.Set<Direction> faces) {
         BusEndpoint<IEnergyStorage> targetEnd = targetEnergy.computeIfAbsent(bus.id(), id ->
             new BusEndpoint<>(Capabilities.EnergyStorage.BLOCK, targetLevel, targetPos, alive,
@@ -363,7 +375,7 @@ public class BusRunner {
         // This is the same fault as trusting `isItemValid` in Bay View, at the other end of the
         // mod, and it is why SPEC.md §9 says to simulate on bind. Measured: pushing FE through a
         // link into a racked Basic Energy Cube moved zero until this line changed.
-        int budget = Math.max(1, bus.rate() * FE_PER_RATE);
+        int budget = Math.max(1, rate(record, bus) * FE_PER_RATE);
         IEnergyStorage to = sink.resolve(store -> store.receiveEnergy(budget, true) > 0, sinkFaces);
         if (to == null) {
             // A destination that is merely full is resting, not unreachable, so the two are still
@@ -393,7 +405,7 @@ public class BusRunner {
      * <p>No skim and no filter. The Assay converts goods, and the link's filter is a ghost
      * <em>item</em>; SPEC.md §5's filter items are where a fluid filter would go.
      */
-    private BusStatus runFluid(BusConfig bus, ServerLevel targetLevel, BlockPos targetPos,
+    private BusStatus runFluid(WorkbayRecord record, BusConfig bus, ServerLevel targetLevel, BlockPos targetPos,
         ServerLevel backshop, BlockPos machinePos, java.util.Set<Direction> faces) {
         BusEndpoint<IFluidHandler> targetEnd = targetFluids.computeIfAbsent(bus.id(), id ->
             new BusEndpoint<>(Capabilities.FluidHandler.BLOCK, targetLevel, targetPos, alive,
@@ -411,7 +423,7 @@ public class BusRunner {
         java.util.Set<Direction> sourceFaces = insert ? faces : EVERY_FACE;
         java.util.Set<Direction> sinkFaces = insert ? EVERY_FACE : faces;
 
-        int budget = Math.max(1, bus.rate() * MB_PER_RATE);
+        int budget = Math.max(1, rate(record, bus) * MB_PER_RATE);
         IFluidHandler from = source.resolve(
             h -> !h.drain(budget, IFluidHandler.FluidAction.SIMULATE).isEmpty(), sourceFaces);
         if (from == null) {

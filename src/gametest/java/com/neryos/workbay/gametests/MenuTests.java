@@ -703,7 +703,7 @@ public class MenuTests {
             // Three bays, so the target-bay ring has a value on both sides of the hole. One plate,
             // because the base Workbay already grants two (WorkbayRecord.BASE_BAYS).
             registry.put(workbay.record().orElseThrow()
-                .withUpgrades(new WorkbayRecord.Upgrades(1, 0, 0, 0, 0, 0)));
+                .withUpgrades(new WorkbayRecord.Upgrades(1, 0, 0, 0, 0, 0, 0)));
             WorkbayMenu menu = menuFor(workbay, player);
 
             // The redstone ring: forward one step off ALWAYS, then back past it to the far end.

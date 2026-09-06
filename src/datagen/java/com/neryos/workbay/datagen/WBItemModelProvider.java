@@ -24,6 +24,7 @@ public class WBItemModelProvider extends ItemModelProvider {
         flatItem(WBItems.EXPANSION_PLATE.getId().getPath(), "iron_nugget");
         flatItem(WBItems.RESONATOR.getId().getPath(), "echo_shard");
         flatItem(WBItems.MULTICHANNEL.getId().getPath(), "prismarine_crystals");
+        flatItem(WBItems.IMPELLER.getId().getPath(), "breeze_rod");
         blockItem(WBBlocks.CONNECTOR.getId().getPath());
         blockItem(WBBlocks.ASSAY.getId().getPath());
     }

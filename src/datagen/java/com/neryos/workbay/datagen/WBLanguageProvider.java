@@ -30,6 +30,7 @@ public class WBLanguageProvider extends LanguageProvider {
         addItem(WBItems.EXPANSION_PLATE, "Expansion Plate");
         addItem(WBItems.RESONATOR, "Resonator");
         addItem(WBItems.MULTICHANNEL, "Multichannel Upgrade");
+        addItem(WBItems.IMPELLER, "Impeller");
 
         // Chat, one-shot. SPEC.md §6 and §14's network model: a Workbay belongs to the player who
         // placed it, not to the specific item, so there is no code to lose.

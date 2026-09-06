@@ -32,7 +32,17 @@ public enum WorkbayUpgrade implements StringRepresentable {
         () -> WorkbayConfig.SERVER.maxBaysPerWorkbay.get() - WorkbayRecord.BASE_BAYS,
         2, 6, () -> WBItems.EXPANSION_PLATE.get()),
     RESONATOR("resonator", () -> 1, 24, 0, () -> WBItems.RESONATOR.get()),
-    MULTICHANNEL("multichannel", () -> 1, 24, 0, () -> WBItems.MULTICHANNEL.get());
+    MULTICHANNEL("multichannel", () -> 1, 24, 0, () -> WBItems.MULTICHANNEL.get()),
+    /**
+     * Throughput, and the only upgrade that changes a number every link already has.
+     *
+     * <p>Two, because the third would be arguing about somebody else's mod: at two the ladder tops
+     * out level with EnderIO's enhanced item conduit and just under its plain energy one, and a
+     * mod that sells space rather than TPS (SPEC.md §0) has no business beating a cable mod at
+     * cables. The rate a link is born with is deliberately modest -- an unupgraded link feeds a
+     * furnace and starves a Mekanism machine, which is the shape of the ladder.
+     */
+    IMPELLER("impeller", () -> 2, 12, 12, () -> WBItems.IMPELLER.get());
 
     private final String name;
     private final IntSupplier max;

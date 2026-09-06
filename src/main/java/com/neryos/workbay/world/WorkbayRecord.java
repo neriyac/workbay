@@ -219,8 +219,18 @@ public record WorkbayRecord(
      * carried in v1 so that v2 adds behaviour rather than a migration.
      */
     public record Upgrades(int expansionPlates, int resonators, int anchors, int annexPlates,
-        int roomTier, int multichannel) {
-        public static final Upgrades NONE = new Upgrades(0, 0, 0, 0, 0, 0);
+        int roomTier, int multichannel, int impellers) {
+        public static final Upgrades NONE = new Upgrades(0, 0, 0, 0, 0, 0, 0);
+
+        /**
+         * What one Impeller multiplies a link's rate by. Four, so the ladder is 1x, 4x, 16x.
+         *
+         * <p>The top of that ladder puts an item link at EnderIO's enhanced conduit and an energy
+         * link just under its plain one, which is where a mod whose promise is space rather than
+         * throughput (SPEC.md §0) belongs: fast enough to feed what you racked, never the reason
+         * to build here.
+         */
+        public static final int IMPELLER_STEP = 4;
 
         public static final Codec<Upgrades> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.INT.optionalFieldOf("ExpansionPlates", 0).forGetter(Upgrades::expansionPlates),
@@ -228,18 +238,21 @@ public record WorkbayRecord(
             Codec.INT.optionalFieldOf("Anchors", 0).forGetter(Upgrades::anchors),
             Codec.INT.optionalFieldOf("AnnexPlates", 0).forGetter(Upgrades::annexPlates),
             Codec.INT.optionalFieldOf("RoomTier", 0).forGetter(Upgrades::roomTier),
-            Codec.INT.optionalFieldOf("Multichannel", 0).forGetter(Upgrades::multichannel)
+            Codec.INT.optionalFieldOf("Multichannel", 0).forGetter(Upgrades::multichannel),
+            Codec.INT.optionalFieldOf("Impellers", 0).forGetter(Upgrades::impellers)
         ).apply(i, Upgrades::new));
 
         /** One more of the named upgrade. Upgrades are consumed on install (SPEC.md §1). */
         public Upgrades plus(com.neryos.workbay.content.workbay.WorkbayUpgrade upgrade) {
             return switch (upgrade) {
                 case EXPANSION_PLATE -> new Upgrades(expansionPlates + 1, resonators, anchors,
-                    annexPlates, roomTier, multichannel);
+                    annexPlates, roomTier, multichannel, impellers);
                 case RESONATOR -> new Upgrades(expansionPlates, resonators + 1, anchors,
-                    annexPlates, roomTier, multichannel);
+                    annexPlates, roomTier, multichannel, impellers);
                 case MULTICHANNEL -> new Upgrades(expansionPlates, resonators, anchors,
-                    annexPlates, roomTier, multichannel + 1);
+                    annexPlates, roomTier, multichannel + 1, impellers);
+                case IMPELLER -> new Upgrades(expansionPlates, resonators, anchors,
+                    annexPlates, roomTier, multichannel, impellers + 1);
             };
         }
 
@@ -248,7 +261,17 @@ public record WorkbayRecord(
                 case EXPANSION_PLATE -> expansionPlates;
                 case RESONATOR -> resonators;
                 case MULTICHANNEL -> multichannel;
+                case IMPELLER -> impellers;
             };
+        }
+
+        /** What every link on this Workbay multiplies its rate by. One with no Impeller fitted. */
+        public int throughput() {
+            int factor = 1;
+            for (int i = 0; i < impellers; i++) {
+                factor *= IMPELLER_STEP;
+            }
+            return factor;
         }
 
         public boolean anchored() {

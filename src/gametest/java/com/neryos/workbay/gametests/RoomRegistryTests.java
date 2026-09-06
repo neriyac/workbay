@@ -114,7 +114,7 @@ public class RoomRegistryTests {
             before.create(BOB, "Bob", random);
 
             alice = alice
-                .withUpgrades(new WorkbayRecord.Upgrades(3, 1, 1, 2, 17, 1))
+                .withUpgrades(new WorkbayRecord.Upgrades(3, 1, 1, 2, 17, 1, 0))
                 .withLocked(true)
                 .withLastKnownPos(GlobalPos.of(WorkbayDimensions.BACKSHOP, new BlockPos(12, 34, -56)))
                 .withBays(List.of(

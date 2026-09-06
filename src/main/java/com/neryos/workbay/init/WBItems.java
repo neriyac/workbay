@@ -31,6 +31,9 @@ public class WBItems {
     public static final DeferredItem<Item> MULTICHANNEL =
         ITEMS.registerSimpleItem("multichannel", new Item.Properties());
 
+    public static final DeferredItem<Item> IMPELLER =
+        ITEMS.registerSimpleItem("impeller", new Item.Properties());
+
     public static void register(IEventBus bus) {
         ITEMS.register(bus);
     }

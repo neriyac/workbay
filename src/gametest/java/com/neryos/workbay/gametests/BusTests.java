@@ -178,6 +178,51 @@ public class BusTests {
         return out.toString();
     }
 
+    @GameTest
+    @TestHolder(description = "An Impeller multiplies what every link on the Workbay moves in one "
+        + "step, so the same link at the same rate carries four times as much.")
+    public static void anImpellerMultipliesWhatALinkMovesInOneStep(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(7, 5, 7));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos source = helper.absolutePos(new BlockPos(5, 1, 0));
+
+            level.setBlock(source, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            if (level.getBlockEntity(source) instanceof Container chest) {
+                chest.setItem(0, new ItemStack(Items.IRON_INGOT, 64));
+            }
+
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.CHEST));
+            WorkbayRecord record = workbay.record().orElseThrow();
+            RoomRegistry.get(level.getServer()).put(record.withUpgrades(
+                new WorkbayRecord.Upgrades(0, 0, 0, 0, 0, 0, 1)));
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+
+            // Rate one, so what arrives is the multiplier and nothing else.
+            BusConfig link = connect(helper, workbay, source.above(), Direction.DOWN, player);
+            workbay.addBus(link.withMode(BusConfig.Mode.EXTRACT).withRate(1).withSpeed(10));
+
+            helper.startSequence()
+                // One step at this speed, with room for the tick the link starts on.
+                .thenIdle(15)
+                .thenExecute(() -> {
+                    int moved = countIn(backshop, machinePos, Items.IRON_INGOT);
+                    helper.assertTrue(moved >= WorkbayRecord.Upgrades.IMPELLER_STEP,
+                        "one step moved " + moved + " iron with an Impeller fitted, which is what "
+                            + "it would have moved with none: the upgrade is not reaching the link");
+                    helper.assertTrue(moved <= 2 * WorkbayRecord.Upgrades.IMPELLER_STEP,
+                        "one step moved " + moved + " iron, far past one step's worth - the test "
+                            + "waited through more steps than it meant to");
+                })
+                .thenExecute(() -> tearDown(helper, workbayPos))
+                .thenSucceed();
+        });
+    }
+
     /** What a hosted machine is actually holding, read the way a link reads it. */
     private static String inside(ServerLevel backshop, BlockPos machinePos) {
         IItemHandler handler = backshop.getCapability(Capabilities.ItemHandler.BLOCK, machinePos, null);
@@ -856,7 +901,7 @@ public class BusTests {
             WorkbayRecord record = workbay.record().orElseThrow();
             // A second bay to link to. Racking directly, the way setUp racks bay 0, rather than
             // going through an Expansion Plate item this test does not need to own.
-            registry.put(record.withUpgrades(new WorkbayRecord.Upgrades(1, 0, 0, 0, 0, 0)));
+            registry.put(record.withUpgrades(new WorkbayRecord.Upgrades(1, 0, 0, 0, 0, 0, 0)));
             record = workbay.record().orElseThrow();
             ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
             BayHosting.rack(backshop, record.bayColumn(), 1, new ItemStack(Blocks.CHEST), player,
@@ -927,7 +972,7 @@ public class BusTests {
             WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.CHEST));
             RoomRegistry registry = RoomRegistry.get(level.getServer());
             WorkbayRecord record = workbay.record().orElseThrow();
-            registry.put(record.withUpgrades(new WorkbayRecord.Upgrades(1, 0, 0, 0, 0, 0)));
+            registry.put(record.withUpgrades(new WorkbayRecord.Upgrades(1, 0, 0, 0, 0, 0, 0)));
             record = workbay.record().orElseThrow();
 
             ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
@@ -997,7 +1042,7 @@ public class BusTests {
             WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.CHEST));
             // Three bays, so retargeting has somewhere else to go than straight back.
             RoomRegistry.get(level.getServer()).put(workbay.record().orElseThrow()
-                .withUpgrades(new WorkbayRecord.Upgrades(2, 0, 0, 0, 0, 0)));
+                .withUpgrades(new WorkbayRecord.Upgrades(2, 0, 0, 0, 0, 0, 0)));
 
             player.moveTo(workbayPos.getX() + 0.5, workbayPos.getY(), workbayPos.getZ() + 0.5);
             WorkbayMenu menu = new WorkbayMenu(1, player.getInventory(), workbay,

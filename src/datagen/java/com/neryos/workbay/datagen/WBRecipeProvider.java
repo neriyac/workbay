@@ -90,6 +90,7 @@ public class WBRecipeProvider extends RecipeProvider {
         upgrade(output, WBItems.EXPANSION_PLATE.get(), Items.IRON_INGOT);
         upgrade(output, WBItems.RESONATOR.get(), Items.ENDER_EYE);
         upgrade(output, WBItems.MULTICHANNEL.get(), Items.AMETHYST_SHARD);
+        upgrade(output, WBItems.IMPELLER.get(), Items.BREEZE_ROD);
     }
 
     private void upgrade(RecipeOutput output, net.minecraft.world.item.Item result,

@@ -230,6 +230,7 @@
   "gui.workbay.upgrades.unaffordable": "You have %s Levy and this one costs %s. Raise the skim, or move more goods through your links.",
   "item.workbay.expansion_plate": "Expansion Plate",
   "item.workbay.housing": "Housing",
+  "item.workbay.impeller": "Impeller",
   "item.workbay.multichannel": "Multichannel Upgrade",
   "item.workbay.resonator": "Resonator",
   "item.workbay.shopsteel": "Shopsteel",
