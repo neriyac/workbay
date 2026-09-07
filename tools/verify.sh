@@ -13,13 +13,14 @@ fast=0
 [ "${1:-}" = "--fast" ] && fast=1
 
 mkdir -p build
-log="build/verify.log"
 fails=""
 
 # Quiet on success, full output on failure. Gradle's -q does not silence the game
 # itself, so a run's output goes to a file and is shown only when it matters.
 step() {
   name="$1"; shift
+  # One log per step: a shared file means the next step erases the failing one's output.
+  log="build/verify-${name// /-}.log"
   printf '%-16s ' "$name"
   if "$@" > "$log" 2>&1; then
     printf 'PASS\n'
@@ -51,5 +52,5 @@ if [ -n "$fails" ]; then
   echo "FAILED:$fails"
   exit 1
 fi
-rm -f "$log"
+rm -f build/verify-*.log
 echo "all checks passed"

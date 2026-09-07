@@ -189,7 +189,9 @@ function Aim([int]$gx, [int]$gy) {
 }
 
 # The game's own F2, so the capture is the game and never the desktop.
-$script:Shots = "C:\Users\Neryos\Desktop\Coding\CodingWithAI\Minecraft Mods\Clean Envitoment\run\screenshots"
+# Override with $env:MC_SHOTS to drive a client that is not runClient -- a plain launcher
+# instance keeps its screenshots in its own game directory.
+$script:Shots = if ($env:MC_SHOTS) { $env:MC_SHOTS } else { "C:\Users\Neryos\Desktop\Coding\CodingWithAI\Minecraft Mods\Clean Envitoment\run\screenshots" }
 
 function Shot {
   Assert-MC | Out-Null
