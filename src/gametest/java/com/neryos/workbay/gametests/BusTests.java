@@ -251,13 +251,23 @@ public class BusTests {
      * blockstate variants, and was <b>never written by anything</b>: every Workbay in every world
      * was {@code idle} forever.
      *
-     * <p>Two Workbays, so both readings are asserted against each other in one run rather than one
-     * of them being asserted against a default that happens to match. Breaking
-     * {@code refreshLitState} to write one constant turns exactly one of the two red whatever the
-     * constant is.
+     * <p><b>One Workbay, read twice.</b> This used to place two and assert that they differed, and
+     * that is a distinction the mod does not make: links live on the {@link WorkbayRecord}, a second
+     * Workbay placed by the same player joins the same record (§14), and every Workbay on a record
+     * ticks <em>every</em> bus on it. Both blocks therefore always read the same thing. The old test
+     * passed only on the single tick the shared bay ran dry — one block's runner had already
+     * re-read the dead link as IDLE while the other still held a stale problem — which is why it
+     * went red two runs in four. OPEN_ISSUES #39 is the behaviour it was accidentally documenting.
+     *
+     * <p>The "one constant" guard survives the change: a {@code refreshLitState} that always writes
+     * RUNNING hangs on the second wait, one that always writes STUCK or IDLE hangs on the first.
+     *
+     * <p>Nothing here waits on a quantity running out. The source holds three stacks, which is more
+     * iron than this test's whole timeout can move, and the dead link is an <b>EXTRACT</b> — it
+     * reads its unreachable target first and so reports the same thing whatever the bay holds.
      */
     @GameTest(timeoutTicks = 900)
-    @TestHolder(description = "A Workbay whose link is moving reads running; one whose link cannot reach reads stuck.")
+    @TestHolder(description = "A Workbay reads running while a link moves, and stuck once one cannot reach.")
     public static void theBlockSaysRunningOrStuckWithoutBeingOpened(final DynamicTest test) {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(7, 5, 7));
 
@@ -266,8 +276,7 @@ public class BusTests {
             GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
             ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
 
-            BlockPos workingPos = helper.absolutePos(new BlockPos(0, 1, 0));
-            BlockPos stuckPos = helper.absolutePos(new BlockPos(4, 1, 0));
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
             BlockPos chestPos = helper.absolutePos(new BlockPos(0, 1, 4));
             // A block with no item capability on any face. The Connector still attaches to it, so
             // the link exists and reports TARGET_NO_PORT -- the live case a player hits by pairing
@@ -277,35 +286,42 @@ public class BusTests {
             level.setBlock(chestPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
             level.setBlock(deadPos, Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
 
-            WorkbayBlockEntity working = setUp(helper, workingPos, player, new ItemStack(Blocks.CHEST));
-            WorkbayBlockEntity stuck = setUp(helper, stuckPos, player, new ItemStack(Blocks.CHEST));
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.CHEST));
 
-            BlockPos sourcePos = BayGeometry.machinePos(working.record().orElseThrow().bayColumn(), 0);
+            BlockPos sourcePos = BayGeometry.machinePos(workbay.record().orElseThrow().bayColumn(), 0);
             if (!(backshop.getBlockEntity(sourcePos) instanceof Container hosted)) {
                 helper.fail("the bay does not hold a container after racking a chest");
                 return;
             }
-            // Enough iron that the link is still moving when the assertion runs: a link that has
-            // finished reports IDLE, and this test would then be measuring the hold rather than
-            // the reading.
+            // Three stacks at one item per five ticks is 960 ticks of iron against a 900-tick
+            // timeout, so the link cannot finish inside this test and RUNNING cannot lapse into
+            // IDLE underneath an assertion. The old single stack ran out after 320.
             hosted.setItem(0, new ItemStack(Items.IRON_INGOT, 64));
+            hosted.setItem(1, new ItemStack(Items.IRON_INGOT, 64));
+            hosted.setItem(2, new ItemStack(Items.IRON_INGOT, 64));
 
-            working.addBus(connect(helper, working, chestPos.above(), Direction.DOWN, player)
+            workbay.addBus(connect(helper, workbay, chestPos.above(), Direction.DOWN, player)
                 .withRate(1).withSpeed(5));
-            stuck.addBus(connect(helper, stuck, deadPos.above(), Direction.DOWN, player)
-                .withRate(1).withSpeed(5));
+
+            boolean[] sawRunning = {false};
 
             helper.startSequence()
                 .thenWaitUntil(() -> {
-                    WorkbayState lit = level.getBlockState(workingPos).getValue(WorkbayBlock.STATE);
+                    WorkbayState lit = level.getBlockState(workbayPos).getValue(WorkbayBlock.STATE);
                     if (lit != WorkbayState.RUNNING) {
                         throw new GameTestAssertException("a Workbay whose link is moving iron "
                             + "still reads " + lit.getSerializedName() + ". Nothing writes "
                             + "WorkbayBlock.STATE, so the block cannot say anything across a room.");
                     }
+                    sawRunning[0] = true;
                 })
+                // Only now, so the two readings cannot overlap: while this link exists the block
+                // has a problem to report and RUNNING can never be seen again.
+                .thenExecute(() -> workbay.addBus(
+                    connect(helper, workbay, deadPos.above(), Direction.DOWN, player)
+                        .withMode(BusConfig.Mode.EXTRACT).withRate(1).withSpeed(5)))
                 .thenWaitUntil(() -> {
-                    WorkbayState lit = level.getBlockState(stuckPos).getValue(WorkbayBlock.STATE);
+                    WorkbayState lit = level.getBlockState(workbayPos).getValue(WorkbayBlock.STATE);
                     if (lit != WorkbayState.STUCK) {
                         throw new GameTestAssertException("a Workbay whose link cannot reach its "
                             + "target reads " + lit.getSerializedName() + ", not stuck");
@@ -314,15 +330,13 @@ public class BusTests {
                 .thenExecute(() -> {
                     // The pair, together: a driver that wrote one constant would pass one of the
                     // two waits above and hang on the other, and this says which reading is which.
+                    helper.assertTrue(sawRunning[0],
+                        "the Workbay read running while its link was moving iron");
                     helper.assertValueEqual(
-                        level.getBlockState(workingPos).getValue(WorkbayBlock.STATE),
-                        WorkbayState.RUNNING, "the lit state of the Workbay that is moving items");
-                    helper.assertValueEqual(
-                        level.getBlockState(stuckPos).getValue(WorkbayBlock.STATE),
+                        level.getBlockState(workbayPos).getValue(WorkbayBlock.STATE),
                         WorkbayState.STUCK, "the lit state of the Workbay that cannot reach");
                 })
-                .thenExecute(() -> tearDown(helper, workingPos))
-                .thenExecute(() -> tearDown(helper, stuckPos))
+                .thenExecute(() -> tearDown(helper, workbayPos))
                 .thenSucceed();
         });
     }

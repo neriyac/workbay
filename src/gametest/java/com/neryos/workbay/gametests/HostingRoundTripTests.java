@@ -152,16 +152,24 @@ public class HostingRoundTripTests {
      *
      * <p>The wrong order is run too. Without that, a change that stopped spills happening for some
      * unrelated reason would leave this test green and meaningless.
+     *
+     * <p><b>The two chests are eight blocks apart and each box reaches 1.5.</b> They used to be four
+     * apart inside a 5x5x5 template with boxes inflated by <b>3</b>, which overlap across four blocks
+     * of x and z — so a drop from the wrongly-ordered chest that drifted a little counted as a spill
+     * from the rightly-ordered one, and the test went red saying {@code Block#onRemove} was dropping
+     * contents. Rare, and rare is the worst kind: it made every future red read as "probably that
+     * one again". The boxes no longer touch, so nothing either chest drops can be attributed to the
+     * other whatever the random offset and motion of the drop happen to be.
      */
     @GameTest(timeoutTicks = 600)
     @TestHolder(description = "Removing a container's block entity before the setBlock is what stops its contents spilling.")
     public static void extractOrderMustRemoveTheBlockEntityFirst(final DynamicTest test) {
-        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(9, 5, 9));
 
         test.onGameTest(ExtendedGameTestHelper.class, helper -> {
             ServerLevel level = helper.getLevel();
             BlockPos right = helper.absolutePos(new BlockPos(0, 3, 0));
-            BlockPos wrong = helper.absolutePos(new BlockPos(4, 3, 4));
+            BlockPos wrong = helper.absolutePos(new BlockPos(8, 3, 8));
 
             fillChest(level, right);
             // SPEC.md §10: block entity first, then the block.
@@ -178,7 +186,7 @@ public class HostingRoundTripTests {
                 .thenExecute(() -> {
                     int spilledByWrongOrder = level.getEntitiesOfClass(
                         net.minecraft.world.entity.item.ItemEntity.class,
-                        new AABB(wrong).inflate(3.0)).size();
+                        new AABB(wrong).inflate(1.5)).size();
                     if (spilledByWrongOrder == 0) {
                         helper.fail("the wrong order spilled nothing either, so this test cannot "
                             + "detect a spill and proves nothing about SPEC.md §10 step 3");
@@ -186,7 +194,7 @@ public class HostingRoundTripTests {
                     }
                     int spilledByRightOrder = level.getEntitiesOfClass(
                         net.minecraft.world.entity.item.ItemEntity.class,
-                        new AABB(right).inflate(3.0)).size();
+                        new AABB(right).inflate(1.5)).size();
                     if (spilledByRightOrder != 0) {
                         helper.fail("removing the block entity first still spilled "
                             + spilledByRightOrder + " stacks, so Block#onRemove is dropping contents "

@@ -33,7 +33,15 @@ class FlowPage extends WorkbayPage {
 
     /** The panel is one size again. What used to grow is now the view onto something bigger. */
     private static final int WIDTH = 320;
-    private static final int CANVAS_H = 190;
+    /** What the canvas gets when the window has room for it. */
+    private static final int CANVAS_MAX = 190;
+    /**
+     * And what it gets when the window has not. Minecraft only ever guarantees a 240-tall scaled
+     * canvas, and at GUI scale 3 and 4 a great many players have less: 190 + {@link #CHROME} is 288,
+     * so the title ran off the top and the legend off the bottom on every window shorter than that.
+     * OPEN_ISSUES #37, and the reason the bays page has taken its height from the window since §4.
+     */
+    private static final int CANVAS_MIN = 110;
 
     private static final int MARGIN = 12;
     /** Room between two columns, which is all an arrow gets to say which way it points. */
@@ -53,6 +61,12 @@ class FlowPage extends WorkbayPage {
     private final List<Node> nodes = new ArrayList<>();
     private final List<Edge> edges = new ArrayList<>();
 
+    /** Header, the gap under the canvas, three legend rows, and the bottom margin. */
+    private static final int CHROME = TOP_Y + 8 + 3 * 12 + 8;
+
+    /** The canvas, fitted to the window rather than written down. See {@link #CANVAS_MIN}. */
+    private final int canvasH;
+
     private final int nodeW;
     private final int graphW;
     private final int graphH;
@@ -65,6 +79,8 @@ class FlowPage extends WorkbayPage {
 
     FlowPage(WorkbayScreen screen) {
         super(screen);
+        // Eight pixels of air outside the panel, the same margin the bays page leaves.
+        this.canvasH = Math.clamp(screen.availableHeight() - 8 - CHROME, CANVAS_MIN, CANVAS_MAX);
         WorkbaySnapshot snap = screen.snapshot();
 
         // ------------------------------------------------------------------ what is on the map
@@ -141,14 +157,14 @@ class FlowPage extends WorkbayPage {
         // Eight pixels of air inside the frame, because a fit that touches the border reads as a
         // graph that has been cut off.
         this.zoom = Math.clamp(Math.min((WIDTH - 2 * MARGIN - 8) / (float) Math.max(1, graphW),
-            (CANVAS_H - 8) / (float) Math.max(1, graphH)), MIN_ZOOM, 1.0F);
+            (canvasH - 8) / (float) Math.max(1, graphH)), MIN_ZOOM, 1.0F);
         centre();
     }
 
     /** Puts the whole graph in the middle of the view at the current zoom. */
     private void centre() {
         panX = ((WIDTH - 2 * MARGIN) / zoom - graphW) / 2;
-        panY = (CANVAS_H / zoom - graphH) / 2;
+        panY = (canvasH / zoom - graphH) / 2;
     }
 
     private static final float MIN_ZOOM = 0.35F;
@@ -161,8 +177,7 @@ class FlowPage extends WorkbayPage {
 
     @Override
     int height() {
-        // Canvas, then three legend rows, then the same bottom margin the top gets.
-        return TOP_Y + CANVAS_H + 8 + 3 * 12 + 8;
+        return canvasH + CHROME;
     }
 
     private int viewLeft() {
@@ -188,14 +203,14 @@ class FlowPage extends WorkbayPage {
 
     private boolean inside(double mouseX, double mouseY) {
         return mouseX >= viewLeft() && mouseX < viewLeft() + viewW()
-            && mouseY >= viewTop() && mouseY < viewTop() + CANVAS_H;
+            && mouseY >= viewTop() && mouseY < viewTop() + canvasH;
     }
 
     @Override
     void render(GuiGraphics g, int mouseX, int mouseY) {
         header(g, mouseX, mouseY, "FLOW");
-        Draw.well(g, viewLeft(), viewTop(), viewW(), CANVAS_H);
-        screen.hit(viewLeft(), viewTop(), viewW(), CANVAS_H, () -> { },
+        Draw.well(g, viewLeft(), viewTop(), viewW(), canvasH);
+        screen.hit(viewLeft(), viewTop(), viewW(), canvasH, () -> { },
             WorkbayScreen.gui("flow.canvas"), WorkbayScreen.gui("flow.canvas.tip"));
         if (nodes.isEmpty()) {
             text(g, WorkbayScreen.gui("flow.empty"), viewLeft() + 6, viewTop() + 8, viewW() - 12,
@@ -207,7 +222,7 @@ class FlowPage extends WorkbayPage {
         // Clipped to the well, so a flow bigger than the view is cut off at its edge instead of
         // drawn over the legend and out across the world behind the screen.
         g.enableScissor(viewLeft() + 1, viewTop() + 1, viewLeft() + viewW() - 1,
-            viewTop() + CANVAS_H - 1);
+            viewTop() + canvasH - 1);
         g.pose().pushPose();
         g.pose().translate(viewLeft(), viewTop(), 0);
         g.pose().scale(zoom, zoom, 1.0F);
@@ -229,7 +244,7 @@ class FlowPage extends WorkbayPage {
             int sw = Math.round(nodeW * zoom);
             int sh = Math.round(NODE_H * zoom);
             if (sx + sw > viewLeft() && sx < viewLeft() + viewW()
-                && sy + sh > viewTop() && sy < viewTop() + CANVAS_H) {
+                && sy + sh > viewTop() && sy < viewTop() + canvasH) {
                 screen.hit(sx, sy, sw, sh, () -> { }, node.label());
             }
         }
@@ -272,7 +287,7 @@ class FlowPage extends WorkbayPage {
         // Never so far that the graph leaves the window entirely: a canvas you can lose is one a
         // player has to close and reopen to get back.
         panX = Math.clamp(panX, -graphW + 24 / zoom, viewW() / zoom - 24 / zoom);
-        panY = Math.clamp(panY, -graphH + 12 / zoom, CANVAS_H / zoom - 12 / zoom);
+        panY = Math.clamp(panY, -graphH + 12 / zoom, canvasH / zoom - 12 / zoom);
         return true;
     }
 
@@ -417,7 +432,7 @@ class FlowPage extends WorkbayPage {
      * a grey line with nothing saying what grey is reads as a line the screen forgot to finish.
      */
     private void legend(GuiGraphics g) {
-        int py = y(TOP_Y + CANVAS_H + 8);
+        int py = y(TOP_Y + canvasH + 8);
         int right = WIDTH / 2 + 4;
         int leftRoom = right - MARGIN - 20 - 6;
         int rightRoom = WIDTH - right - 20 - MARGIN;

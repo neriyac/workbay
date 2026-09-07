@@ -61,8 +61,29 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
      */
     private boolean back;
 
+    /**
+     * The last thing the server said on the action bar while this screen was open, and when.
+     * OPEN_ISSUES #38: the HUD draws the action bar before the screen, so the panel covers every
+     * refusal the panel itself caused. Drawn inside the panel instead, over the bottom of whatever
+     * page is showing — a strip with its own background rather than a gap reserved on three pages,
+     * because a notice is a thing that comes and goes and the layouts have no spare line in common.
+     */
+    @Nullable
+    private Component notice;
+
+    private long noticeAt;
+
+    /** How long a notice stays up. Vanilla's action bar holds for three seconds; this is five. */
+    private static final long NOTICE_MS = 5000;
+
     public WorkbayScreen(WorkbayMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
+    }
+
+    /** Called from {@code WorkbayClient.Notices} when the server puts something on the action bar. */
+    public void notice(Component message) {
+        notice = message;
+        noticeAt = net.minecraft.Util.getMillis();
     }
 
     @Override
@@ -280,6 +301,30 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         if (current != null) {
             current.render(graphics, mouseX, mouseY);
         }
+        renderNotice(graphics);
+    }
+
+    /** Amber, because SPEC.md §4 makes amber "a problem" everywhere but the power bar. */
+    private void renderNotice(GuiGraphics graphics) {
+        if (notice == null) {
+            return;
+        }
+        if (net.minecraft.Util.getMillis() - noticeAt > NOTICE_MS) {
+            notice = null;
+            return;
+        }
+        int h = font.lineHeight + 6;
+        int px = leftPos + 4;
+        int py = topPos + imageHeight - h - 4;
+        // Above the page, including its item sprites: an item is rendered on its own layer well in
+        // front of everything a page fills, so a strip drawn flat came out with a chest sprite
+        // showing through the word it was covering. Measured, in a client. The carried stack does
+        // the same thing at 400.
+        graphics.pose().pushPose();
+        graphics.pose().translate(0, 0, 300);
+        Draw.well(graphics, px, py, imageWidth - 8, h);
+        Draw.text(graphics, font, notice.getString(), px + 4, py + 4, imageWidth - 16, Draw.AMBER);
+        graphics.pose().popPose();
     }
 
     /** Vanilla would draw "Workbay" and "Inventory" here; this screen has neither in that place. */

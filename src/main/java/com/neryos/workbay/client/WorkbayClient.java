@@ -28,4 +28,33 @@ public final class WorkbayClient {
         event.register(WBMenus.BAY_VIEW.get(),
             com.neryos.workbay.client.screen.BayViewScreen::new);
     }
+
+    /**
+     * OPEN_ISSUES #38. Every refusal in the mod is an action bar message, and the HUD draws the
+     * action bar <b>before</b> the screen — so a rejection raised by a click on the Workbay screen
+     * is painted and then covered by the panel that caused it. What the player sees is a button
+     * that did nothing, which SPEC.md §6 calls the worst failure a screen can have.
+     *
+     * <p>Caught here rather than at the twenty-odd {@code displayClientMessage} call sites: the
+     * hole is that the action bar is invisible behind a screen, not that any one refusal forgot to
+     * say so, and a list of call sites closes the list without closing the hole. Anything the
+     * server puts on the action bar while a Workbay screen is open was caused by that screen, so
+     * the screen draws it — including refusals nobody has written yet.
+     *
+     * <p>Not cancelled: the message still goes to the HUD, so it is there when the screen closes.
+     */
+    @EventBusSubscriber(modid = Workbay.MOD_ID, bus = EventBusSubscriber.Bus.GAME, value = Dist.CLIENT)
+    public static final class Notices {
+        private Notices() {}
+
+        @SubscribeEvent
+        static void overlayMessage(net.neoforged.neoforge.client.event.ClientChatReceivedEvent.System event) {
+            if (!event.isOverlay()) {
+                return;
+            }
+            if (net.minecraft.client.Minecraft.getInstance().screen instanceof WorkbayScreen screen) {
+                screen.notice(event.getMessage());
+            }
+        }
+    }
 }
