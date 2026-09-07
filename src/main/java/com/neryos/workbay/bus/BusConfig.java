@@ -4,6 +4,7 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -50,7 +51,17 @@ public record BusConfig(
     DyeColor channel,
     boolean enabled,
     BusFilter filter,
-    boolean internal) {
+    boolean internal,
+    /**
+     * What this link was made against, remembered. The server only knows the block at the far end
+     * while that chunk is loaded, and a link's target is nearly always in a chunk nobody is
+     * standing in — so without this the screen has nothing to name it by and falls back to two
+     * coordinates, and the flow map draws a box with no icon. Stamped when the Connector is
+     * placed, which is the one moment the block is guaranteed to be there; the live read still
+     * wins when the chunk happens to be loaded, so a target that has been swapped out reads
+     * correctly the moment anybody is near it.
+     */
+    Optional<ResourceLocation> targetBlock) {
 
     /**
      * Legal speeds, in ticks. A fixed list rather than free entry so every one of them divides the
@@ -91,7 +102,10 @@ public record BusConfig(
         // physical anchor cannot be found, broken or audited in the world" against links that leave
         // the Workbay; that rationale does not reach a link whose both ends are bays in the same
         // menu you are already looking at. See SPEC.md §4's bay-to-bay note.
-        Codec.BOOL.optionalFieldOf("Internal", false).forGetter(BusConfig::internal)
+        Codec.BOOL.optionalFieldOf("Internal", false).forGetter(BusConfig::internal),
+        // Optional, so every link saved before this existed still loads -- it simply has nothing
+        // remembered and reads as it did, by position, until it is remade.
+        ResourceLocation.CODEC.optionalFieldOf("TargetBlock").forGetter(BusConfig::targetBlock)
     ).apply(i, BusConfig::new));
 
     /**
@@ -117,7 +131,7 @@ public record BusConfig(
         GlobalPos connector, GlobalPos target) {
         return new BusConfig(id, "", bay, resource, mode, connector, target,
             Optional.empty(), Optional.empty(), defaultRate(), defaultSpeed(), DyeColor.WHITE,
-            false, BusFilter.NONE, false);
+            false, BusFilter.NONE, false, Optional.empty());
     }
 
     /**
@@ -129,7 +143,7 @@ public record BusConfig(
     public static BusConfig createInternal(UUID id, int bay, GlobalPos anchor, GlobalPos target) {
         return new BusConfig(id, "", bay, Resource.ITEM, Mode.INSERT, anchor, target,
             Optional.empty(), Optional.empty(), defaultRate(), defaultSpeed(), DyeColor.WHITE,
-            false, BusFilter.NONE, true);
+            false, BusFilter.NONE, true, Optional.empty());
     }
 
     /**
@@ -139,27 +153,27 @@ public record BusConfig(
      */
     public BusConfig withFilter(BusFilter nowFilter) {
         return new BusConfig(id, name, bay, resource, mode, connector, target, targetFace,
-            machineFace, rate, speed, channel, enabled, nowFilter, internal);
+            machineFace, rate, speed, channel, enabled, nowFilter, internal, targetBlock);
     }
 
     public BusConfig withRate(int newRate) {
         return new BusConfig(id, name, bay, resource, mode, connector, target, targetFace,
-            machineFace, newRate, speed, channel, enabled, filter, internal);
+            machineFace, newRate, speed, channel, enabled, filter, internal, targetBlock);
     }
 
     public BusConfig withSpeed(int newSpeed) {
         return new BusConfig(id, name, bay, resource, mode, connector, target, targetFace,
-            machineFace, rate, newSpeed, channel, enabled, filter, internal);
+            machineFace, rate, newSpeed, channel, enabled, filter, internal, targetBlock);
     }
 
     public BusConfig withEnabled(boolean nowEnabled) {
         return new BusConfig(id, name, bay, resource, mode, connector, target, targetFace,
-            machineFace, rate, speed, channel, nowEnabled, filter, internal);
+            machineFace, rate, speed, channel, nowEnabled, filter, internal, targetBlock);
     }
 
     public BusConfig withMode(Mode newMode) {
         return new BusConfig(id, name, bay, resource, newMode, connector, target, targetFace,
-            machineFace, rate, speed, channel, enabled, filter, internal);
+            machineFace, rate, speed, channel, enabled, filter, internal, targetBlock);
     }
 
     /**
@@ -170,18 +184,30 @@ public record BusConfig(
     public BusConfig withResource(Resource newResource) {
         return new BusConfig(id, name, bay, newResource, mode, connector, target, targetFace,
             machineFace, rate, speed, channel, enabled,
-            newResource == resource ? filter : BusFilter.NONE, internal);
+            newResource == resource ? filter : BusFilter.NONE, internal, targetBlock);
     }
 
     public BusConfig withName(String newName) {
         return new BusConfig(id, newName, bay, resource, mode, connector, target, targetFace,
-            machineFace, rate, speed, channel, enabled, filter, internal);
+            machineFace, rate, speed, channel, enabled, filter, internal, targetBlock);
     }
 
-    /** Internal only: which bay this link points at. Refused elsewhere for every other kind. */
+    /**
+     * Internal only: which bay this link points at. Refused elsewhere for every other kind.
+     *
+     * <p>Drops what was remembered about the old target, for the same reason
+     * {@link #withResource} drops the filter: a name kept across a retarget is a screen confidently
+     * calling this link by the name of a block it no longer talks to.
+     */
     public BusConfig withTarget(GlobalPos newTarget) {
         return new BusConfig(id, name, bay, resource, mode, connector, newTarget, targetFace,
-            machineFace, rate, speed, channel, enabled, filter, internal);
+            machineFace, rate, speed, channel, enabled, filter, internal, Optional.empty());
+    }
+
+    /** Stamps what this link points at, at the one moment the block is known to be loaded. */
+    public BusConfig withTargetBlock(Optional<ResourceLocation> block) {
+        return new BusConfig(id, name, bay, resource, mode, connector, target, targetFace,
+            machineFace, rate, speed, channel, enabled, filter, internal, block);
     }
 
     /**
@@ -190,7 +216,7 @@ public record BusConfig(
      */
     public BusConfig withBay(int newBay) {
         return new BusConfig(id, name, newBay, resource, mode, connector, target, targetFace,
-            machineFace, rate, speed, channel, enabled, filter, internal);
+            machineFace, rate, speed, channel, enabled, filter, internal, targetBlock);
     }
 
     /**
@@ -201,7 +227,7 @@ public record BusConfig(
      */
     public BusConfig withTargetFace(Optional<Direction> newFace) {
         return new BusConfig(id, name, bay, resource, mode, connector, target, newFace,
-            machineFace, rate, speed, channel, enabled, filter, internal);
+            machineFace, rate, speed, channel, enabled, filter, internal, targetBlock);
     }
 
     /**

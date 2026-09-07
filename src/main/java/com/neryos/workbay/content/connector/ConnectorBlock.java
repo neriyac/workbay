@@ -221,10 +221,17 @@ public class ConnectorBlock extends BaseEntityBlock {
             return;
         }
         ConnectorPairing pairing = connector.pairing().orElseThrow();
+        BlockPos targetPos = target(state, pos);
+        // Stamped here and nowhere else: this is the one moment the block at the far end is known
+        // to be loaded, and from now on the screen can say "Chest" rather than two coordinates and
+        // the flow map can draw the chest. See BusConfig#targetBlock.
         workbay.addBus(BusConfig.create(UUID.randomUUID(), pairing.bay(), resource,
             BusConfig.Mode.INSERT,
             GlobalPos.of(level.dimension(), pos),
-            GlobalPos.of(level.dimension(), target(state, pos))));
+            GlobalPos.of(level.dimension(), targetPos))
+            .withTargetBlock(java.util.Optional.ofNullable(
+                net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(
+                    level.getBlockState(targetPos).getBlock()))));
         if (player != null) {
             player.displayClientMessage(WorkbayLang.message("connector_linked",
                 level.getBlockState(target(state, pos)).getBlock().getName(), pairing.code()), true);

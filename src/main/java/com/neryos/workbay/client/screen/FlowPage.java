@@ -51,9 +51,15 @@ class FlowPage extends WorkbayPage {
     private static final int TOP_Y = 46;
     private static final int NODE_W = 100;
 
-    /** One box: a bay of this Workbay, or a block somewhere that a link reaches. */
+    /**
+     * One box: a bay of this Workbay, or a block somewhere that a link reaches.
+     *
+     * @param tip what hovering it says. Built here rather than at draw time because everything it
+     *            needs — which bay, which block, where it stands — is in hand while the map is
+     *            being assembled and gone by the time the box is a rectangle.
+     */
     private record Node(Component label, @Nullable ResourceLocation icon, boolean bay,
-        int px, int py) {}
+        List<Component> tip, int px, int py) {}
 
     /** One link, as the two boxes it joins. */
     private record Edge(int[] xs, int[] ys, int colour, int dash, boolean running) {}
@@ -90,6 +96,7 @@ class FlowPage extends WorkbayPage {
         List<Component> labels = new ArrayList<>();
         List<ResourceLocation> icons = new ArrayList<>();
         List<Boolean> isBay = new ArrayList<>();
+        List<List<Component>> tips = new ArrayList<>();
         List<int[]> wires = new ArrayList<>();
         List<int[]> style = new ArrayList<>();
 
@@ -99,6 +106,7 @@ class FlowPage extends WorkbayPage {
                 labels.add(bayName(bay));
                 icons.add(bay.hosted().orElse(null));
                 isBay.add(true);
+                tips.add(bayTip(bay));
             }
         }
         for (WorkbaySnapshot.Link link : snap.links()) {
@@ -120,6 +128,7 @@ class FlowPage extends WorkbayPage {
                 far = labels.size();
                 index.put(key, far);
                 labels.add(targetName(link));
+                tips.add(targetTip(link));
                 // The target's own block, when this client happens to know it. A map of eight
                 // boxes reading "Connector, Connector, Connector" is a map of one thing; the
                 // sprite is what tells a barrel from a chest from a machine at a glance.
@@ -142,7 +151,7 @@ class FlowPage extends WorkbayPage {
         this.nodeW = n > 12 ? 84 : NODE_W;
         FlowLayout layout = new FlowLayout(n, wires, nodeW);
         for (int i = 0; i < n; i++) {
-            nodes.add(new Node(labels.get(i), icons.get(i), isBay.get(i),
+            nodes.add(new Node(labels.get(i), icons.get(i), isBay.get(i), tips.get(i),
                 layout.nodeX[i], layout.nodeY[i]));
         }
         for (int i = 0; i < wires.size(); i++) {
@@ -209,9 +218,16 @@ class FlowPage extends WorkbayPage {
     @Override
     void render(GuiGraphics g, int mouseX, int mouseY) {
         header(g, mouseX, mouseY, "FLOW");
-        Draw.well(g, viewLeft(), viewTop(), viewW(), canvasH);
-        screen.hit(viewLeft(), viewTop(), viewW(), canvasH, () -> { },
+        // What the map is and how to drive it, on the page's own title. It used to be the canvas's
+        // tooltip, which meant pointing anywhere in the empty half of the graph raised a paragraph
+        // about panning -- every time, over the thing you were trying to look at. A description is
+        // for asking about once; a box you are pointing at is what the cursor is for.
+        screen.hit(x(8), y(6), 90, 16, () -> { },
             WorkbayScreen.gui("flow.canvas"), WorkbayScreen.gui("flow.canvas.tip"));
+        Draw.well(g, viewLeft(), viewTop(), viewW(), canvasH);
+        // Registered with no tooltip: it exists to swallow clicks on the empty canvas, not to say
+        // anything. Empty space answers nothing.
+        screen.hit(viewLeft(), viewTop(), viewW(), canvasH, () -> { });
         if (nodes.isEmpty()) {
             text(g, WorkbayScreen.gui("flow.empty"), viewLeft() + 6, viewTop() + 8, viewW() - 12,
                 Draw.TEXT_FAINT);
@@ -245,7 +261,8 @@ class FlowPage extends WorkbayPage {
             int sh = Math.round(NODE_H * zoom);
             if (sx + sw > viewLeft() && sx < viewLeft() + viewW()
                 && sy + sh > viewTop() && sy < viewTop() + canvasH) {
-                screen.hit(sx, sy, sw, sh, () -> { }, node.label());
+                screen.hit(sx, sy, sw, sh, () -> { },
+                    node.tip().toArray(new Component[0]));
             }
         }
         legend(g);
@@ -491,6 +508,42 @@ class FlowPage extends WorkbayPage {
      * block's own name, then — when this client cannot know it — <b>where</b> it is. Five nodes all
      * reading "not loaded" is a map of one place.
      */
+    /**
+     * What a bay box says when you point at it: which bay, what is in it, and what it is doing.
+     * The name alone was all a box carried, and on a map whose whole point is "where is my stuff
+     * going" the box that holds the machine was the one saying least.
+     */
+    private List<Component> bayTip(WorkbaySnapshot.Bay bay) {
+        List<Component> lines = new ArrayList<>();
+        lines.add(bayName(bay));
+        bay.hosted()
+            .filter(id -> !id.equals(ResourceLocation.withDefaultNamespace("air")))
+            .ifPresent(id -> lines.add(name(id).copy().withStyle(
+                net.minecraft.ChatFormatting.GRAY)));
+        lines.add(WorkbayScreen.gui("flow.node.bay", bay.index() + 1)
+            .copy().withStyle(net.minecraft.ChatFormatting.DARK_GRAY));
+        return lines;
+    }
+
+    /**
+     * And what a box out in the world says: the block, where it stands, and which of its faces the
+     * link is pinned to. The position is the half a player cannot get anywhere else — the row in
+     * LINKS has fifty pixels and spends them on the name.
+     */
+    private List<Component> targetTip(WorkbaySnapshot.Link link) {
+        List<Component> lines = new ArrayList<>();
+        lines.add(targetName(link));
+        var pos = link.config().target().pos();
+        lines.add(WorkbayScreen.gui("flow.node.at", pos.getX(), pos.getY(), pos.getZ())
+            .copy().withStyle(net.minecraft.ChatFormatting.GRAY));
+        lines.add(WorkbayScreen.gui("flow.node.face", link.config().targetFace()
+                .<Component>map(face -> Component.translatable("gui.workbay.links.face."
+                    + face.getSerializedName()))
+                .orElseGet(() -> WorkbayScreen.gui("links.face.any")))
+            .copy().withStyle(net.minecraft.ChatFormatting.DARK_GRAY));
+        return lines;
+    }
+
     private static Component targetName(WorkbaySnapshot.Link link) {
         if (link.label().isPresent()) {
             return Component.literal(link.label().get());

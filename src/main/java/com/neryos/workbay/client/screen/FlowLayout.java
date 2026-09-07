@@ -14,7 +14,13 @@ import java.util.List;
  * {@code OrthogonalRoutingGenerator}, which follows Sander's <i>Layout of directed hypergraphs with
  * orthogonal hyperedges</i> (GD '03).
  *
- * <p>Two things in that phase were guessed at first, and both are why arrows used to sit on arrows.
+ * <p>Three things in that phase were guessed at first, and they are why arrows used to sit on
+ * arrows.
+ *
+ * <p><b>An edge gets a port of its own where it arrives.</b> Sander spreads a hyperedge's ends
+ * along the side they meet; skipping that put every arrival on one point, so three links into one
+ * bay shared their last leg and one status colour covered all three. {@link #CLEAN_RUN} is what
+ * that leg is worth, and the channel is sized from it.
  *
  * <p><b>A vertical run belongs to a source, not to an edge.</b> Everything leaving one box shares
  * one vertical line and branches off it — Sander's <i>hyperedge segment</i>. A line per edge put
@@ -34,8 +40,23 @@ final class FlowLayout {
     static final int NODE_H = 18;
     /** Clear air between two boxes in the same layer. */
     private static final int ROW_GAP = 10;
-    /** Between two routing slots in a channel, and its margin either side. ELK's edge spacing. */
+    /** Between two routing slots in a channel. ELK's edge spacing. */
     private static final int SPACING = 8;
+    /**
+     * The straight run every edge gets to itself where it meets the box it points at, with no other
+     * edge on those pixels. A status is a <b>colour</b>, and a colour needs a length of line to be
+     * read off: before this, three links into one bay all landed on the same middle-of-the-side
+     * point and shared their last leg, so whichever drew last owned the colour of all three. The
+     * channel is sized from this, so it is a floor and not a wish.
+     *
+     * <p>Sixteen because the arrowhead is five of it and the view is usually zoomed out to fit:
+     * at ten, a graph fitted at half size left about two pixels of bare line past the head, which
+     * is a colour you cannot read. Measured on screen, not chosen on paper.
+     */
+    private static final int CLEAN_RUN = 16;
+    /** How far apart two ports on one side sit, and how far in from the box's corners they stop. */
+    private static final int PORT_PITCH = 5;
+    private static final int PORT_INSET = 4;
     /** A dummy is a point, so a long edge crossing a layer costs a sliver rather than a row. */
     private static final int DUMMY_H = 2;
 
@@ -61,6 +82,13 @@ final class FlowLayout {
     private final int[] vy;
     private final int[] size;
     private final List<List<Integer>> layers = new ArrayList<>();
+
+    /**
+     * Where each edge meets the box it points at, by segment identity. Keyed on the array instance
+     * rather than on {@code {from, to}} because two links between the same pair of boxes are two
+     * edges and want two ports, and a map keyed on the pair would hand them one.
+     */
+    private final java.util.IdentityHashMap<int[], Integer> ports = new java.util.IdentityHashMap<>();
 
     /** One vertical run: everything leaving one box into one channel, and where it branches to. */
     private static final class Run {
@@ -173,10 +201,17 @@ final class FlowLayout {
         for (int l = 0; l < layerCount; l++) {
             segments.add(new ArrayList<>());
         }
+        // The same array instances the ports are keyed on, kept per chain so phase 5 can ask which
+        // port this edge in particular lands on rather than where its target box happens to be.
+        List<int[][]> chainSegments = new ArrayList<>();
         for (int[] chain : chains) {
+            int[][] mine = new int[Math.max(0, chain.length - 1)][];
             for (int i = 0; i + 1 < chain.length; i++) {
-                segments.get(vertexLayer[chain[i]]).add(new int[] {chain[i], chain[i + 1]});
+                int[] seg = {chain[i], chain[i + 1]};
+                segments.get(vertexLayer[chain[i]]).add(seg);
+                mine[i] = seg;
             }
+            chainSegments.add(mine);
         }
 
         // ---------------------------------------------------------- 3. minimise the crossings
@@ -185,6 +220,7 @@ final class FlowLayout {
         // ------------------------------------------------------------------ 4. place the nodes
         this.vy = new int[total];
         place(segments, layerCount);
+        ports(segments);
 
         // ------------------------------------------------------------------ 5. route the edges
         List<List<Run>> runs = new ArrayList<>();
@@ -196,7 +232,9 @@ final class FlowLayout {
             for (Run run : here) {
                 most = Math.max(most, run.straight() ? 0 : run.slot + 1);
             }
-            channel[l] = (most + 1) * SPACING;
+            // The slots, then the run the last leg keeps for itself: from the outermost slot to
+            // the box is exactly CLEAN_RUN, and every inner slot's leg is longer than that.
+            channel[l] = most * SPACING + CLEAN_RUN;
             runs.add(here);
         }
         int[] layerX = new int[layerCount];
@@ -207,7 +245,7 @@ final class FlowLayout {
             nodeX[v] = layerX[layer[v]];
             nodeY[v] = vy[v];
         }
-        draw(chains, flipped, vertexLayer, layerX, runs);
+        draw(chains, chainSegments, flipped, vertexLayer, layerX, runs);
 
         int right = 0;
         int bottom = 0;
@@ -391,9 +429,49 @@ final class FlowLayout {
         }
     }
 
-    /** Where an edge meets a box: the middle of its side. Everything arriving meets it there. */
+    /** The middle of a box's side: where everything <em>leaves</em> from, and phase 4's handle. */
     private int anchor(int vertex) {
         return vy[vertex] + size[vertex] / 2;
+    }
+
+    /** Where this edge in particular meets the box it points at. */
+    private int port(int[] seg) {
+        Integer at = ports.get(seg);
+        return at == null ? anchor(seg[1]) : at;
+    }
+
+    /**
+     * A port per edge on the side it arrives at, so the last leg of every edge is a line of its own
+     * and carries its own colour for {@link #CLEAN_RUN} pixels. Only the arriving side: everything
+     * <em>leaving</em> a box shares one vertical run on purpose (Sander's hyperedge, and a fork
+     * reads as a fork), so a box that fans out still fans out from one point.
+     *
+     * <p>Ordered by where each edge comes from, so the fan into a box does not cross itself, and
+     * spread from the middle outwards inside the box's own side. A box with more arrivals than fit
+     * shrinks the pitch to nothing and lands them all on the middle, which is where they were.
+     * Dummies carry one chain each and keep their centre.
+     */
+    private void ports(List<List<int[]>> segments) {
+        java.util.Map<Integer, List<int[]>> arriving = new java.util.LinkedHashMap<>();
+        for (List<int[]> side : segments) {
+            for (int[] seg : side) {
+                arriving.computeIfAbsent(seg[1], v -> new ArrayList<>()).add(seg);
+            }
+        }
+        for (java.util.Map.Entry<Integer, List<int[]>> at : arriving.entrySet()) {
+            List<int[]> here = at.getValue();
+            int middle = anchor(at.getKey());
+            if (here.size() == 1 || size[at.getKey()] != NODE_H) {
+                here.forEach(seg -> ports.put(seg, middle));
+                continue;
+            }
+            here.sort(Comparator.comparingInt(seg -> anchor(seg[0])));
+            int pitch = Math.min(PORT_PITCH, (NODE_H - 2 * PORT_INSET) / (here.size() - 1));
+            int first = middle - pitch * (here.size() - 1) / 2;
+            for (int i = 0; i < here.size(); i++) {
+                ports.put(here.get(i), first + i * pitch);
+            }
+        }
     }
 
     // ------------------------------------------------------------------------------- phase 5
@@ -416,7 +494,7 @@ final class FlowLayout {
                 runs.add(mine);
             }
             int[] grown = Arrays.copyOf(mine.ends, mine.ends.length + 1);
-            grown[grown.length - 1] = anchor(seg[1]);
+            grown[grown.length - 1] = port(seg);
             Arrays.sort(grown);
             mine.ends = grown;
         }
@@ -511,10 +589,11 @@ final class FlowLayout {
      * middle of the far box's side. An edge whose two ends are already level skips the vertical
      * altogether — one fewer thing to follow and one fewer slot to pay for.
      */
-    private void draw(List<int[]> chains, boolean[] flipped, int[] vertexLayer, int[] layerX,
-        List<List<Run>> runs) {
+    private void draw(List<int[]> chains, List<int[][]> chainSegments, boolean[] flipped,
+        int[] vertexLayer, int[] layerX, List<List<Run>> runs) {
         for (int e = 0; e < chains.size(); e++) {
             int[] chain = chains.get(e);
+            int[][] segs = chainSegments.get(e);
             List<Integer> xs = new ArrayList<>();
             List<Integer> ys = new ArrayList<>();
             for (int i = 0; i + 1 < chain.length; i++) {
@@ -527,7 +606,7 @@ final class FlowLayout {
                     }
                 }
                 int startY = anchor(chain[i]);
-                int endY = anchor(chain[i + 1]);
+                int endY = port(segs[i]);
                 if (i > 0) {
                     add(xs, ys, layerX[l], startY);
                 }

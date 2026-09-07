@@ -345,7 +345,13 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
             graphics.pose().popPose();
             return;
         }
-        for (Hit hit : hits) {
+        // Reverse order, exactly as the click does, and for the same reason: a control drawn on
+        // top of another must also *answer* on top of it. Forward order meant the flow map's
+        // canvas -- one region covering the whole graph, registered before the boxes on it -- won
+        // every hover, so every box on the map showed the canvas's own tooltip and none of them
+        // could say what it was.
+        for (int i = hits.size() - 1; i >= 0; i--) {
+            Hit hit = hits.get(i);
             if (hit.tooltip() != null && hit.contains(mouseX, mouseY)) {
                 graphics.renderTooltip(font, wrapTooltip(hit.tooltip()), mouseX, mouseY);
                 return;
@@ -448,6 +454,18 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
 
     public void send(WorkbayAction action, long arg) {
         send(action, arg, Optional.empty(), Optional.empty());
+    }
+
+    /**
+     * The same, for a control that dispatches from outside the hit list and so has to say for
+     * itself which way it was clicked. The preview cube is the only one: its faces are decided on
+     * <em>release</em>, because a press there may turn the block instead, and by then the flag the
+     * hit list sets is long gone.
+     */
+    public void sendStepped(WorkbayAction action, long arg, boolean backwards) {
+        back = backwards;
+        send(action, arg);
+        back = false;
     }
 
     public void send(WorkbayAction action, UUID link) {

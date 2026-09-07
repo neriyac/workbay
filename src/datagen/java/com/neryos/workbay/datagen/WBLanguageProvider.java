@@ -127,6 +127,9 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("button.eject"), "Eject");
         add(WorkbayLang.guiKey("button.eject.tip"), "Take this machine out of its bay, with "
             + "everything inside it.");
+        add(WorkbayLang.guiKey("links.target.tip"), "The block this link is pointed at. Shown as "
+            + "the block itself because a row of names all read alike at a glance and a chest "
+            + "does not.");
         add(WorkbayLang.guiKey("links.rename.tip"), "Right-click to name this link. A name of "
             + "your own is what the flow map draws instead of the target's coordinates. Return "
             + "commits it, Escape leaves it alone, and an empty name goes back to the derived one.");
@@ -352,7 +355,10 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("flow.legend.internal"), "stays inside");
         add(WorkbayLang.guiKey("flow.canvas"), "Flow map");
         add(WorkbayLang.guiKey("flow.canvas.tip"), "Every link this Workbay has, as the graph it "
-            + "makes. Drag to move the view, scroll to zoom. Hover a box for its full name.");
+            + "makes. Drag to move the view, scroll to zoom. Hover a box for what it is.");
+        add(WorkbayLang.guiKey("flow.node.bay"), "Bay %s of this Workbay");
+        add(WorkbayLang.guiKey("flow.node.at"), "%s %s %s");
+        add(WorkbayLang.guiKey("flow.node.face"), "Face: %s");
         add(WorkbayLang.guiKey("flow.legend.stalled"), "stalled");
         add(WorkbayLang.guiKey("flow.legend.live"), "moving right now");
 

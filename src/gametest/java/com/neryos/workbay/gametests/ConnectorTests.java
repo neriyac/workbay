@@ -103,6 +103,14 @@ public class ConnectorTests {
             }
             helper.assertValueEqual(link.connector().pos(), chestPos.above(), "the link's Connector");
             helper.assertValueEqual(link.resource(), BusConfig.Resource.ITEM, "the link's resource");
+            // What the link points at, remembered on the link itself. The server can only read the
+            // far block while its chunk is loaded, which for a real base is almost never -- so
+            // without this stamp the row has nothing to call the link but two coordinates and the
+            // flow map draws a box with no icon. This is the one moment the block is guaranteed
+            // to be there, so this is where it has to be taken.
+            helper.assertValueEqual(link.targetBlock().orElse(null),
+                net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(Blocks.CHEST),
+                "the block the link remembers being placed against");
             helper.succeed();
         });
     }

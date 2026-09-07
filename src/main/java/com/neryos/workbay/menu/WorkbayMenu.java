@@ -665,11 +665,17 @@ public class WorkbayMenu extends AbstractContainerMenu {
             .anyMatch(link -> workbay.busStatus(link.id()) == BusRunner.BusStatus.RUNNING);
     }
 
-    /** What the Connector is stuck to, for the row's target text. Never loads a chunk to find out. */
+    /**
+     * What the Connector is stuck to, for the row's target text and the flow map's icon. Never
+     * loads a chunk to find out — and falls back to what the link remembered when it was made,
+     * which is the ordinary case: a link's target is nearly always in a chunk nobody is standing
+     * in, and before the fallback existed every such row read as two coordinates and every such
+     * flow node drew an empty box.
+     */
     private static Optional<ResourceLocation> targetBlockOf(ServerPlayer player, BusConfig link) {
         ServerLevel level = player.server.getLevel(link.target().dimension());
         if (level == null || !level.isLoaded(link.target().pos())) {
-            return Optional.empty();
+            return link.targetBlock();
         }
         return Optional.ofNullable(
             BuiltInRegistries.BLOCK.getKey(level.getBlockState(link.target().pos()).getBlock()));

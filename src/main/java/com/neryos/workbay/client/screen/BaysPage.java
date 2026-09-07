@@ -616,12 +616,20 @@ class BaysPage extends WorkbayPage {
 
     @Override
     boolean mousePressed(double mouseX, double mouseY, int button) {
-        if (button != 0 || !inWell(mouseX, mouseY)) {
+        if ((button != 0 && button != 1) || !inWell(mouseX, mouseY)) {
             return false;
         }
+        // Which button, kept until the release: the face is chosen on release (a press may become
+        // a turn instead), and right-click means the previous value of the ring everywhere else in
+        // this mod. The cube took only left-clicks, so its faces were the one cycling control in
+        // the screen that could not be stepped backwards.
+        turningWith = button;
         PREVIEW.press();
         return true;
     }
+
+    /** Which mouse button started the turn that is in progress, or -1. */
+    private int turningWith = -1;
 
     @Override
     boolean mouseDragged(double dragX, double dragY) {
@@ -637,8 +645,10 @@ class BaysPage extends WorkbayPage {
         }
         Direction face = PREVIEW.faceAt(mouseX, mouseY, x(CUBE_CX), y(CUBE_CY), CUBE_SIZE);
         if (face != null) {
-            screen.send(WorkbayAction.CYCLE_FACE, faceType.ordinal() | (face.ordinal() << 4));
+            screen.sendStepped(WorkbayAction.CYCLE_FACE,
+                faceType.ordinal() | (face.ordinal() << 4), turningWith == 1);
         }
+        turningWith = -1;
         return true;
     }
 
@@ -891,16 +901,43 @@ class BaysPage extends WorkbayPage {
         // fault this column was just fixed for, wearing different words. The six came off the
         // status column, which needs forty-five for its longest word and had sixty.
         int nameW = taxed ? 54 - cutW : 56;
+        // What the link is pointed at, as the block itself. A name answers "which one" only if you
+        // read it; a chest reads as a chest before you have finished the row. It sits in front of
+        // the name rather than in a column of its own because the row is at SPEC.md §4's ceiling
+        // and this is the same fact as the name, not a new one.
+        //
+        // And it only takes the twelve pixels when there is something to draw: a link with nothing
+        // remembered falls back to a *position* for its name, which is the longest label the column
+        // ever carries and the one that needed fifty-six in the first place. So the column gives up
+        // width exactly when the label got shorter, and never otherwise.
+        Optional<ResourceLocation> icon = targetIcon(link);
+        int nameX = px + 80;
+        if (icon.isPresent()) {
+            var item = BuiltInRegistries.ITEM.get(icon.get());
+            if (item != net.minecraft.world.item.Items.AIR) {
+                g.pose().pushPose();
+                g.pose().translate(px + 80, py + 3, 0);
+                g.pose().scale(0.75F, 0.75F, 1.0F);
+                g.renderItem(new ItemStack(item), 0, 0);
+                g.pose().popPose();
+                screen.hit(px + 80, py + 3, 12, 12, () -> { },
+                    displayName(icon.get()), WorkbayScreen.gui("links.target.tip"));
+                nameX = px + 94;
+                nameW -= 14;
+            }
+        }
         if (!screen.renaming()) {
-            text(g, label, px + 80, py + 5, nameW, on ? Draw.TEXT : Draw.TEXT_FAINT);
+            text(g, label, nameX, py + 5, nameW, on ? Draw.TEXT : Draw.TEXT_FAINT);
         }
         // Right-click the name to give the link one of your own. On the name itself rather than on
         // a seventh control: the row is already at SPEC.md §4's two-controls ceiling, and a name is
         // the one thing a player edits by pointing at the thing that is wrong. Left-click is left
         // alone so the row keeps behaving as it did.
-        screen.hit(px + 80, py + 3, nameW, 12, () -> {
+        final int renameX = nameX;
+        final int renameW = nameW;
+        screen.hit(renameX, py + 3, renameW, 12, () -> {
             if (screen.back()) {
-                screen.beginRename(px + 80, py + 2, nameW, 12, config.name(),
+                screen.beginRename(renameX, py + 2, renameW, 12, config.name(),
                     typed -> screen.sendText(WorkbayAction.SET_LINK_NAME, typed, config.id()));
             }
         }, Component.literal(label), WorkbayScreen.gui("links.rename.tip"));
@@ -1457,6 +1494,21 @@ class BaysPage extends WorkbayPage {
      */
     private static String labelOf(WorkbaySnapshot.Link link) {
         return link.label().orElseGet(() -> targetName(link));
+    }
+
+    /**
+     * The block this link talks to, for the row's own icon: a bay's hosted machine when the far end
+     * is a bay, and otherwise whatever the link is pointed at out in the world — read live when the
+     * chunk is loaded and remembered from when the Connector was placed when it is not, which is
+     * nearly always. Empty means there is genuinely nothing to draw, and the row keeps its full
+     * name column.
+     */
+    private Optional<ResourceLocation> targetIcon(WorkbaySnapshot.Link link) {
+        if (link.config().internal()) {
+            return link.targetBay().flatMap(bay -> snapshot().bay(bay).hosted());
+        }
+        return link.targetBlock()
+            .filter(id -> !id.equals(ResourceLocation.withDefaultNamespace("air")));
     }
 
     /**
