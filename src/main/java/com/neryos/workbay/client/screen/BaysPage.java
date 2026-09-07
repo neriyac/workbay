@@ -443,12 +443,12 @@ class BaysPage extends WorkbayPage {
             WorkbayScreen.gui("button.paste"),
             WorkbayScreen.gui(copied == null ? "button.paste.empty" : "button.paste.tip"));
 
-        // Bay View. SPEC.md §1 grants it to the base Workbay, which is what settles §5's stray
-        // "unlocked by the first Expansion Plate": a racked container that cannot be filled by hand
-        // is a hole in the loop, not a feature to sell an upgrade with.
-        actionButton(g, mouseX, mouseY, x(170), WBIcons.SCREEN, !empty, false,
-            () -> screen.send(WorkbayAction.OPEN_BAY_VIEW),
-            WorkbayScreen.gui("button.bayview"), WorkbayScreen.gui("button.bayview.tip"));
+        // No Bay View button. It named a machine's slots by simulating an insert into each, which
+        // reads a *full* input slot as one that takes nothing -- so a furnace holding 64 iron and
+        // 64 coal labelled both of them "Output slot". A screen that names a slot wrongly is worse
+        // than no screen: the player believes it. Withdrawn until the roles are read from
+        // something a full slot cannot flip. OPEN_ISSUES #35; the machine's own screen, next along,
+        // is the way in meanwhile and shows the truth because the machine draws it.
 
         // The machine's own screen. The other half of §5, and the half a player asks for first:
         // Bay View can only show what a capability exposes, and a machine's recipe mode, side
@@ -461,7 +461,7 @@ class BaysPage extends WorkbayPage {
         // and it is the only one that knows its own file.
         boolean here = snapshot().remoteScreens()
             && com.neryos.workbay.remote.RemoteConfig.remoteScreensEnabled();
-        actionButton(g, mouseX, mouseY, x(194), WBIcons.ENTER, !empty, false,
+        actionButton(g, mouseX, mouseY, x(170), WBIcons.ENTER, !empty, false,
             () -> screen.send(WorkbayAction.ENTER_BAY, here ? 1 : 0),
             WorkbayScreen.gui(here ? "button.open" : "button.enter"),
             WorkbayScreen.gui(here ? "button.open.tip" : "button.enter.tip"));

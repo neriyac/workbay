@@ -35,16 +35,6 @@ public final class MekanismChemicals {
 
     private static final String MOD_ID = "mekanism";
 
-    /**
-     * The same capability object Mekanism registers, built from its name. Created eagerly because
-     * {@code createSided} is idempotent per name and costs nothing when the mod is absent — the
-     * lookup then simply never finds a provider.
-     */
-    private static final BlockCapability<IChemicalHandler, @Nullable Direction> CHEMICAL =
-        BlockCapability.createSided(
-            ResourceLocation.fromNamespaceAndPath(MOD_ID, "chemical_handler"),
-            IChemicalHandler.class);
-
     /** One chemical tank, flattened to what a gauge needs and nothing more. */
     public record Tank(Component name, long amount, long capacity) {}
 
@@ -62,19 +52,46 @@ public final class MekanismChemicals {
         if (!present() || !level.isLoaded(pos)) {
             return List.of();
         }
-        IChemicalHandler handler = level.getCapability(CHEMICAL, pos, null);
-        if (handler == null) {
-            return List.of();
-        }
-        List<Tank> tanks = new ArrayList<>();
-        for (int tank = 0; tank < handler.getChemicalTanks(); tank++) {
-            ChemicalStack held = handler.getChemicalInTank(tank);
-            long capacity = handler.getChemicalTankCapacity(tank);
-            if (capacity > 0) {
-                tanks.add(new Tank(held.isEmpty() ? Component.empty() : held.getTextComponent(),
-                    held.isEmpty() ? 0L : held.getAmount(), capacity));
+        return Impl.tanks(level, pos);
+    }
+
+    /**
+     * Everything that names a Mekanism type, in a class of its own, because loading a class is
+     * what resolves the types in its fields. A {@code static final} capability of type
+     * {@code IChemicalHandler} on the outer class is resolved when the *guard* is called -- before
+     * {@link #present()} can answer -- so a mod that loads perfectly well without Mekanism still
+     * threw {@code NoClassDefFoundError} the first time anything read a bay. Found by opening Bay
+     * View in a plain instance; a dev run always has Mekanism on the classpath and never can.
+     * A nested class is initialised on its own first use, which is here, after the guard passed.
+     */
+    private static final class Impl {
+        private Impl() {}
+
+        /**
+         * The same capability object Mekanism registers, built from its name.
+         * {@code createSided} returns the very object when the name and type match, which is how a
+         * capability is shared without a hard dependency.
+         */
+        private static final BlockCapability<IChemicalHandler, @Nullable Direction> CHEMICAL =
+            BlockCapability.createSided(
+                ResourceLocation.fromNamespaceAndPath(MOD_ID, "chemical_handler"),
+                IChemicalHandler.class);
+
+        static List<Tank> tanks(ServerLevel level, BlockPos pos) {
+            IChemicalHandler handler = level.getCapability(CHEMICAL, pos, null);
+            if (handler == null) {
+                return List.of();
             }
+            List<Tank> tanks = new ArrayList<>();
+            for (int tank = 0; tank < handler.getChemicalTanks(); tank++) {
+                ChemicalStack held = handler.getChemicalInTank(tank);
+                long capacity = handler.getChemicalTankCapacity(tank);
+                if (capacity > 0) {
+                    tanks.add(new Tank(held.isEmpty() ? Component.empty() : held.getTextComponent(),
+                        held.isEmpty() ? 0L : held.getAmount(), capacity));
+                }
+            }
+            return List.copyOf(tanks);
         }
-        return List.copyOf(tanks);
     }
 }

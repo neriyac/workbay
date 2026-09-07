@@ -57,6 +57,14 @@ public final class RemoteScreens {
     /** The last tag each viewer was sent, so an unchanged machine costs one comparison. */
     private static final Map<UUID, CompoundTag> SENT = new ConcurrentHashMap<>();
 
+    /**
+     * Where closing the machine's screen puts the player back. A remote screen is opened from a
+     * button on another screen, so Escape reads as "back", not as "put everything away" -- without
+     * this the player is dropped into the world and has to right-click the block and find the bay
+     * again to make one more change.
+     */
+    private static final Map<UUID, Runnable> BACK = new ConcurrentHashMap<>();
+
     private RemoteScreens() {}
 
     public static void opened(Player player, ServerLevel bay, BlockPos machine) {
@@ -131,6 +139,21 @@ public final class RemoteScreens {
      * <p>The client's copy goes first, down the same ordered connection, or the menu's client-side
      * constructor looks up a block entity that is not there yet and the throw disconnects them.
      */
+    /**
+     * As {@link #open(ServerPlayer, ServerLevel, BlockPos)}, and closing the machine's screen runs
+     * {@code back} -- the screen the player pressed the button on. Only on a real close: a machine
+     * that opens no screen falls through to the trip into the bay, and must not also bounce the
+     * player back to a screen the caller is about to replace.
+     */
+    public static boolean open(ServerPlayer player, ServerLevel bay, BlockPos machine, Runnable back) {
+        BACK.remove(player.getUUID());
+        if (!open(player, bay, machine)) {
+            return false;
+        }
+        BACK.put(player.getUUID(), back);
+        return true;
+    }
+
     public static boolean open(ServerPlayer player, ServerLevel bay, BlockPos machine) {
         BlockState hosted = bay.getBlockState(machine);
         BlockEntity entity = bay.getBlockEntity(machine);
@@ -201,6 +224,7 @@ public final class RemoteScreens {
     /** Ends the reach and takes the client's copy back. */
     public static void close(ServerPlayer player) {
         SENT.remove(player.getUUID());
+        BACK.remove(player.getUUID());
         Open machine = OPEN.remove(player.getUUID());
         if (machine != null) {
             PacketDistributor.sendToPlayer(player, new RemoteMachinePacket(machine.pos(),
@@ -219,8 +243,19 @@ public final class RemoteScreens {
 
     @SubscribeEvent
     public static void onClose(PlayerContainerEvent.Close event) {
-        if (!opening && event.getEntity() instanceof ServerPlayer player) {
-            close(player);
+        if (opening || !(event.getEntity() instanceof ServerPlayer player)) {
+            return;
+        }
+        // Read before close(), which clears it, and run after: reopening a menu here is the same
+        // close-then-open inside one packet handler that a modded screen's own tab buttons do, so
+        // the client never sees a tick with nothing open.
+        Runnable back = BACK.get(player.getUUID());
+        close(player);
+        if (back != null) {
+            // Next tick, not now: this event fires from inside doCloseContainer, which assigns
+            // containerMenu = inventoryMenu *after* it, so a menu opened here is thrown away and
+            // the player lands in the world with nothing open. Measured, in a client.
+            player.server.execute(back);
         }
     }
 }

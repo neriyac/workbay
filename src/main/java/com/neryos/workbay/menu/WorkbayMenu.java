@@ -203,12 +203,11 @@ public class WorkbayMenu extends AbstractContainerMenu {
             case CYCLE_REDSTONE -> editBay(serverPlayer, record,
                 bay -> bay.withRedstone(bay.redstone().step(back)));
             case SET_SKIM -> setSkim(serverPlayer, record, back);
-            case OPEN_BAY_VIEW -> {
-                if (!BayViewMenu.open(serverPlayer, workbay, record, selectedBay)) {
-                    serverPlayer.displayClientMessage(
-                        com.neryos.workbay.WorkbayLang.message("bayview_unreachable"), true);
-                }
-            }
+            // Bay View is withdrawn (OPEN_ISSUES #35) and no button sends this any more. The case
+            // stays because the action is a network enum and dropping a constant renumbers the
+            // rest; the menu itself is untouched and still tested, so bringing it back is one
+            // button and this line.
+            case OPEN_BAY_VIEW -> { }
             case ENTER_BAY -> {
                 // The screen where the player stands first, and the trip only if that cannot
                 // happen: a host with the mixins off (SPEC.md §0), a client with them off (arg),
@@ -293,8 +292,18 @@ public class WorkbayMenu extends AbstractContainerMenu {
             || record.bay(selectedBay).hosted().isEmpty()) {
             return false;
         }
+        // Closing the machine's screen comes back here, on the same bay: the button that opened it
+        // lives on this screen, so Escape means "back", not "put everything away". Guarded on the
+        // Workbay still being there, because the trip is not instant and a block can be broken.
+        WorkbayBlockEntity origin = workbay;
+        int bay = selectedBay;
         return com.neryos.workbay.remote.RemoteScreens.open(viewer, backshop,
-            BayGeometry.machinePos(record.bayColumn(), selectedBay));
+            BayGeometry.machinePos(record.bayColumn(), selectedBay),
+            () -> {
+                if (origin != null && !origin.isRemoved()) {
+                    open(viewer, origin, bay);
+                }
+            });
     }
 
     private void editLink(Optional<UUID> linkId, java.util.function.UnaryOperator<BusConfig> edit) {

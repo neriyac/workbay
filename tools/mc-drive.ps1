@@ -30,7 +30,8 @@ $SPI_SETFOREGROUNDLOCKTIMEOUT = 0x2001
 $KEYEVENTF_KEYUP = 0x2
 
 function Get-MC {
-  $p = Get-Process java -ErrorAction SilentlyContinue |
+  # javaw too: a launcher-installed instance runs javaw, runClient runs java.
+  $p = Get-Process java, javaw -ErrorAction SilentlyContinue |
        Where-Object { $_.MainWindowTitle -like 'Minecraft*' } | Select-Object -First 1
   if (-not $p) { throw "no Minecraft window" }
   return $p
