@@ -180,6 +180,19 @@ function Drag([int]$gx, [int]$gy, [int]$tx, [int]$ty) {
   Start-Sleep -Milliseconds 250
 }
 
+# The wheel, over a point in a GUI. `data` is a signed count of notches but mouse_event takes it
+# as an unsigned dword, so a negative one has to be handed over as its two's complement or
+# PowerShell refuses the cast outright.
+function Scroll([int]$gx, [int]$gy, [int]$notches) {
+  Aim $gx $gy
+  $step = if ($notches -lt 0) { [uint32](4294967296 - 120) } else { [uint32]120 }
+  for ($i = 0; $i -lt [Math]::Abs($notches); $i++) {
+    [W]::mouse_event(0x0800, 0, 0, $step, [IntPtr]::Zero)
+    Start-Sleep -Milliseconds 90
+  }
+  Start-Sleep -Milliseconds 200
+}
+
 function Aim([int]$gx, [int]$gy) {
   $h = Assert-MC
   $fb = FB

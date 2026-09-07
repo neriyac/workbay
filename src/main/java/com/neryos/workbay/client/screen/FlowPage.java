@@ -459,7 +459,11 @@ class FlowPage extends WorkbayPage {
         rule(g, x(MARGIN), py + 12, Draw.BLUE, 3);
         text(g, WorkbayScreen.gui("flow.legend.internal"), x(MARGIN + 20), py + 12, leftRoom,
             Draw.TEXT_DIM);
-        rule(g, x(MARGIN), py + 24, Draw.GREEN, 2);
+        // Solid, with a pip on it, because that is what a live edge is: the map draws a running
+        // link as a solid run carrying travelling pips, and a dashed sample was the one thing it
+        // never looks like -- dashed is what "stays inside" means, two lines above.
+        rule(g, x(MARGIN), py + 24, Draw.GREEN, 1);
+        g.fill(x(MARGIN + 7), py + 26, x(MARGIN + 10), py + 29, Draw.GREEN);
         text(g, WorkbayScreen.gui("flow.legend.live"), x(MARGIN + 20), py + 24, leftRoom,
             Draw.TEXT_DIM);
 
@@ -504,21 +508,22 @@ class FlowPage extends WorkbayPage {
     }
 
     /**
-     * What a box out in the world is called: the name the player gave the link, then the target
-     * block's own name, then — when this client cannot know it — <b>where</b> it is. Five nodes all
-     * reading "not loaded" is a map of one place.
-     */
-    /**
      * What a bay box says when you point at it: which bay, what is in it, and what it is doing.
      * The name alone was all a box carried, and on a map whose whole point is "where is my stuff
      * going" the box that holds the machine was the one saying least.
      */
     private List<Component> bayTip(WorkbaySnapshot.Bay bay) {
         List<Component> lines = new ArrayList<>();
-        lines.add(bayName(bay));
+        Component title = bayName(bay);
+        lines.add(title);
+        // Only when it is not the title again. A bay nobody has renamed *is* named after the block
+        // it holds, so the two lines read "Furnace / Furnace" -- the same fault the LINKS name
+        // column was fixed for, printed downwards instead of across.
         bay.hosted()
             .filter(id -> !id.equals(ResourceLocation.withDefaultNamespace("air")))
-            .ifPresent(id -> lines.add(name(id).copy().withStyle(
+            .map(FlowPage::name)
+            .filter(blockName -> !blockName.getString().equals(title.getString()))
+            .ifPresent(blockName -> lines.add(blockName.copy().withStyle(
                 net.minecraft.ChatFormatting.GRAY)));
         lines.add(WorkbayScreen.gui("flow.node.bay", bay.index() + 1)
             .copy().withStyle(net.minecraft.ChatFormatting.DARK_GRAY));
@@ -544,6 +549,11 @@ class FlowPage extends WorkbayPage {
         return lines;
     }
 
+    /**
+     * What a box out in the world is called: the name the player gave the link, then the target
+     * block's own name, then — when this client cannot know it — <b>where</b> it is. Five nodes all
+     * reading "not loaded" is a map of one place.
+     */
     private static Component targetName(WorkbaySnapshot.Link link) {
         if (link.label().isPresent()) {
             return Component.literal(link.label().get());
