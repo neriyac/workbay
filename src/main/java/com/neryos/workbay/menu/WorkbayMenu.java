@@ -208,6 +208,14 @@ public class WorkbayMenu extends AbstractContainerMenu {
             // rest; the menu itself is untouched and still tested, so bringing it back is one
             // button and this line.
             case OPEN_BAY_VIEW -> { }
+            case ENTER_ROOM -> {
+                // Closing first, for the same reason a bay visit does: the player is about to be
+                // somewhere this menu's stillValid would refuse, and a screen left open over a
+                // teleport is how you get a ghost.
+                serverPlayer.closeContainer();
+                com.neryos.workbay.world.RoomVisit.enter(serverPlayer, record, (int) arg);
+            }
+            case TOGGLE_ROOM_ANCHOR -> toggleRoomAnchor(serverPlayer, record, (int) arg);
             case ENTER_BAY -> {
                 // The screen where the player stands first, and the trip only if that cannot
                 // happen: a host with the mixins off (SPEC.md §0), a client with them off (arg),
@@ -537,6 +545,14 @@ public class WorkbayMenu extends AbstractContainerMenu {
             serverPlayer.displayClientMessage(com.neryos.workbay.WorkbayLang.message("locked"), true);
             return;
         }
+        // An Annex Plate with no Room Frame fitted is the "installs and does nothing" failure
+        // SPEC.md §1 warns about: roomCapacity is zero without a Frame, so the plate would be
+        // eaten for a room slot that cannot exist.
+        if (upgrade == WorkbayUpgrade.ANNEX_PLATE && record.upgrades().roomTier() == 0) {
+            serverPlayer.displayClientMessage(
+                com.neryos.workbay.WorkbayLang.message("annex_needs_frame"), true);
+            return;
+        }
         int installed = record.upgrades().installed(upgrade);
         if (installed >= upgrade.max()) {
             serverPlayer.displayClientMessage(
@@ -560,6 +576,40 @@ public class WorkbayMenu extends AbstractContainerMenu {
         RoomRegistry.get(serverPlayer.server).put(record
             .withUpgrades(record.upgrades().plus(upgrade))
             .withAssay(record.assay().withLevy(record.assay().levy() - cost)));
+    }
+
+    /**
+     * Switches one room's Anchor. Refused when the network has no Anchor upgrade, when the host has
+     * force loading off, or when the network is already holding as many rooms as it may — the cap
+     * is the number a server owner is actually paying, so it is checked on the click and not read
+     * once at startup.
+     */
+    private void toggleRoomAnchor(ServerPlayer serverPlayer, WorkbayRecord record, int index) {
+        if (!record.owner().equals(serverPlayer.getUUID())) {
+            serverPlayer.displayClientMessage(com.neryos.workbay.WorkbayLang.message("locked"), true);
+            return;
+        }
+        com.neryos.workbay.world.RoomRegistry registry =
+            com.neryos.workbay.world.RoomRegistry.get(serverPlayer.server);
+        List<com.neryos.workbay.world.RoomRecord> rooms = registry.roomsOf(record);
+        if (index < 0 || index >= rooms.size()) {
+            return;
+        }
+        com.neryos.workbay.world.RoomRecord room = rooms.get(index);
+        boolean turningOn = !room.anchored();
+        if (turningOn && !com.neryos.workbay.world.RoomAnchors.canAnchorAnother(registry, record, room)) {
+            serverPlayer.displayClientMessage(
+                com.neryos.workbay.WorkbayLang.message("anchor_capped",
+                    com.neryos.workbay.config.WorkbayConfig.SERVER.maxAnchoredRoomsPerNetwork.get()),
+                true);
+            return;
+        }
+        com.neryos.workbay.world.RoomRecord updated = room.withAnchored(turningOn);
+        registry.putRoom(updated);
+        ServerLevel backshop = serverPlayer.server.getLevel(WorkbayDimensions.BACKSHOP);
+        if (backshop != null) {
+            com.neryos.workbay.world.RoomAnchors.apply(backshop, updated);
+        }
     }
 
     // -------------------------------------------------------------- snapshot
@@ -614,7 +664,30 @@ public class WorkbayMenu extends AbstractContainerMenu {
             bays, links, record.upgrades(), record.assay().levy(), record.assay().rate(),
             record.assay().skimmed(), record.deployedCount(),
             com.neryos.workbay.config.WorkbayConfig.SERVER.maxDeployedWorkbaysPerNetwork.get(),
-            com.neryos.workbay.remote.RemoteConfig.remoteScreensEnabled());
+            com.neryos.workbay.remote.RemoteConfig.remoteScreensEnabled(),
+            readRooms(player, record));
+    }
+
+    /**
+     * One entry per room slot the upgrades entitle this network to, opened or not. An unopened slot
+     * has no record yet — SPEC.md §8 spends the region on first entry — so it reads as zero size
+     * and zero chunks, which is exactly what it costs.
+     */
+    private static List<WorkbaySnapshot.Room> readRooms(ServerPlayer player, WorkbayRecord record) {
+        List<WorkbaySnapshot.Room> out = new ArrayList<>();
+        com.neryos.workbay.world.RoomRegistry registry =
+            com.neryos.workbay.world.RoomRegistry.get(player.server);
+        List<com.neryos.workbay.world.RoomRecord> known = registry.roomsOf(record);
+        for (int index = 0; index < record.roomCapacity(); index++) {
+            com.neryos.workbay.world.RoomRecord room = index < known.size() ? known.get(index) : null;
+            String name = room == null ? "" : room.name().orElse("");
+            out.add(new WorkbaySnapshot.Room(index, name,
+                room == null ? 0 : com.neryos.workbay.world.RoomGeometry.interior(room.builtTier()),
+                room == null ? 0 : room.chunkCost(),
+                room != null && room.built(),
+                room != null && room.anchored()));
+        }
+        return out;
     }
 
     private static WorkbaySnapshot.Bay readBay(WorkbayRecord record, int index,

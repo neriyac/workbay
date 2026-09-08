@@ -62,6 +62,7 @@ public class WorkbayConfig {
     public static class Server {
         public final ModConfigSpec.BooleanValue allowAnchors;
         public final ModConfigSpec.IntValue maxAnchoredWorkbaysPerPlayer;
+        public final ModConfigSpec.IntValue maxAnchoredRoomsPerNetwork;
         public final ModConfigSpec.IntValue anchorGraceMinutes;
         public final ModConfigSpec.IntValue maxBaysPerWorkbay;
         public final ModConfigSpec.IntValue maxNetworksPerPlayer;
@@ -86,6 +87,12 @@ public class WorkbayConfig {
         public final ModConfigSpec.IntValue multichannelCostStep;
         public final ModConfigSpec.IntValue impellerCost;
         public final ModConfigSpec.IntValue impellerCostStep;
+        public final ModConfigSpec.IntValue roomFrameCost;
+        public final ModConfigSpec.IntValue wideRoomFrameCost;
+        public final ModConfigSpec.IntValue vastRoomFrameCost;
+        public final ModConfigSpec.IntValue annexPlateCost;
+        public final ModConfigSpec.IntValue annexPlateCostStep;
+        public final ModConfigSpec.IntValue anchorCost;
 
         Server(ModConfigSpec.Builder builder) {
             allowAnchors = builder
@@ -97,6 +104,13 @@ public class WorkbayConfig {
                 .comment("How many of one player's Workbays may force-load at once. Further Anchors",
                     "install but stay inactive.")
                 .defineInRange("maxAnchoredWorkbaysPerPlayer", 4, 0, 1024);
+
+            maxAnchoredRoomsPerNetwork = builder
+                .comment("How many of a network's rooms may be anchored at once.",
+                    "This is the number a host actually pays: an occupied room costs no ticket at",
+                    "all, and an anchored one holds 1, 4 or 9 chunks depending on its Room Frame.",
+                    "One anchored vast room is nine ticking chunks; four of them is thirty-six.")
+                .defineInRange("maxAnchoredRoomsPerNetwork", 1, 0, 64);
 
             anchorGraceMinutes = builder
                 .comment("How long a player's anchored Workbays keep running after they log out.")
@@ -218,6 +232,14 @@ public class WorkbayConfig {
             multichannelCostStep = builder.defineInRange("multichannelCostStep", 0, 0, 100_000);
             impellerCost = builder.defineInRange("impellerCost", 12, 0, 100_000);
             impellerCostStep = builder.defineInRange("impellerCostStep", 12, 0, 100_000);
+            // No step on the Frames: only one is ever installed, the highest wins, and a step on a
+            // one-off is a knob that can never be read. The steepness is in the gap between them.
+            roomFrameCost = builder.defineInRange("roomFrameCost", 40, 0, 100_000);
+            wideRoomFrameCost = builder.defineInRange("wideRoomFrameCost", 120, 0, 100_000);
+            vastRoomFrameCost = builder.defineInRange("vastRoomFrameCost", 300, 0, 100_000);
+            annexPlateCost = builder.defineInRange("annexPlateCost", 30, 0, 100_000);
+            annexPlateCostStep = builder.defineInRange("annexPlateCostStep", 30, 0, 100_000);
+            anchorCost = builder.defineInRange("anchorCost", 200, 0, 100_000);
 
             builder.pop();
         }

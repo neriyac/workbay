@@ -60,10 +60,16 @@ public record WorkbaySnapshot(
      * about to get: a button reading "open its screen" that teleports you into a bay is the mod
      * lying about what it just did.
      */
-    boolean remoteScreens) {
+    boolean remoteScreens,
+    /**
+     * This network's rooms, in slot order, one entry per slot the upgrades entitle it to —
+     * including the ones nobody has opened yet, which is what {@code built} is false for. On the
+     * snapshot because the page has to price a room before it exists.
+     */
+    List<Room> rooms) {
 
     public static final WorkbaySnapshot EMPTY = new WorkbaySnapshot("", false, 1, 0, 0, 1,
-        List.of(), List.of(), WorkbayRecord.Upgrades.NONE, 0, 0, 0, 1, 1, false);
+        List.of(), List.of(), WorkbayRecord.Upgrades.NONE, 0, 0, 0, 1, 1, false, List.of());
 
     public static final Codec<WorkbaySnapshot> CODEC = RecordCodecBuilder.create(i -> i.group(
         Codec.STRING.fieldOf("Code").forGetter(WorkbaySnapshot::code),
@@ -80,8 +86,27 @@ public record WorkbaySnapshot(
         Codec.INT.fieldOf("Skimmed").forGetter(WorkbaySnapshot::skimmed),
         Codec.INT.fieldOf("Deployed").forGetter(WorkbaySnapshot::deployed),
         Codec.INT.fieldOf("MaxDeployed").forGetter(WorkbaySnapshot::maxDeployed),
-        Codec.BOOL.optionalFieldOf("RemoteScreens", false).forGetter(WorkbaySnapshot::remoteScreens)
+        Codec.BOOL.optionalFieldOf("RemoteScreens", false).forGetter(WorkbaySnapshot::remoteScreens),
+        Room.CODEC.listOf().optionalFieldOf("Rooms", List.of()).forGetter(WorkbaySnapshot::rooms)
     ).apply(i, WorkbaySnapshot::new));
+
+    /**
+     * One room slot, as the ROOMS page needs it. {@code interior} and {@code chunkCost} are what
+     * the room <b>is</b>, not what the network's Frame entitles it to: an unopened slot is 0 and 0
+     * and says {@code Empty}, and a room built before an upgrade still reads its own size until
+     * somebody walks back into it and it grows.
+     */
+    public record Room(int index, String name, int interior, int chunkCost, boolean built,
+        boolean anchored) {
+        public static final Codec<Room> CODEC = RecordCodecBuilder.create(i -> i.group(
+            Codec.INT.fieldOf("Index").forGetter(Room::index),
+            Codec.STRING.fieldOf("Name").forGetter(Room::name),
+            Codec.INT.fieldOf("Interior").forGetter(Room::interior),
+            Codec.INT.fieldOf("ChunkCost").forGetter(Room::chunkCost),
+            Codec.BOOL.fieldOf("Built").forGetter(Room::built),
+            Codec.BOOL.fieldOf("Anchored").forGetter(Room::anchored)
+        ).apply(i, Room::new));
+    }
 
     public static final StreamCodec<RegistryFriendlyByteBuf, WorkbaySnapshot> STREAM_CODEC =
         ByteBufCodecs.fromCodecWithRegistries(CODEC);

@@ -138,10 +138,17 @@ class UpgradesPage extends WorkbayPage {
     private void rows(GuiGraphics g, int mouseX, int mouseY) {
         WorkbaySnapshot snap = snapshot();
 
+        int row = -1;
         for (WorkbayUpgrade upgrade : WorkbayUpgrade.values()) {
+            // The room line is on the ROOMS page, beside the rooms whose chunk cost it sets. This
+            // page keeps the four rungs it was drawn for, and its rows stay two lines deep.
+            if (upgrade.aboutRooms()) {
+                continue;
+            }
+            row++;
             int index = upgrade.ordinal();
             int px = x(ROW_X);
-            int py = y(ROW_Y + index * ROW_PITCH);
+            int py = y(ROW_Y + row * ROW_PITCH);
             int installed = snap.upgrades().installed(upgrade);
             boolean maxed = installed >= upgrade.max();
             int cost = upgrade.levyCost(installed);

@@ -91,6 +91,15 @@ public class WBRecipeProvider extends RecipeProvider {
         upgrade(output, WBItems.RESONATOR.get(), Items.ENDER_EYE);
         upgrade(output, WBItems.MULTICHANNEL.get(), Items.AMETHYST_SHARD);
         upgrade(output, WBItems.IMPELLER.get(), Items.BREEZE_ROD);
+        upgrade(output, WBItems.ROOM_FRAME.get(), Items.QUARTZ);
+        upgrade(output, WBItems.WIDE_ROOM_FRAME.get(), Items.DIAMOND);
+        // SPEC.md §3: the Vast Frame carries the mod's rarest gate because it buys the rarest
+        // capability -- 46 blocks square is where a multiblock you built by hand goes.
+        upgrade(output, WBItems.VAST_ROOM_FRAME.get(), Items.NETHER_STAR);
+        upgrade(output, WBItems.ANNEX_PLATE.get(), Items.COPPER_INGOT);
+        // SPEC.md §3: force loading carries the hardest gate in the mod, and a Heart of the Sea is
+        // the vanilla one-time find that a Broken Spawner stands in for in a modded pack.
+        upgrade(output, WBItems.ANCHOR.get(), Items.HEART_OF_THE_SEA);
     }
 
     private void upgrade(RecipeOutput output, net.minecraft.world.item.Item result,

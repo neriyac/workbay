@@ -29,6 +29,11 @@ public class WBLanguageProvider extends LanguageProvider {
         addBlock(WBBlocks.CONNECTOR, "Connector");
         addBlock(WBBlocks.ASSAY, "Assay");
         addItem(WBItems.EXPANSION_PLATE, "Expansion Plate");
+        addItem(WBItems.ROOM_FRAME, "Room Frame");
+        addItem(WBItems.WIDE_ROOM_FRAME, "Wide Room Frame");
+        addItem(WBItems.VAST_ROOM_FRAME, "Vast Room Frame");
+        addItem(WBItems.ANNEX_PLATE, "Annex Plate");
+        addItem(WBItems.ANCHOR, "Anchor");
         addItem(WBItems.RESONATOR, "Resonator");
         addItem(WBItems.MULTICHANNEL, "Multichannel Upgrade");
         addItem(WBItems.IMPELLER, "Impeller");
@@ -386,6 +391,36 @@ public class WBLanguageProvider extends LanguageProvider {
         // tooltip, which is where this mod's text budget goes.
         add(WorkbayLang.guiKey("upgrade.expansion_plate"), "Expansion Plate");
         add(WorkbayLang.guiKey("upgrade.expansion_plate.desc"), "+1 bay");
+        add(WorkbayLang.guiKey("upgrade.room_frame"), "Room Frame");
+        add(WorkbayLang.guiKey("upgrade.room_frame.desc"), "A 14x14 room, 1 chunk");
+        add(WorkbayLang.guiKey("upgrade.wide_room_frame"), "Wide Room Frame");
+        add(WorkbayLang.guiKey("upgrade.wide_room_frame.desc"), "Every room 30x30, 4 chunks");
+        add(WorkbayLang.guiKey("upgrade.vast_room_frame"), "Vast Room Frame");
+        add(WorkbayLang.guiKey("upgrade.vast_room_frame.desc"), "Every room 46x46, 9 chunks");
+        add(WorkbayLang.guiKey("upgrade.annex_plate"), "Annex Plate");
+        add(WorkbayLang.guiKey("upgrade.annex_plate.desc"), "+1 room");
+        add(WorkbayLang.guiKey("upgrade.anchor"), "Anchor");
+        add(WorkbayLang.guiKey("upgrade.anchor.desc"), "Rooms may run while empty");
+
+        add(WorkbayLang.guiKey("button.rooms"), "Rooms");
+        add(WorkbayLang.guiKey("button.rooms.tip"), "Somewhere to build, out the back. A room only "
+            + "runs while somebody is standing in it, unless you anchor it.");
+        add(WorkbayLang.guiKey("rooms.none"), "Install a Room Frame above for your first room.");
+        add(WorkbayLang.guiKey("rooms.name"), "Room %s");
+        add(WorkbayLang.guiKey("rooms.size"), "%sx%s, %s chunks");
+        add(WorkbayLang.guiKey("rooms.empty"), "Empty - open it to build it");
+        add(WorkbayLang.guiKey("rooms.enter"), "Enter");
+        add(WorkbayLang.guiKey("rooms.open"), "Open");
+        add(WorkbayLang.guiKey("rooms.enter.tip"), "Go and stand in it. Click the Exit block by the "
+            + "door to come back to exactly where you are now.");
+        add(WorkbayLang.guiKey("rooms.anchored"), "Anchored");
+        add(WorkbayLang.guiKey("rooms.anchored.tip"), "This room keeps running while you are away, "
+            + "and holds %s chunks loaded to do it. Click to switch it off.");
+        add(WorkbayLang.guiKey("rooms.unanchored"), "Not anchored");
+        add(WorkbayLang.guiKey("rooms.unanchored.tip"), "This room only runs while somebody is "
+            + "inside it, and costs nothing while it is empty. Anchoring it holds %s chunks loaded.");
+        add(WorkbayLang.messageKey("anchor_capped"), "This network may anchor %s room(s) at a time. "
+            + "Switch another one off first.");
         add(WorkbayLang.guiKey("upgrade.resonator"), "Resonator");
         add(WorkbayLang.guiKey("upgrade.resonator.desc"), "Any dimension");
         add(WorkbayLang.guiKey("upgrade.multichannel"), "Multichannel");
@@ -488,6 +523,8 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.messageKey("pair_needs_connector"), "Hold a Connector to pair one.");
         add(WorkbayLang.messageKey("upgrade_maxed"), "This Workbay already has as many of those as "
             + "it takes.");
+        add(WorkbayLang.messageKey("annex_needs_frame"), "An Annex Plate adds a room to a network "
+            + "that already has one. Install a Room Frame first.");
         add(WorkbayLang.messageKey("upgrade_missing"), "You don't have one of those to install.");
         add(WorkbayLang.messageKey("upgrade_needs_levy"), "That costs %s Levy and this Workbay has "
             + "%s. Raise the skim, or move more goods through your links.");

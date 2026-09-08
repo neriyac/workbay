@@ -71,5 +71,12 @@ public enum WorkbayAction {
      * <em>client</em> has the mixins on, because a client without them cannot find a machine in a
      * chunk it was never sent, and only the client knows its own file.
      */
-    ENTER_BAY
+    ENTER_BAY,
+    /** Puts the player in room {@code arg} of this network, building it on its first visit. */
+    ENTER_ROOM,
+    /**
+     * Switches room {@code arg}'s Anchor on or off. Off is the default and the whole point: an
+     * Anchor that lit every room the network owns would buy 36 ticking chunks with one upgrade.
+     */
+    TOGGLE_ROOM_ANCHOR
 }

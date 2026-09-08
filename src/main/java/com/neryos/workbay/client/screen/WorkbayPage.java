@@ -65,13 +65,19 @@ abstract class WorkbayPage {
         g.pose().scale(1.6F, 1.6F, 1.0F);
         // Room is in the scaled frame, so it is the gap to the first header button divided by the
         // scale — otherwise a title box drawn at 1.6x claims 1.6x the pixels it was told it had.
-        Draw.text(g, screen.font(), title, 0, 0, (int) ((width() - 74 - 8) / 1.6F), Draw.TEXT);
+        Draw.text(g, screen.font(), title, 0, 0, (int) ((width() - 96 - 8) / 1.6F), Draw.TEXT);
         g.pose().popPose();
 
         WorkbaySnapshot snap = snapshot();
 
-        // Three 18x18 buttons, top right. The lock is the only one that changes what it draws.
+        // Four 18x18 buttons, top right. The lock is the only one that changes what it draws.
         boolean onBays = screen.page() == WorkbayScreen.Page.BAYS;
+        // ROOMS is always here, never hidden until a Frame is installed: the Frames are bought on
+        // that page, so hiding it until you own one is a door locked from the inside.
+        iconButton(g, mouseX, mouseY, x(width() - 88), y(6), WBIcons.DOOR,
+            screen.page() == WorkbayScreen.Page.ROOMS,
+            () -> screen.goTo(WorkbayScreen.Page.ROOMS),
+            WorkbayScreen.gui("button.rooms"), WorkbayScreen.gui("button.rooms.tip"));
         iconButton(g, mouseX, mouseY, x(width() - 66), y(6), WBIcons.UPGRADE,
             screen.page() == WorkbayScreen.Page.UPGRADES,
             () -> screen.goTo(WorkbayScreen.Page.UPGRADES),

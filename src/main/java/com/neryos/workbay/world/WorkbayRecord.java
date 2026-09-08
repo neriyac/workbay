@@ -277,6 +277,16 @@ public record WorkbayRecord(
                     annexPlates, roomTier, multichannel + 1, impellers);
                 case IMPELLER -> new Upgrades(expansionPlates, resonators, anchors,
                     annexPlates, roomTier, multichannel, impellers + 1);
+                case ANNEX_PLATE -> new Upgrades(expansionPlates, resonators, anchors,
+                    annexPlates + 1, roomTier, multichannel, impellers);
+                case ANCHOR -> new Upgrades(expansionPlates, resonators, anchors + 1,
+                    annexPlates, roomTier, multichannel, impellers);
+                // Highest wins, and never down: a smaller Frame fitted over a bigger room would
+                // put bedrock through a factory somebody built. install() refuses it first; this
+                // is the second half of the same rule, where the number actually changes.
+                case ROOM_FRAME, WIDE_ROOM_FRAME, VAST_ROOM_FRAME ->
+                    new Upgrades(expansionPlates, resonators, anchors, annexPlates,
+                        Math.max(roomTier, upgrade.roomTier()), multichannel, impellers);
             };
         }
 
@@ -286,6 +296,12 @@ public record WorkbayRecord(
                 case RESONATOR -> resonators;
                 case MULTICHANNEL -> multichannel;
                 case IMPELLER -> impellers;
+                case ANNEX_PLATE -> annexPlates;
+                case ANCHOR -> anchors;
+                // 1 once the room is already at least this big, so the install path refuses it as
+                // maxed rather than needing a rule of its own.
+                case ROOM_FRAME, WIDE_ROOM_FRAME, VAST_ROOM_FRAME ->
+                    roomTier >= upgrade.roomTier() ? 1 : 0;
             };
         }
 

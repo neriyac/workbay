@@ -349,6 +349,42 @@ public static final String[] EXTRACT = {
         ".####.......",
     };
 
+
+    /**
+     * ROOMS. A doorway with a floor line, which is what the page is about — somewhere to walk into.
+     * Not a house or a box: both read as storage, and this mod already draws a bay as a box.
+     */
+    public static final String[] DOOR = {
+        "............",
+        "..########..",
+        "..##....##..",
+        "..##....##..",
+        "..##....##..",
+        "..##....##..",
+        "..##....##..",
+        "..##.##.##..",
+        "..##....##..",
+        "..##....##..",
+        "############",
+        "............",
+    };
+
+    /** The room anchor toggle: a shackle over two flukes, read at twelve pixels as "held down". */
+    public static final String[] ANCHOR = {
+        "....####....",
+        "...##..##...",
+        "...##..##...",
+        "....####....",
+        ".....##.....",
+        "..########..",
+        ".....##.....",
+        ".....##.....",
+        "##...##...##",
+        "##...##...##",
+        ".##########.",
+        "...######...",
+    };
+
     public static final String[] PLUS = {
         "............",
         "............",

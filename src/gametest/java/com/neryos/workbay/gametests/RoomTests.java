@@ -39,9 +39,13 @@ public class RoomTests {
 
     /** A Workbay bound to a mock player, with a Room Frame of the given tier granted. */
     private record Site(GameTestPlayer player, ServerLevel backshop, WorkbayRecord record,
-        Vec3 from, float yRot, float xRot) {}
+        Vec3 from, float yRot, float xRot, BlockPos workbayPos) {}
 
     private static Site site(ExtendedGameTestHelper helper, int tier) {
+        return site(helper, tier, 0, 0);
+    }
+
+    private static Site site(ExtendedGameTestHelper helper, int tier, int annexPlates, int anchors) {
         GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
         BlockPos pos = helper.absolutePos(new BlockPos(0, 1, 0));
         ServerLevel level = helper.getLevel();
@@ -54,11 +58,11 @@ public class RoomTests {
         WorkbayRecord record = workbay.record().orElseThrow();
         WorkbayRecord.Upgrades up = record.upgrades();
         record = record.withUpgrades(new WorkbayRecord.Upgrades(up.expansionPlates(), up.resonators(),
-            up.anchors(), up.annexPlates(), tier, up.multichannel(), up.impellers()));
+            anchors, annexPlates, tier, up.multichannel(), up.impellers()));
         RoomRegistry.get(level.getServer()).put(record);
 
         return new Site(player, level.getServer().getLevel(WorkbayDimensions.BACKSHOP), record,
-            player.position(), player.getYRot(), player.getXRot());
+            player.position(), player.getYRot(), player.getXRot(), pos);
     }
 
     private static RoomRecord room(ExtendedGameTestHelper helper, Site site) {
@@ -182,6 +186,65 @@ public class RoomTests {
                 .is(WBBlocks.EXIT.get()), "the Exit block moved when the room grew");
             helper.succeed();
         });
+    }
+
+    /**
+     * Anchoring is per room and capped, which is the whole answer to "what does a room cost a
+     * server". An Anchor that lit every room the network owns would buy up to thirty-six ticking
+     * chunks with one upgrade and no second thought.
+     */
+    @GameTest
+    @TestHolder(description = "Anchoring is switched on per room and refused past the network's cap.")
+    public static void anchoringIsPerRoomAndCapped(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            Site site = site(helper, 1, 2, 1);
+            // Two rooms, both opened, so both have a shell and a size to charge for.
+            helper.assertTrue(RoomVisit.enter(site.player(), site.record(), 0), "room 1 refused");
+            RoomVisit.leave(site.player());
+            RoomRegistry registry = RoomRegistry.get(helper.getLevel().getServer());
+            WorkbayRecord current = registry.byId(site.record().id()).orElseThrow();
+            helper.assertTrue(RoomVisit.enter(site.player(), current, 1), "room 2 refused");
+            RoomVisit.leave(site.player());
+
+            com.neryos.workbay.menu.WorkbayMenu menu = menu(helper, site);
+            menu.act(com.neryos.workbay.menu.WorkbayAction.TOGGLE_ROOM_ANCHOR, 0,
+                java.util.Optional.empty());
+            helper.assertTrue(rooms(helper, site).get(0).anchored(),
+                "switching room 1's anchor on did nothing");
+
+            // maxAnchoredRoomsPerNetwork defaults to 1: the second must be refused, not silently
+            // taken, because the number is what a host is paying.
+            menu.act(com.neryos.workbay.menu.WorkbayAction.TOGGLE_ROOM_ANCHOR, 1,
+                java.util.Optional.empty());
+            helper.assertFalse(rooms(helper, site).get(1).anchored(),
+                "a second room anchored past the cap of "
+                    + com.neryos.workbay.config.WorkbayConfig.SERVER.maxAnchoredRoomsPerNetwork.get());
+
+            // And the cap is a cap, not a lock: switching the first off frees the slot.
+            menu.act(com.neryos.workbay.menu.WorkbayAction.TOGGLE_ROOM_ANCHOR, 0,
+                java.util.Optional.empty());
+            menu.act(com.neryos.workbay.menu.WorkbayAction.TOGGLE_ROOM_ANCHOR, 1,
+                java.util.Optional.empty());
+            helper.assertFalse(rooms(helper, site).get(0).anchored(),
+                "room 1 is still anchored after being switched off");
+            helper.assertTrue(rooms(helper, site).get(1).anchored(),
+                "room 2 could not be anchored after room 1 was switched off");
+            helper.succeed();
+        });
+    }
+
+    private static java.util.List<RoomRecord> rooms(ExtendedGameTestHelper helper, Site site) {
+        RoomRegistry registry = RoomRegistry.get(helper.getLevel().getServer());
+        return registry.roomsOf(registry.byId(site.record().id()).orElseThrow());
+    }
+
+    private static com.neryos.workbay.menu.WorkbayMenu menu(ExtendedGameTestHelper helper, Site site) {
+        WorkbayBlockEntity workbay = (WorkbayBlockEntity) helper.getLevel()
+            .getBlockEntity(site.workbayPos());
+        return new com.neryos.workbay.menu.WorkbayMenu(1, site.player().getInventory(), workbay,
+            com.neryos.workbay.menu.WorkbayMenu.build(workbay, site.player(), 0));
     }
 
     /**

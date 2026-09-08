@@ -32,7 +32,7 @@ import java.util.UUID;
 public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
 
     /** Which screen is showing. All three share one menu; there is nothing to re-bind between them. */
-    public enum Page { BAYS, FLOW, UPGRADES }
+    public enum Page { BAYS, FLOW, UPGRADES, ROOMS }
 
     private final List<Hit> hits = new ArrayList<>();
     private final List<Ghost> ghosts = new ArrayList<>();
@@ -92,6 +92,7 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
             case BAYS -> new BaysPage(this);
             case FLOW -> new FlowPage(this);
             case UPGRADES -> new UpgradesPage(this);
+            case ROOMS -> new RoomsPage(this);
         };
         imageWidth = current.width();
         imageHeight = current.height();

@@ -57,7 +57,66 @@ public enum WorkbayUpgrade implements StringRepresentable {
     IMPELLER("impeller", () -> WorkbayConfig.SERVER.maxImpellers.get(),
         () -> WorkbayConfig.SERVER.impellerCost.get(),
         () -> WorkbayConfig.SERVER.impellerCostStep.get(),
-        () -> WBItems.IMPELLER.get());
+        () -> WBItems.IMPELLER.get()),
+
+    /**
+     * The room line. Three Frames, <b>highest wins</b>, and one size for every room the network
+     * owns — a Frame per room would mean a size stored per room, a way to say which room a Frame
+     * is going into, and a player holding a Wide Frame with no idea where it landed.
+     *
+     * <p>Each is its own enum constant rather than one Frame with a level, because the install path
+     * is a max and a counter and this is the shape that fits it: {@code installed} answers 1 once
+     * the tier is already at least this one, so a smaller Frame on a bigger room is refused as
+     * "already fitted" rather than quietly downgrading a room somebody is standing in.
+     */
+    ROOM_FRAME("room_frame", () -> 1,
+        () -> WorkbayConfig.SERVER.roomFrameCost.get(), () -> 0,
+        () -> WBItems.ROOM_FRAME.get()),
+    WIDE_ROOM_FRAME("wide_room_frame", () -> 1,
+        () -> WorkbayConfig.SERVER.wideRoomFrameCost.get(), () -> 0,
+        () -> WBItems.WIDE_ROOM_FRAME.get()),
+    VAST_ROOM_FRAME("vast_room_frame", () -> 1,
+        () -> WorkbayConfig.SERVER.vastRoomFrameCost.get(), () -> 0,
+        () -> WBItems.VAST_ROOM_FRAME.get()),
+
+    /**
+     * Lets a room be kept running while it is empty, and the bay column while nobody is near.
+     * Grants the <em>ability</em> only: SPEC.md §0 switches each room on separately, beside the
+     * number of chunks it holds, so one upgrade cannot quietly light thirty-six of them.
+     *
+     * <p>Its max is the config switch, so a host who wants no force loading in their JVM gets an
+     * upgrade that cannot be installed rather than a registry that changes shape (SPEC.md §13).
+     */
+    ANCHOR("anchor", () -> WorkbayConfig.SERVER.allowAnchors.get() ? 1 : 0,
+        () -> WorkbayConfig.SERVER.anchorCost.get(), () -> 0,
+        () -> WBItems.ANCHOR.get()),
+
+    /** +1 room each, at whatever size the Frame says. Three, so the ceiling is four rooms. */
+    ANNEX_PLATE("annex_plate",
+        () -> com.neryos.workbay.world.RoomGeometry.MAX_ROOMS - 1,
+        () -> WorkbayConfig.SERVER.annexPlateCost.get(),
+        () -> WorkbayConfig.SERVER.annexPlateCostStep.get(),
+        () -> WBItems.ANNEX_PLATE.get());
+
+    /**
+     * True for the upgrades the ROOMS page owns. They are bought there rather than on UPGRADES
+     * because what they cost is a <b>chunk count</b>, and a chunk count means nothing without the
+     * rooms it applies to beside it.
+     */
+    public boolean aboutRooms() {
+        return this != EXPANSION_PLATE && this != RESONATOR && this != MULTICHANNEL
+            && this != IMPELLER;
+    }
+
+    /** The Room Frame tier this upgrade grants, or 0 for anything that is not a Frame. */
+    public int roomTier() {
+        return switch (this) {
+            case ROOM_FRAME -> 1;
+            case WIDE_ROOM_FRAME -> 2;
+            case VAST_ROOM_FRAME -> 3;
+            default -> 0;
+        };
+    }
 
     private final String name;
     private final IntSupplier max;

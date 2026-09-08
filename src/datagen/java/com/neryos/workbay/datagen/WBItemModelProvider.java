@@ -23,6 +23,11 @@ public class WBItemModelProvider extends ItemModelProvider {
         flatItem(WBItems.SHOPSTEEL.getId().getPath());
         flatItem(WBItems.HOUSING.getId().getPath());
         flatItem(WBItems.EXPANSION_PLATE.getId().getPath());
+        flatItem(WBItems.ROOM_FRAME.getId().getPath());
+        flatItem(WBItems.WIDE_ROOM_FRAME.getId().getPath());
+        flatItem(WBItems.VAST_ROOM_FRAME.getId().getPath());
+        flatItem(WBItems.ANNEX_PLATE.getId().getPath());
+        flatItem(WBItems.ANCHOR.getId().getPath());
         flatItem(WBItems.RESONATOR.getId().getPath());
         flatItem(WBItems.MULTICHANNEL.getId().getPath());
         flatItem(WBItems.IMPELLER.getId().getPath());
