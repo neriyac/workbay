@@ -186,8 +186,12 @@ public class WorkbayBlock extends BaseEntityBlock {
         if (record == null) {
             return net.minecraft.world.ItemInteractionResult.FAIL;
         }
-        pair(stack, record, GlobalPos.of(level.dimension(), pos), firstOccupiedBay(record));
-        player.displayClientMessage(WorkbayLang.message("connector_paired"), true);
+        int bay = firstOccupiedBay(record);
+        pair(stack, record, GlobalPos.of(level.dimension(), pos), bay);
+        // Which bay, because this path always lands on the first occupied one and a player with a
+        // full rack has no way to know that from a message that does not say it. Aiming somewhere
+        // else is the screen's Pair button.
+        player.displayClientMessage(WorkbayLang.message("connector_paired", bay + 1), true);
         return net.minecraft.world.ItemInteractionResult.CONSUME;
     }
 

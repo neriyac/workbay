@@ -95,8 +95,8 @@ public class WBLanguageProvider extends LanguageProvider {
             + "It has no faces to connect to out here.");
 
         // The Connector, which is where every link comes from. SPEC.md §0.
-        add(WorkbayLang.messageKey("connector_paired"), "Connector paired. Place it against the "
-            + "block you want to link.");
+        add(WorkbayLang.messageKey("connector_paired"), "Connector paired to bay %s. Place it against "
+            + "the block you want to link.");
         add(WorkbayLang.messageKey("connector_unpaired"), "This Connector isn't paired yet. "
             + "Right-click a Workbay with it first.");
         add(WorkbayLang.messageKey("connector_linked"), "Linked to %s. Workbay %s has a row for it, "
@@ -361,6 +361,10 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("upgrades.deployed.full"), "This network is at its limit. Placing "
             + "another Workbay is refused and the item stays in your hand — break this one "
             + "first, or raise maxDeployedWorkbaysPerNetwork in the server config.");
+        // 3 of 1 is a real state: the cap was lowered after those blocks went down, and
+        // nothing re-checks it. OPEN_ISSUES #49 -- the screen names it rather than hiding it.
+        add(WorkbayLang.guiKey("upgrades.deployed.over"), "%s more than this server allows. They "
+            + "were placed before the cap was lowered; break one to get back under it.");
         add(WorkbayLang.guiKey("upgrades.levy"), "Levy: %s");
         add(WorkbayLang.guiKey("upgrades.cost"), "Costs %s Levy, taken from this Workbay's balance "
             + "when you install it. The next one costs more.");
@@ -544,7 +548,8 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("skim.no_assay.short"), "No Assay");
         add(WorkbayLang.guiKey("skim.no_assay.tip"), "Nothing is skimmed until an Assay is racked in a bay.");
 
-        add(WorkbayLang.messageKey("pair_needs_connector"), "Hold a Connector to pair one.");
+        add(WorkbayLang.messageKey("pair_needs_connector"), "Hold a Connector \u2014 main hand or off "
+            + "hand \u2014 to pair one to this bay.");
         add(WorkbayLang.messageKey("upgrade_maxed"), "This Workbay already has as many of those as "
             + "it takes.");
         add(WorkbayLang.messageKey("annex_needs_frame"), "An Annex Plate adds a room to a network "

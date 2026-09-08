@@ -392,6 +392,61 @@ public class MenuTests {
      * The insert flow from SPEC.md §4, without a screen: hold a machine, click the bay slot, and it
      * is standing in the Backshop. Then take it back out, with everything inside it.
      */
+    /**
+     * <b>The Pair button, which could never be pressed with anything in it.</b> It read the main
+     * hand only — and a Connector in the main hand is what pairs one by right-clicking the block,
+     * which opens no screen. So the one control that can aim a Connector at a bay other than the
+     * first occupied one was unreachable for the whole project (OPEN_ISSUES #28). It reads the
+     * offhand now.
+     *
+     * <p>The bay asserted is <b>not</b> the one the block-side path would have chosen, or the test
+     * would pass on the bug: bay 0 is occupied here, so {@code firstOccupiedBay} is 0 and the
+     * button is asked for 2.
+     */
+    @GameTest
+    @TestHolder(description = "The Pair button stamps a Connector held in the offhand with the selected bay.")
+    public static void pairReachesTheOffhandAndTheSelectedBay(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
+            WorkbayRecord record = workbay.record().orElseThrow();
+            com.neryos.workbay.world.RoomRegistry.get(level.getServer())
+                .put(record.withUpgrades(new WorkbayRecord.Upgrades(2, 0, 0, 0, 0, 0, 0)));
+
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            com.neryos.workbay.world.WorkbayTickets.force(backshop,
+                workbay.record().orElseThrow().id(), workbay.record().orElseThrow().bayColumn());
+            com.neryos.workbay.world.BayHosting.rack(backshop,
+                workbay.record().orElseThrow().bayColumn(), 0, new ItemStack(Blocks.CHEST), player,
+                net.minecraft.core.Direction.NORTH);
+
+            WorkbayMenu menu = menuFor(workbay, player);
+            ItemStack connector = new ItemStack(
+                com.neryos.workbay.init.WBBlocks.CONNECTOR.get());
+            player.setItemInHand(InteractionHand.OFF_HAND, connector);
+            player.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+
+            menu.act(WorkbayAction.SELECT_BAY, 2, Optional.empty());
+            menu.act(WorkbayAction.PAIR, 0, Optional.empty());
+
+            var pairing = player.getOffhandItem()
+                .get(com.neryos.workbay.init.WBDataComponents.PAIRING.get());
+            if (pairing == null) {
+                helper.fail("the Pair button left the offhand Connector unpaired, so the button is "
+                    + "still unreachable with anything in it");
+                return;
+            }
+            helper.assertValueEqual(pairing.bay(), 2, "the bay the Pair button aimed at");
+            helper.assertValueEqual(pairing.workbayId(), workbay.record().orElseThrow().id(),
+                "the network the Connector was paired to");
+            helper.succeed();
+        });
+    }
+
     @GameTest
     @TestHolder(description = "Racking and ejecting through the menu moves a real machine.")
     public static void rackAndEjectThroughTheMenu(final DynamicTest test) {

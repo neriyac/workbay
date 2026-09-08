@@ -466,9 +466,21 @@ public class WorkbayMenu extends AbstractContainerMenu {
         workbay.forgetBay(selectedBay);
     }
 
-    /** Screen 1's `+ Pair`: stamps the held Connector with this Workbay and the selected bay. */
+    /**
+     * Screen 1's `+ Pair`: stamps the held Connector with this Workbay and the <b>selected</b> bay.
+     *
+     * <p><b>The offhand as well as the main hand, which is the whole of what made this button
+     * reachable.</b> It read the main hand only — and a Connector in the main hand is what pairs a
+     * Connector by right-clicking the block, which opens no screen at all. So the one control in
+     * the mod that can aim a Connector at a bay other than the first occupied one could never be
+     * pressed with anything in it (OPEN_ISSUES #28). Hold it in the offhand, open the screen with
+     * an empty hand, pick the bay, press Pair.
+     */
     private void pair(ServerPlayer serverPlayer, WorkbayRecord record) {
         ItemStack held = serverPlayer.getMainHandItem();
+        if (!held.is(WBBlocks.CONNECTOR.get().asItem())) {
+            held = serverPlayer.getOffhandItem();
+        }
         if (!held.is(WBBlocks.CONNECTOR.get().asItem())) {
             serverPlayer.displayClientMessage(
                 com.neryos.workbay.WorkbayLang.message("pair_needs_connector"), true);
@@ -476,9 +488,8 @@ public class WorkbayMenu extends AbstractContainerMenu {
         }
         WorkbayBlock.pair(held, record,
             GlobalPos.of(serverPlayer.level().dimension(), workbay.getBlockPos()), selectedBay);
-        serverPlayer.displayClientMessage(com.neryos.workbay.WorkbayLang.message("connector_paired",
-            net.minecraft.network.chat.Component.literal(record.code())
-                .withStyle(net.minecraft.ChatFormatting.AQUA)), true);
+        serverPlayer.displayClientMessage(
+            com.neryos.workbay.WorkbayLang.message("connector_paired", selectedBay + 1), true);
     }
 
     /**
