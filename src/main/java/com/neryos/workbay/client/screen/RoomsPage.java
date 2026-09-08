@@ -1,5 +1,6 @@
 package com.neryos.workbay.client.screen;
 
+import com.neryos.workbay.content.room.RoomColour;
 import com.neryos.workbay.content.workbay.WorkbayUpgrade;
 import com.neryos.workbay.menu.WorkbayAction;
 import com.neryos.workbay.menu.WorkbaySnapshot;
@@ -61,14 +62,25 @@ class RoomsPage extends WorkbayPage {
     // Room columns. The three buttons are fixed to the right edge and the two strings share what is
     // left, so the longest room name and "46x46, 9 chunks" both have their own room.
     private static final int ROOM_NAME_X = 6;
-    private static final int ROOM_NAME_W = 64;
-    private static final int ROOM_SIZE_X = 74;
+    private static final int ROOM_NAME_W = 84;
+    private static final int ROOM_SIZE_X = 94;
     private static final int ROOM_SIZE_W = 96;
-    private static final int COLOUR_X = ROW_W - 122;
-    private static final int BIOME_X = ROW_W - 102;
+    private static final int SETTINGS_X = ROW_W - 102;
     private static final int ANCHOR_X = ROW_W - 82;
     private static final int ENTER_X = ROW_W - 62;
     private static final int ENTER_W = 58;
+
+    // The settings window.
+    private static final int WIN_W = 176;
+    private static final int WIN_PAD = 8;
+    private static final int SWATCH = 16;
+    private static final int SWATCH_PITCH = 18;
+    private static final int SWATCHES_PER_ROW = 8;
+    private static final int BIOME_H = 14;
+    private static final int BIOME_PITCH = 15;
+
+    /** Which room's settings window is open, or -1. Client-side and never sent anywhere. */
+    private int open = -1;
 
     RoomsPage(WorkbayScreen screen) {
         super(screen);
@@ -99,6 +111,11 @@ class RoomsPage extends WorkbayPage {
         header(g, mouseX, mouseY, "ROOMS");
         ladder(g, mouseX, mouseY);
         rooms(g, mouseX, mouseY);
+        // Last, so its hit boxes win: the screen dispatches clicks in reverse registration order,
+        // which is exactly "whatever is drawn on top".
+        if (open >= 0) {
+            settings(g, mouseX, mouseY);
+        }
     }
 
     private void ladder(GuiGraphics g, int mouseX, int mouseY) {
@@ -183,11 +200,7 @@ class RoomsPage extends WorkbayPage {
             // unopened one has no record to remember either choice on -- SPEC.md §8 spends the
             // region on first entry.
             if (room.built()) {
-                swatch(g, mouseX, mouseY, px + COLOUR_X, py, room);
-                iconButton(g, mouseX, mouseY, px + BIOME_X, py, WBIcons.BIOME, false,
-                    () -> screen.send(WorkbayAction.CYCLE_ROOM_BIOME, room.index()),
-                    WorkbayScreen.gui("rooms.biome", biomeName(room.biome())),
-                    WorkbayScreen.gui("rooms.biome.tip"));
+                swatch(g, mouseX, mouseY, px + SETTINGS_X, py, room);
             }
 
             // The Anchor toggle only exists once the network owns an Anchor. SPEC.md §4: a control
@@ -214,20 +227,106 @@ class RoomsPage extends WorkbayPage {
     }
 
     /**
-     * The room's colour, drawn as the colour itself rather than as an icon of one. A swatch is the
-     * one control on this page whose whole job is to show a value the player can only judge by
-     * looking at it, so the button <b>is</b> the value.
+     * The room's colour, drawn as the colour itself rather than as an icon of one, and the way into
+     * that room's settings. A swatch is the one control here whose job is to show a value you can
+     * only judge by looking, so the button <b>is</b> the value.
      */
     private void swatch(GuiGraphics g, int mouseX, int mouseY, int px, int py,
         WorkbaySnapshot.Room room) {
         boolean hover = screen.hovered(px, py, 18, 18, mouseX, mouseY);
-        Draw.button(g, px, py, 18, 18, hover, false);
+        Draw.button(g, px, py, 18, 18, hover, open == room.index());
         g.fill(px + 4, py + 4, px + 14, py + 14, 0xFF000000 | room.colour().tint());
-        screen.hit(px, py, 18, 18,
-            () -> screen.send(WorkbayAction.CYCLE_ROOM_COLOUR, room.index()),
+        int index = room.index();
+        screen.hit(px, py, 18, 18, () -> open = open == index ? -1 : index,
+            WorkbayScreen.gui("rooms.settings"),
             WorkbayScreen.gui("rooms.colour",
                 WorkbayScreen.gui("colour." + room.colour().getSerializedName())),
-            WorkbayScreen.gui("rooms.colour.tip"));
+            WorkbayScreen.gui("rooms.biome", biomeName(room.biome())));
+    }
+
+    /**
+     * One room's settings, over the page. <b>A window, not two cycle buttons.</b>
+     *
+     * <p>The cycle buttons were built first and were the wrong control twice over: the biome one
+     * was a twelve-pixel icon that never changed, so pressing it looked exactly like nothing
+     * happening, and neither ever showed what the other choices <em>were</em>. Mekanism answers the
+     * same question with a window -- {@code GuiColorWindow}, {@code GuiRobitSkinSelect} -- and that
+     * is the right answer: a value you pick out of a set is a list, not a step.
+     */
+    private void settings(GuiGraphics g, int mouseX, int mouseY) {
+        WorkbaySnapshot.Room room = snapshot().rooms().stream()
+            .filter(r -> r.index() == open && r.built()).findFirst().orElse(null);
+        if (room == null) {
+            open = -1;
+            return;
+        }
+        var biomes = biomeChoices();
+        int rows = (RoomColour.values().length + SWATCHES_PER_ROW - 1) / SWATCHES_PER_ROW;
+        int h = WIN_PAD * 2 + 12 + 10 + rows * SWATCH_PITCH + 8 + 10 + biomes.size() * BIOME_PITCH;
+        int wx = x((WIDTH - WIN_W) / 2);
+        int wy = y(Math.max(2, (height() - h) / 2));
+
+        // The page stays drawn behind it; a scrim says which of the two is taking clicks. The
+        // full-page hit under the window is what closes it, and it is registered first so every
+        // control of the window itself still wins -- clicks resolve in reverse order.
+        g.fill(x(0), y(0), x(WIDTH), y(height()), 0xB4000000);
+        screen.hit(x(0), y(0), WIDTH, height(), () -> open = -1);
+        Draw.panel(g, wx, wy, WIN_W, h);
+
+        int cursor = wy + WIN_PAD;
+        String name = room.name().isEmpty()
+            ? WorkbayScreen.gui("rooms.name", room.index() + 1).getString() : room.name();
+        Draw.text(g, screen.font(), name, wx + WIN_PAD, cursor, WIN_W - WIN_PAD * 2, Draw.TEXT);
+        cursor += 12;
+
+        Draw.text(g, screen.font(), WorkbayScreen.gui("rooms.colour.label").getString(),
+            wx + WIN_PAD, cursor, WIN_W - WIN_PAD * 2, Draw.TEXT_DIM);
+        cursor += 10;
+        for (RoomColour colour : RoomColour.values()) {
+            int i = colour.ordinal();
+            int cx = wx + WIN_PAD + (i % SWATCHES_PER_ROW) * SWATCH_PITCH;
+            int cy = cursor + (i / SWATCHES_PER_ROW) * SWATCH_PITCH;
+            boolean chosen = colour == room.colour();
+            boolean hover = screen.hovered(cx, cy, SWATCH, SWATCH, mouseX, mouseY);
+            Draw.button(g, cx, cy, SWATCH, SWATCH, hover, chosen);
+            g.fill(cx + 3, cy + 3, cx + SWATCH - 3, cy + SWATCH - 3, 0xFF000000 | colour.tint());
+            long packed = room.index() | ((long) i << 16);
+            screen.hit(cx, cy, SWATCH, SWATCH,
+                () -> screen.send(WorkbayAction.SET_ROOM_COLOUR, packed),
+                WorkbayScreen.gui("colour." + colour.getSerializedName()));
+        }
+        cursor += rows * SWATCH_PITCH + 8;
+
+        Draw.text(g, screen.font(), WorkbayScreen.gui("rooms.biome.label").getString(),
+            wx + WIN_PAD, cursor, WIN_W - WIN_PAD * 2, Draw.TEXT_DIM);
+        cursor += 10;
+        for (int i = 0; i < biomes.size(); i++) {
+            var key = biomes.get(i);
+            int by = cursor + i * BIOME_PITCH;
+            boolean chosen = key.location().toString().equals(room.biome());
+            boolean hover = screen.hovered(wx + WIN_PAD, by, WIN_W - WIN_PAD * 2, BIOME_H,
+                mouseX, mouseY);
+            Draw.button(g, wx + WIN_PAD, by, WIN_W - WIN_PAD * 2, BIOME_H, hover, chosen);
+            Draw.text(g, screen.font(), biomeName(key.location().toString()).getString(),
+                wx + WIN_PAD + 6, by + 3, WIN_W - WIN_PAD * 2 - 12,
+                chosen ? Draw.TEXT : Draw.TEXT_DIM);
+            long packed = room.index() | ((long) i << 16);
+            screen.hit(wx + WIN_PAD, by, WIN_W - WIN_PAD * 2, BIOME_H,
+                () -> screen.send(WorkbayAction.SET_ROOM_BIOME, packed),
+                WorkbayScreen.gui("rooms.biome.tip"));
+        }
+    }
+
+    /**
+     * The tag, read from the <b>client's own</b> registry: tags are synced, so the picker needs
+     * nothing on the snapshot -- which is as well, because its codec group is full at sixteen.
+     */
+    private static java.util.List<
+        net.minecraft.resources.ResourceKey<net.minecraft.world.level.biome.Biome>> biomeChoices() {
+        net.minecraft.client.multiplayer.ClientLevel level =
+            net.minecraft.client.Minecraft.getInstance().level;
+        return level == null ? java.util.List.of()
+            : com.neryos.workbay.world.RoomBiomes.choices(level.registryAccess());
     }
 
     /**

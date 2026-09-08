@@ -94,5 +94,14 @@ public enum WorkbayAction {
      * Out of the room the player is standing in, back to where they entered from. Only
      * {@link RoomDoorMenu} sends it -- the Workbay screen has no way to be open in a room.
      */
-    LEAVE_ROOM
+    LEAVE_ROOM,
+    /**
+     * Room {@code arg}'s biome, chosen from a list rather than stepped: {@code arg} packs the room
+     * in its low 16 bits and the index into {@link WorkbaySnapshot#roomBiomes} in the next 16.
+     * A cycle button showed no state at all — it was an icon that never changed, so clicking it
+     * looked exactly like nothing happening.
+     */
+    SET_ROOM_BIOME,
+    /** The same for the shell's colour; the high half is a {@code RoomColour} ordinal. */
+    SET_ROOM_COLOUR
 }

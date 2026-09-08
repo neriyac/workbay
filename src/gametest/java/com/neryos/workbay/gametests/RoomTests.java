@@ -126,13 +126,17 @@ public class RoomTests {
     }
 
     /**
-     * <b>The whole shell is the way out.</b> There was one Exit block on the entry pad and it was
-     * wrong twice: it could be broken, and in a 46-block room it had to be walked back to. So the
-     * click under test is on a plain wall in the far corner -- the piece of the room least likely
-     * to be special -- and it has to open the same way out as the marked doorways do.
+     * <b>Any wall is the way out, and the floor is not.</b> There was one Exit block on the entry
+     * pad and it was wrong twice: it could be broken, and in a 46-block room it had to be walked
+     * back to. So the click under test is on a plain wall well away from the drawn door -- the
+     * piece of the room least likely to be special.
+     *
+     * <p>The floor is excluded deliberately and is asserted here, because everything a player
+     * builds sits on it: a right-click there is far more often "place this" than "let me out", and
+     * a way out that fires while you are laying a machine down is worse than one you look up for.
      */
     @GameTest
-    @TestHolder(description = "Right-clicking any wall opens the way out, and it returns the player to the spot and facing they left.")
+    @TestHolder(description = "Right-clicking any wall opens the way out and returns the player where they left; the floor does not.")
     public static void anyWallIsTheWayOut(final DynamicTest test) {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
 
@@ -140,18 +144,22 @@ public class RoomTests {
             Site site = site(helper, 1);
             helper.assertTrue(RoomVisit.enter(site.player(), site.record(), 0), "entering was refused");
             RoomRecord room = room(helper, site);
-            // The far corner of the floor: shell, and nothing anybody would have marked.
-            BlockPos plain = RoomGeometry.origin(room.region())
-                .offset(RoomGeometry.footprint(1) - 2, 0, RoomGeometry.footprint(1) - 2);
-            helper.assertTrue(site.backshop().getBlockState(plain).is(WBBlocks.ROOM_WALL.get())
-                    && site.backshop().getBlockState(plain)
-                        .getValue(com.neryos.workbay.content.room.RoomWallBlock.PART)
-                        == com.neryos.workbay.content.room.RoomPart.FLOOR,
-                "the far corner is not a plain piece of shell, so this test proves nothing");
+            BlockPos origin = RoomGeometry.origin(room.region());
+            // High on the west wall: shell, and nowhere near the door drawn at y 1-2 mid-wall.
+            BlockPos plain = origin.offset(0, 6, 3);
+            BlockPos floor = origin.offset(4, 0, 4);
+            helper.assertTrue(site.backshop().getBlockState(plain)
+                    .getValue(com.neryos.workbay.content.room.RoomWallBlock.PART)
+                    == com.neryos.workbay.content.room.RoomPart.WALL,
+                "the block under test is not a plain wall, so this test proves nothing");
 
-            // The click a player makes, not a call to leave(): the block is the feature.
-            site.backshop().getBlockState(plain).useWithoutItem(site.backshop(), site.player(),
-                new BlockHitResult(Vec3.atCenterOf(plain), Direction.UP, plain, false));
+            // The floor first, so a pass here cannot be "the menu was already open".
+            click(site, floor);
+            helper.assertFalse(site.player().containerMenu
+                    instanceof com.neryos.workbay.menu.RoomDoorMenu,
+                "the floor opened the way out; building on it would fight the door");
+
+            click(site, plain);
             helper.assertTrue(site.player().containerMenu
                     instanceof com.neryos.workbay.menu.RoomDoorMenu,
                 "clicking a wall opened " + site.player().containerMenu.getClass().getSimpleName()
@@ -170,6 +178,12 @@ public class RoomTests {
                 "the player is still recorded as being in a room after leaving");
             helper.succeed();
         });
+    }
+
+    /** The right-click a player makes, not a call to the menu: the block is the feature. */
+    private static void click(Site site, BlockPos at) {
+        site.backshop().getBlockState(at).useWithoutItem(site.backshop(), site.player(),
+            new BlockHitResult(Vec3.atCenterOf(at), Direction.UP, at, false));
     }
 
     /**

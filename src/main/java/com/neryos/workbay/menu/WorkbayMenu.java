@@ -218,6 +218,12 @@ public class WorkbayMenu extends AbstractContainerMenu {
             case TOGGLE_ROOM_ANCHOR -> toggleRoomAnchor(serverPlayer, record, (int) arg);
             case CYCLE_ROOM_BIOME -> cycleRoomBiome(serverPlayer, record, (int) arg);
             case CYCLE_ROOM_COLOUR -> cycleRoomColour(serverPlayer, record, (int) arg, back);
+            // arg packs the room in the low 16 bits and the choice in the next: one action, one
+            // guard, and no second packet for "which room" versus "which value".
+            case SET_ROOM_BIOME -> setRoomBiome(serverPlayer, record, (int) (arg & 0xFFFF),
+                (int) (arg >> 16));
+            case SET_ROOM_COLOUR -> setRoomColour(serverPlayer, record, (int) (arg & 0xFFFF),
+                (int) (arg >> 16));
             case ENTER_BAY -> {
                 // The screen where the player stands first, and the trip only if that cannot
                 // happen: a host with the mixins off (SPEC.md §0), a client with them off (arg),
@@ -665,6 +671,62 @@ public class WorkbayMenu extends AbstractContainerMenu {
             // colour click would rebuild a shell somebody is standing in.
             com.neryos.workbay.world.RoomBuilder.ensure(backshop, painted, painted.builtTier());
         }
+    }
+
+    /** One room's biome, by index into the tag. Out-of-range indices are dropped, not clamped. */
+    private void setRoomBiome(ServerPlayer serverPlayer, WorkbayRecord record, int index,
+        int choice) {
+        com.neryos.workbay.world.RoomRecord room = editableRoom(serverPlayer, record, index);
+        List<net.minecraft.resources.ResourceKey<net.minecraft.world.level.biome.Biome>> all =
+            com.neryos.workbay.world.RoomBiomes.choices(serverPlayer.server.registryAccess());
+        if (room == null || choice < 0 || choice >= all.size()) {
+            return;
+        }
+        com.neryos.workbay.world.RoomRecord updated = room.withBiome(all.get(choice));
+        com.neryos.workbay.world.RoomRegistry.get(serverPlayer.server).putRoom(updated);
+        ServerLevel backshop = serverPlayer.server.getLevel(WorkbayDimensions.BACKSHOP);
+        if (backshop != null) {
+            com.neryos.workbay.world.RoomBiomes.apply(backshop, updated);
+        }
+        refreshNow();
+    }
+
+    /** One room's shell colour, by {@code RoomColour} ordinal. */
+    private void setRoomColour(ServerPlayer serverPlayer, WorkbayRecord record, int index,
+        int choice) {
+        com.neryos.workbay.world.RoomRecord room = editableRoom(serverPlayer, record, index);
+        com.neryos.workbay.content.room.RoomColour[] all =
+            com.neryos.workbay.content.room.RoomColour.values();
+        if (room == null || choice < 0 || choice >= all.length) {
+            return;
+        }
+        com.neryos.workbay.world.RoomRecord painted = room.withColour(all[choice]);
+        com.neryos.workbay.world.RoomRegistry.get(serverPlayer.server).putRoom(painted);
+        ServerLevel backshop = serverPlayer.server.getLevel(WorkbayDimensions.BACKSHOP);
+        if (backshop != null) {
+            // The room's own tier, not the network's: repainting must never also grow it.
+            com.neryos.workbay.world.RoomBuilder.ensure(backshop, painted, painted.builtTier());
+        }
+        refreshNow();
+    }
+
+    /**
+     * The room at {@code index} if this player may change it, or null. Only a built room has a
+     * shell to paint or chunks to write a biome over.
+     */
+    @Nullable
+    private com.neryos.workbay.world.RoomRecord editableRoom(ServerPlayer serverPlayer,
+        WorkbayRecord record, int index) {
+        if (!record.owner().equals(serverPlayer.getUUID())) {
+            serverPlayer.displayClientMessage(com.neryos.workbay.WorkbayLang.message("locked"), true);
+            return null;
+        }
+        List<com.neryos.workbay.world.RoomRecord> rooms =
+            com.neryos.workbay.world.RoomRegistry.get(serverPlayer.server).roomsOf(record);
+        if (index < 0 || index >= rooms.size() || !rooms.get(index).built()) {
+            return null;
+        }
+        return rooms.get(index);
     }
 
     // -------------------------------------------------------------- snapshot

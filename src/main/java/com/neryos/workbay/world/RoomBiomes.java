@@ -39,18 +39,23 @@ public final class RoomBiomes {
         ResourceLocation.fromNamespaceAndPath(Workbay.MOD_ID, "room_biomes"));
 
     /**
-     * What the room screen's button steps through, in the tag's own order. Empty only if a pack has
-     * emptied the tag, and then the button is not drawn at all.
+     * What a room may be set to, in the tag's own order. Empty only if a pack has emptied the tag,
+     * and then the picker is not drawn at all.
+     *
+     * <p>Takes a {@link net.minecraft.core.RegistryAccess} rather than the server, because
+     * <b>the client can answer this too</b>: tags are synced, so the room screen reads the list
+     * from its own registry and it never has to ride the snapshot. That matters more than it
+     * sounds — the snapshot's codec group is full at sixteen fields.
      */
-    public static List<ResourceKey<Biome>> choices(MinecraftServer server) {
-        return server.registryAccess().registryOrThrow(Registries.BIOME).getTag(ROOM_BIOMES)
+    public static List<ResourceKey<Biome>> choices(net.minecraft.core.RegistryAccess registries) {
+        return registries.registryOrThrow(Registries.BIOME).getTag(ROOM_BIOMES)
             .map(tag -> tag.stream().flatMap(holder -> holder.unwrapKey().stream()).toList())
             .orElse(List.of());
     }
 
     /** The next biome after this room's, wrapping. Falls back to plains on an empty tag. */
     public static ResourceKey<Biome> next(MinecraftServer server, RoomRecord room) {
-        List<ResourceKey<Biome>> all = choices(server);
+        List<ResourceKey<Biome>> all = choices(server.registryAccess());
         if (all.isEmpty()) {
             return Biomes.PLAINS;
         }

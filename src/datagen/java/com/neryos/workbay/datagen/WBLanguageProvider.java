@@ -428,9 +428,11 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("door.go.tip"), "Straight into that room. You still come out where "
             + "you first came in.");
         add(WorkbayLang.guiKey("door.open"), "Open");
+        add(WorkbayLang.guiKey("rooms.settings"), "Room settings");
+        add(WorkbayLang.guiKey("rooms.colour.label"), "Walls");
+        add(WorkbayLang.guiKey("rooms.biome.label"), "Behaves like");
         add(WorkbayLang.guiKey("rooms.colour"), "Walls: %s");
-        add(WorkbayLang.guiKey("rooms.colour.tip"), "What this room's shell is painted. Click for "
-            + "the next colour, right-click for the previous one.");
+        add(WorkbayLang.guiKey("rooms.colour.tip"), "What this room's shell is painted.");
         // The palette lives in RoomColour and these are its names. Ten strings rather than ten
         // textures is the whole point of tinting one greyscale wall.
         add(WorkbayLang.guiKey("colour.slate"), "Slate");
@@ -446,8 +448,8 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("colour.overworld"), "Overworld");
         add(WorkbayLang.guiKey("rooms.biome"), "Biome: %s");
         add(WorkbayLang.guiKey("rooms.biome.tip"), "What a machine in this room reads for "
-            + "temperature and rainfall. Click to step to the next one. Nothing falls from the "
-            + "sky in a room, because there is no sky: a cold room is cold, it does not snow.");
+            + "temperature and rainfall. Nothing falls from the sky in a room, because there is no "
+            + "sky: a cold room is cold, it does not snow.");
         add(WorkbayLang.guiKey("rooms.unanchored.tip"), "This room only runs while somebody is "
             + "inside it, and costs nothing while it is empty. Anchoring it holds %s chunks loaded.");
         add(WorkbayLang.messageKey("anchor_capped"), "This network may anchor %s room(s) at a time. "

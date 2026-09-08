@@ -22,8 +22,8 @@ import net.minecraft.world.phys.BlockHitResult;
  *
  * <p><b>The whole shell is the door.</b> There was a single Exit block on the entry pad, and it was
  * wrong twice over: it could be lost, and in a 46-block room it had to be walked back to. Every
- * wall, floor and ceiling block opens the same screen, so "how do I get out" is answered by
- * right-clicking whatever you are standing next to. The {@code DOOR_*} parts draw a real 2×2 door
+ * wall and ceiling block opens the same screen, so "how do I get out" is answered by right-clicking
+ * whatever is beside you — but <b>not the floor</b>, which is where building happens. The {@code DOOR_*} parts draw a real 2×2 door
  * in the middle of each wall so that it is <em>discoverable</em> rather than merely true; it never
  * opens, has no hinge and no handle to press, because it is not a door — it is the picture of one
  * over the thing that already works everywhere.
@@ -57,6 +57,13 @@ public class RoomWallBlock extends Block {
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
         Player player, BlockHitResult hit) {
+        // The floor is the one piece that does not open it. Everything a player builds sits on the
+        // floor, so a right-click there is far more often "place this" than "let me out", and a way
+        // out that fires while you are laying a machine down is worse than one you have to look up
+        // for. Walls and ceiling still do, which is where a person looks for a door anyway.
+        if (state.getValue(PART).isFloor()) {
+            return InteractionResult.PASS;
+        }
         if (level.isClientSide) {
             return InteractionResult.SUCCESS;
         }
