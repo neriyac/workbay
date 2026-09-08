@@ -51,6 +51,9 @@ public record FaceConfig(int items, int fluids, int energy) {
             case ITEM -> new FaceConfig(updated, fluids, energy);
             case FLUID -> new FaceConfig(items, updated, energy);
             case ENERGY -> new FaceConfig(items, fluids, updated);
+            // Nothing to cycle: chemicals have no face row on the cube, so this is unreachable
+            // from the screen and returns the config it was given rather than inventing a field.
+            case CHEMICAL -> this;
         };
     }
 
@@ -94,6 +97,9 @@ public record FaceConfig(int items, int fluids, int energy) {
             case ITEM -> items;
             case FLUID -> fluids;
             case ENERGY -> energy;
+            // No face config for chemicals, and deliberately none: zero is "any face", and which
+            // face a Mekanism machine offers gas on is its own side config's answer, not ours.
+            case CHEMICAL -> 0;
         };
     }
 }

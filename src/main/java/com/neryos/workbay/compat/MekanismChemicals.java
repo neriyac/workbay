@@ -38,6 +38,12 @@ public final class MekanismChemicals {
     /** One chemical tank, flattened to what a gauge needs and nothing more. */
     public record Tank(Component name, long amount, long capacity) {}
 
+    /**
+     * What one attempt to move chemicals came to. Our own enum, naming no Mekanism type, so
+     * {@code BusRunner} can switch on it without ever loading a class that mentions one.
+     */
+    public enum Move { MOVED, NOTHING_TO_MOVE, NO_SOURCE_PORT, NO_SINK_PORT, NOT_LOADED }
+
     public static boolean present() {
         return ModList.get() != null && ModList.get().isLoaded(MOD_ID);
     }
@@ -53,6 +59,28 @@ public final class MekanismChemicals {
             return List.of();
         }
         return Impl.tanks(level, pos);
+    }
+
+    /**
+     * Moves chemicals one way along a link, the way the other three resources move: bind by
+     * <b>simulating the move</b>, never by asking a handler what it says it can do, then commit
+     * what the simulation said would fit.
+     *
+     * <p>Everything about it that names a Mekanism type is inside {@link Impl}, and this guard is
+     * outside it — which is the shape yesterday's crash bought. A guard sitting in the same class
+     * as a Mekanism-typed field is checked <em>after</em> the JVM has already failed to initialise
+     * that class, and every install without Mekanism dies on the first call.
+     */
+    public static Move move(ServerLevel sourceLevel, BlockPos sourcePos,
+        @Nullable Direction sourceFace, ServerLevel sinkLevel, BlockPos sinkPos,
+        @Nullable Direction sinkFace, long budget) {
+        if (!present()) {
+            return Move.NO_SOURCE_PORT;
+        }
+        if (!sourceLevel.isLoaded(sourcePos) || !sinkLevel.isLoaded(sinkPos)) {
+            return Move.NOT_LOADED;
+        }
+        return Impl.move(sourceLevel, sourcePos, sourceFace, sinkLevel, sinkPos, sinkFace, budget);
     }
 
     /**
@@ -76,6 +104,90 @@ public final class MekanismChemicals {
             BlockCapability.createSided(
                 ResourceLocation.fromNamespaceAndPath(MOD_ID, "chemical_handler"),
                 IChemicalHandler.class);
+
+        /**
+         * The six real faces, in {@code Direction.values} order, and never the null side. Mekanism
+         * returns a read-only proxy for null (SPEC.md §9), so a bus bound there finds a handler,
+         * moves nothing, and reports no error — total silent failure.
+         */
+        private static IChemicalHandler handler(ServerLevel level, BlockPos pos,
+            @Nullable Direction face, java.util.function.Predicate<IChemicalHandler> accepts) {
+            if (face != null) {
+                IChemicalHandler fixed = level.getCapability(CHEMICAL, pos, face);
+                if (fixed != null && accepts.test(fixed)) {
+                    return fixed;
+                }
+                // and fall through. A configured face is a preference, not a pin: Mekanism's side
+                // config decides which of a block's faces carry gas, and the face the player stuck
+                // a Connector to is very often not one of them.
+            }
+            for (Direction side : Direction.values()) {
+                IChemicalHandler candidate = level.getCapability(CHEMICAL, pos, side);
+                if (candidate != null && accepts.test(candidate)) {
+                    return candidate;
+                }
+            }
+            return null;
+        }
+
+        /** What this handler would give up, up to the budget. Empty when it has nothing to offer. */
+        private static ChemicalStack offer(IChemicalHandler handler, long budget) {
+            for (int tank = 0; tank < handler.getChemicalTanks(); tank++) {
+                ChemicalStack drawn = handler.extractChemical(tank, budget, mekanism.api.Action.SIMULATE);
+                if (!drawn.isEmpty()) {
+                    return drawn;
+                }
+            }
+            return ChemicalStack.EMPTY;
+        }
+
+        static Move move(ServerLevel sourceLevel, BlockPos sourcePos, @Nullable Direction sourceFace,
+            ServerLevel sinkLevel, BlockPos sinkPos, @Nullable Direction sinkFace, long budget) {
+            IChemicalHandler from = handler(sourceLevel, sourcePos, sourceFace,
+                h -> !offer(h, budget).isEmpty());
+            if (from == null) {
+                // Empty and unreachable are different things, and one answer for both is how a dead
+                // link spends a session looking like a resting one.
+                boolean any = handler(sourceLevel, sourcePos, sourceFace, h -> h.getChemicalTanks() > 0) != null;
+                return any ? Move.NOTHING_TO_MOVE : Move.NO_SOURCE_PORT;
+            }
+            ChemicalStack offered = offer(from, budget);
+            IChemicalHandler to = handler(sinkLevel, sinkPos, sinkFace,
+                h -> h.insertChemical(offered, mekanism.api.Action.SIMULATE).getAmount() < offered.getAmount());
+            if (to == null) {
+                boolean any = handler(sinkLevel, sinkPos, sinkFace, h -> h.getChemicalTanks() > 0) != null;
+                return any ? Move.NOTHING_TO_MOVE : Move.NO_SINK_PORT;
+            }
+            // Simulate, see what would fit, then take exactly that much: the same order the item
+            // and fluid paths use, and the reason a partial move never loses anything.
+            long accepted = offered.getAmount()
+                - to.insertChemical(offered, mekanism.api.Action.SIMULATE).getAmount();
+            if (accepted <= 0) {
+                return Move.NOTHING_TO_MOVE;
+            }
+            ChemicalStack taken = extract(from, offered, accepted);
+            if (taken.isEmpty()) {
+                return Move.NOTHING_TO_MOVE;
+            }
+            ChemicalStack leftover = to.insertChemical(taken, mekanism.api.Action.EXECUTE);
+            if (!leftover.isEmpty()) {
+                // The sink took less than it said it would. Put the rest back where it came from
+                // rather than dropping it: a chemical that vanishes is a duplication bug backwards.
+                from.insertChemical(leftover, mekanism.api.Action.EXECUTE);
+            }
+            return Move.MOVED;
+        }
+
+        /** Takes exactly {@code amount} of the offered chemical, from whichever tank holds it. */
+        private static ChemicalStack extract(IChemicalHandler from, ChemicalStack offered, long amount) {
+            for (int tank = 0; tank < from.getChemicalTanks(); tank++) {
+                ChemicalStack sample = from.extractChemical(tank, amount, mekanism.api.Action.SIMULATE);
+                if (!sample.isEmpty() && sample.is(offered.getChemical())) {
+                    return from.extractChemical(tank, amount, mekanism.api.Action.EXECUTE);
+                }
+            }
+            return ChemicalStack.EMPTY;
+        }
 
         static List<Tank> tanks(ServerLevel level, BlockPos pos) {
             IChemicalHandler handler = level.getCapability(CHEMICAL, pos, null);

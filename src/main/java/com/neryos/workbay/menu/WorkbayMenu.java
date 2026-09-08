@@ -282,8 +282,9 @@ public class WorkbayMenu extends AbstractContainerMenu {
                 yield fluid == net.minecraft.world.level.material.Fluids.EMPTY
                     ? Optional.empty() : Optional.ofNullable(BuiltInRegistries.FLUID.getKey(fluid));
             }
-            // Nothing to match on, so nothing to put in a slot. SPEC.md §5.
-            case ENERGY -> Optional.empty();
+            // Nothing to match on, so nothing to put in a slot. SPEC.md §5. A chemical has no
+            // item to drag from either, so it joins energy rather than getting a fifth entry kind.
+            case ENERGY, CHEMICAL -> Optional.empty();
         };
     }
 

@@ -243,7 +243,14 @@ public record BusConfig(
     }
 
     public enum Resource implements StringRepresentable {
-        ITEM("item"), FLUID("fluid"), ENERGY("energy");
+        ITEM("item"), FLUID("fluid"), ENERGY("energy"),
+        /**
+         * Mekanism's chemicals (OPEN_ISSUES #31). The fourth case, and the only one that is not a
+         * NeoForge capability every mod can implement — so it is the only resource that can be
+         * <em>absent</em>, and {@link #step} skips it when Mekanism is not installed rather than
+         * offering a player a link that can never bind.
+         */
+        CHEMICAL("chemical");
 
         private final String name;
 
@@ -256,9 +263,25 @@ public record BusConfig(
             return name;
         }
 
-        /** One step round the ring. Back is what a right-click asks for. */
+        /**
+         * One step round the ring. Back is what a right-click asks for, and a resource whose mod
+         * is not here is not on the ring at all — a link cycled onto CHEMICAL without Mekanism
+         * would read as broken rather than as unavailable.
+         */
         public Resource step(boolean back) {
-            return values()[Math.floorMod(ordinal() + (back ? -1 : 1), values().length)];
+            Resource next = this;
+            for (int guard = 0; guard < values().length; guard++) {
+                next = values()[Math.floorMod(next.ordinal() + (back ? -1 : 1), values().length)];
+                if (next.available()) {
+                    return next;
+                }
+            }
+            return this;
+        }
+
+        /** False only for a resource whose mod is not installed. Named no Mekanism type here. */
+        public boolean available() {
+            return this != CHEMICAL || com.neryos.workbay.compat.MekanismChemicals.present();
         }
     }
 

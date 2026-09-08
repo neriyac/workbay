@@ -140,19 +140,22 @@ public class ConnectorTests {
             helper.assertValueEqual(workbay.buses().size(), 1,
                 "links on a base Connector after asking for a second type");
 
-            // With Multichannel it carries all three, and no more.
+            // With Multichannel it carries every resource that exists in this install, and no
+            // more. Four here, because the gametest server has Mekanism and therefore chemicals;
+            // three without it, which is why the number is asked for rather than written down.
+            int all = com.neryos.workbay.content.connector.ConnectorBlock.multichannelLinks();
             RoomRegistry registry = RoomRegistry.get(level.getServer());
             WorkbayRecord record = workbay.record().orElseThrow();
             registry.put(record.withUpgrades(record.upgrades()
                 .plus(com.neryos.workbay.content.workbay.WorkbayUpgrade.MULTICHANNEL)));
 
-            for (int attempt = 0; attempt < 4; attempt++) {
+            for (int attempt = 0; attempt < all + 1; attempt++) {
                 poke(level, connectorPos, player);
             }
-            helper.assertValueEqual(workbay.buses().size(), 3,
-                "links on a Multichannel Connector after four more attempts");
+            helper.assertValueEqual(workbay.buses().size(), all,
+                "links on a Multichannel Connector after one more attempt than it can hold");
             helper.assertValueEqual(
-                workbay.buses().stream().map(BusConfig::resource).distinct().count(), 3L,
+                workbay.buses().stream().map(BusConfig::resource).distinct().count(), (long) all,
                 "distinct resource types on one Multichannel Connector");
             helper.succeed();
         });

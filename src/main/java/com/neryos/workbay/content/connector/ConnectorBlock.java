@@ -53,9 +53,18 @@ public class ConnectorBlock extends BaseEntityBlock {
     /** Points <em>into</em> the block this Connector is stuck to, the way an observer's does. */
     public static final DirectionProperty FACING = BlockStateProperties.FACING;
 
-    /** Base cap: one resource type per Connector. The Multichannel upgrade raises it to all three. */
+    /**
+     * Base cap: one resource type per Connector. The Multichannel upgrade raises it to every
+     * resource that <em>exists here</em> — three without Mekanism, four with it, because a fourth
+     * slot for a chemical link that can never bind is a slot that reads as broken. Not a constant
+     * for the same reason: whether chemicals exist is a property of the install.
+     */
     public static final int BASE_LINKS = 1;
-    public static final int MULTICHANNEL_LINKS = BusConfig.Resource.values().length;
+
+    public static int multichannelLinks() {
+        return (int) java.util.Arrays.stream(BusConfig.Resource.values())
+            .filter(BusConfig.Resource::available).count();
+    }
 
     private static final VoxelShape[] SHAPES = new VoxelShape[6];
 
@@ -199,12 +208,13 @@ public class ConnectorBlock extends BaseEntityBlock {
         }
         List<BusConfig> here = workbay.linksAt(GlobalPos.of(level.dimension(), pos));
         int cap = workbay.record().map(r -> r.upgrades().multichannel() > 0
-            ? MULTICHANNEL_LINKS : BASE_LINKS).orElse(BASE_LINKS);
+            ? multichannelLinks() : BASE_LINKS).orElse(BASE_LINKS);
         if (here.size() >= cap) {
             return null;
         }
         for (BusConfig.Resource resource : BusConfig.Resource.values()) {
-            if (here.stream().noneMatch(link -> link.resource() == resource)) {
+            if (resource.available()
+                && here.stream().noneMatch(link -> link.resource() == resource)) {
                 return resource;
             }
         }

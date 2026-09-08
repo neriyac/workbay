@@ -266,6 +266,41 @@ public class BusRunner {
             case ITEM -> runItems(record, bus, targetLevel, target.pos(), backshop, machinePos, faces);
             case ENERGY -> runEnergy(record, bus, targetLevel, target.pos(), backshop, machinePos, faces);
             case FLUID -> runFluid(record, bus, targetLevel, target.pos(), backshop, machinePos, faces);
+            case CHEMICAL -> runChemical(record, bus, targetLevel, target.pos(), backshop, machinePos);
+        };
+    }
+
+    /**
+     * Chemicals, which are Mekanism's and nobody else's (OPEN_ISSUES #31).
+     *
+     * <p>Thin on purpose. <b>Every line that names a Mekanism type is behind
+     * {@link com.neryos.workbay.compat.MekanismChemicals}</b>, because this class is loaded in every
+     * install and a class is what resolves the types in it. The guard and the work must not live
+     * together: that is the exact shape of the crash that shipped in 0.1.0.
+     *
+     * <p>No face config and no filter. Which face a Mekanism machine offers gas on is its own side
+     * config's answer, and a chemical filter is a fifth kind of entry for a screen that has three.
+     */
+    private BusStatus runChemical(WorkbayRecord record, BusConfig bus, ServerLevel targetLevel,
+        BlockPos targetPos, ServerLevel backshop, BlockPos machinePos) {
+        boolean insert = bus.mode() == BusConfig.Mode.INSERT;
+        ServerLevel sourceLevel = insert ? backshop : targetLevel;
+        BlockPos sourcePos = insert ? machinePos : targetPos;
+        Direction sourceFace = (insert ? bus.machineFace() : bus.targetFace()).orElse(null);
+        ServerLevel sinkLevel = insert ? targetLevel : backshop;
+        BlockPos sinkPos = insert ? targetPos : machinePos;
+        Direction sinkFace = (insert ? bus.targetFace() : bus.machineFace()).orElse(null);
+
+        // Chemicals are measured in mB like fluids, so they take the fluid scale. A separate
+        // constant would be a second number meaning the same thing.
+        long budget = Math.max(1, (long) rate(record, bus) * MB_PER_RATE);
+        return switch (com.neryos.workbay.compat.MekanismChemicals.move(sourceLevel, sourcePos,
+            sourceFace, sinkLevel, sinkPos, sinkFace, budget)) {
+            case MOVED -> BusStatus.RUNNING;
+            case NOTHING_TO_MOVE -> BusStatus.IDLE;
+            case NOT_LOADED -> BusStatus.TARGET_NOT_LOADED;
+            case NO_SOURCE_PORT -> insert ? BusStatus.MACHINE_NO_PORT : BusStatus.TARGET_NO_PORT;
+            case NO_SINK_PORT -> insert ? BusStatus.TARGET_NO_PORT : BusStatus.MACHINE_NO_PORT;
         };
     }
 

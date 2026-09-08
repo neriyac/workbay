@@ -1715,4 +1715,125 @@ public class BusTests {
             .orElseThrow(() -> new GameTestAssertException("the snapshot has no row for " + id))
             .label();
     }
+
+    // ------------------------------------------------------- chemicals (#31)
+
+    /**
+     * Gas moves the way items, fluids and energy already move. OPEN_ISSUES #31.
+     *
+     * <p>A chemical is the one resource with no NeoForge capability behind it, so this is the only
+     * link that can be <em>absent</em> — and every line of it that names a Mekanism type lives
+     * behind {@code MekanismChemicals}, because a guard in the same class as a Mekanism-typed field
+     * is checked after the JVM has already failed to load it. That half is proved in a plain
+     * instance with no Mekanism, which no dev run can do; this half proves it carries gas.
+     */
+    @GameTest(timeoutTicks = 300)
+    @TestHolder(description = "A chemical link moves gas out of a hosted Mekanism tank without losing any.")
+    public static void aChemicalLinkMovesGasOutOfAHostedTank(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos targetPos = helper.absolutePos(new BlockPos(4, 1, 4));
+
+            Block tank = BuiltInRegistries.BLOCK
+                .get(ResourceLocation.parse("mekanism:basic_chemical_tank"));
+            if (tank == Blocks.AIR) {
+                helper.fail("mekanism:basic_chemical_tank is not registered. This test is about a "
+                    + "real mod's chemical handler, so a missing partner mod is a failure, not a skip.");
+            }
+            mekanism.api.chemical.Chemical oxygen = mekanism.api.MekanismAPI.CHEMICAL_REGISTRY
+                .get(ResourceLocation.parse("mekanism:oxygen"));
+
+            // The whole placement, not the short one. OPEN_ISSUES: a Mekanism block placed by
+            // setBlock alone exposes no capability on any face, because its containers live in
+            // data components -- and a chemical tank is the block that proves it.
+            BlockState state = tank.defaultBlockState();
+            ItemStack tankStack = new ItemStack(tank);
+            level.setBlock(targetPos, state, Block.UPDATE_ALL);
+            net.minecraft.world.item.BlockItem.updateCustomBlockEntityTag(level, player, targetPos, tankStack);
+            if (level.getBlockEntity(targetPos) instanceof net.minecraft.world.level.block.entity.BlockEntity placed) {
+                placed.applyComponentsFromItemStack(tankStack);
+            }
+            tank.setPlacedBy(level, targetPos, state, player, tankStack);
+            level.invalidateCapabilities(targetPos);
+
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(tank));
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+            helper.assertFalse(level.getCapability(CHEMICAL_CAP, targetPos, Direction.NORTH) == null
+                && level.getCapability(CHEMICAL_CAP, targetPos, Direction.UP) == null,
+                "the target chemical tank exposes no chemical handler on any face, so this test "
+                    + "would be measuring its placement rather than the link");
+
+            long seeded = fillChemical(backshop, machinePos,
+                new mekanism.api.chemical.ChemicalStack(oxygen, 8_000L));
+            if (seeded <= 0) {
+                helper.fail("could not put oxygen into the hosted tank through any face, so the "
+                    + "link has nothing to carry");
+            }
+            long before = inChemicalTanks(backshop, machinePos) + inChemicalTanks(level, targetPos);
+
+            BusConfig link = connect(helper, workbay, targetPos.above(), Direction.DOWN, player);
+            workbay.addBus(link.withResource(BusConfig.Resource.CHEMICAL).withRate(20).withSpeed(10));
+
+            helper.startSequence()
+                .thenWaitUntil(() -> {
+                    if (inChemicalTanks(level, targetPos) < seeded) {
+                        throw new GameTestAssertException("the link has moved "
+                            + inChemicalTanks(level, targetPos) + " of " + seeded
+                            + " mB of oxygen and reads " + workbay.busStatus(link.id())
+                            + "; a bind that trusts a handler's own answer instead of simulating "
+                            + "the move picks a face that accepts nothing");
+                    }
+                })
+                .thenExecute(() -> {
+                    long now = inChemicalTanks(backshop, machinePos) + inChemicalTanks(level, targetPos);
+                    helper.assertValueEqual(now, before, "millibuckets of oxygen in existence");
+                    helper.assertValueEqual(inChemicalTanks(backshop, machinePos), 0L,
+                        "oxygen left in the hosted tank");
+                })
+                .thenExecute(() -> tearDown(helper, workbayPos))
+                .thenSucceed();
+        });
+    }
+
+    /** Fills through whichever face will take it, never the null side (SPEC.md §9). */
+    private static long fillChemical(ServerLevel level, BlockPos pos,
+        mekanism.api.chemical.ChemicalStack stack) {
+        for (Direction face : Direction.values()) {
+            mekanism.api.chemical.IChemicalHandler handler = level.getCapability(CHEMICAL_CAP, pos, face);
+            if (handler == null) {
+                continue;
+            }
+            long leftover = handler.insertChemical(stack, mekanism.api.Action.EXECUTE).getAmount();
+            if (leftover < stack.getAmount()) {
+                return stack.getAmount() - leftover;
+            }
+        }
+        return 0L;
+    }
+
+    /** Everything a block is holding, read on the null side because this is a reading. */
+    private static long inChemicalTanks(ServerLevel level, BlockPos pos) {
+        mekanism.api.chemical.IChemicalHandler handler = level.getCapability(CHEMICAL_CAP, pos, null);
+        if (handler == null) {
+            return 0L;
+        }
+        long total = 0L;
+        for (int tank = 0; tank < handler.getChemicalTanks(); tank++) {
+            total += handler.getChemicalInTank(tank).getAmount();
+        }
+        return total;
+    }
+
+    /** The same capability Mekanism registers, by name — the way the mod's own boundary gets it. */
+    private static final net.neoforged.neoforge.capabilities.BlockCapability<
+        mekanism.api.chemical.IChemicalHandler, Direction> CHEMICAL_CAP =
+        net.neoforged.neoforge.capabilities.BlockCapability.createSided(
+            ResourceLocation.fromNamespaceAndPath("mekanism", "chemical_handler"),
+            mekanism.api.chemical.IChemicalHandler.class);
 }

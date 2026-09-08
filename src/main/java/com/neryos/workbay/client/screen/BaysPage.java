@@ -500,6 +500,10 @@ class BaysPage extends WorkbayPage {
     private static net.minecraft.world.item.ItemStack resourceItem(BusConfig.Resource resource) {
         return switch (resource) {
             case ITEM -> new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.GRASS_BLOCK);
+            // The vanilla item that reads as "gas in a bottle", for the same reason water is a
+            // water bottle: a player recognises the picture before they read the tooltip.
+            case CHEMICAL -> new net.minecraft.world.item.ItemStack(
+                net.minecraft.world.item.Items.DRAGON_BREATH);
             case ENERGY -> new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.COAL);
             case FLUID -> {
                 var water = new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.POTION);
@@ -1228,7 +1232,9 @@ class BaysPage extends WorkbayPage {
                     ? net.neoforged.neoforge.fluids.FluidStack.EMPTY : handler.getFluidInTank(0);
                 yield held.isEmpty() ? 0L : BuiltInRegistries.FLUID.getId(held.getFluid()) + 1L;
             }
-            case ENERGY -> 0L;
+            // Neither has a filter: energy has nothing to name and a chemical has no item to drag
+            // from. Zero is "no entry", which is what the caller already refuses.
+            case ENERGY, CHEMICAL -> 0L;
         };
         if (plusOne <= 0) {
             return;
