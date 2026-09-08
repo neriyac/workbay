@@ -234,11 +234,19 @@ public class WorkbayConfig {
             impellerCostStep = builder.defineInRange("impellerCostStep", 12, 0, 100_000);
             // No step on the Frames: only one is ever installed, the highest wins, and a step on a
             // one-off is a knob that can never be read. The steepness is in the gap between them.
-            roomFrameCost = builder.defineInRange("roomFrameCost", 40, 0, 100_000);
-            wideRoomFrameCost = builder.defineInRange("wideRoomFrameCost", 120, 0, 100_000);
-            vastRoomFrameCost = builder.defineInRange("vastRoomFrameCost", 300, 0, 100_000);
-            annexPlateCost = builder.defineInRange("annexPlateCost", 30, 0, 100_000);
-            annexPlateCostStep = builder.defineInRange("annexPlateCostStep", 30, 0, 100_000);
+            // A room is a private dimension, and it is priced like one. At 40 the first Frame was
+            // the cheapest thing on the whole ladder -- less than an Impeller -- which made the
+            // headline feature of the mod the first thing a player bought and the last thing they
+            // had to work for. 150 is between an Expansion Plate and the Anchor: a real project,
+            // and still the rung everything else on this page is built on.
+            roomFrameCost = builder.defineInRange("roomFrameCost", 150, 0, 100_000);
+            wideRoomFrameCost = builder.defineInRange("wideRoomFrameCost", 400, 0, 100_000);
+            vastRoomFrameCost = builder.defineInRange("vastRoomFrameCost", 900, 0, 100_000);
+            // And a second room is not a discount on the first. 120, 240, 360 for rooms two to
+            // four, so the fourth costs more than the first did and the ceiling of four is a price
+            // long before it is a cap.
+            annexPlateCost = builder.defineInRange("annexPlateCost", 120, 0, 100_000);
+            annexPlateCostStep = builder.defineInRange("annexPlateCostStep", 120, 0, 100_000);
             anchorCost = builder.defineInRange("anchorCost", 200, 0, 100_000);
 
             builder.pop();

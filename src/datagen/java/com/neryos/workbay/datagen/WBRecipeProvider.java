@@ -91,8 +91,12 @@ public class WBRecipeProvider extends RecipeProvider {
         upgrade(output, WBItems.RESONATOR.get(), Items.ENDER_EYE);
         upgrade(output, WBItems.MULTICHANNEL.get(), Items.AMETHYST_SHARD);
         upgrade(output, WBItems.IMPELLER.get(), Items.BREEZE_ROD);
-        upgrade(output, WBItems.ROOM_FRAME.get(), Items.QUARTZ);
-        upgrade(output, WBItems.WIDE_ROOM_FRAME.get(), Items.DIAMOND);
+        // The room ladder's cores climb, and its first rung is not quartz. A private dimension
+        // gated behind the block you find in the first nether trip was the cheapest gate in the
+        // mod on the most expensive thing in it; the Wide Frame takes the Ancient City trip that
+        // used to be nowhere on this ladder, and the ordering stays monotone.
+        upgrade(output, WBItems.ROOM_FRAME.get(), Items.DIAMOND);
+        upgrade(output, WBItems.WIDE_ROOM_FRAME.get(), Items.ECHO_SHARD);
         // SPEC.md §3: the Vast Frame carries the mod's rarest gate because it buys the rarest
         // capability -- 46 blocks square is where a multiblock you built by hand goes.
         upgrade(output, WBItems.VAST_ROOM_FRAME.get(), Items.NETHER_STAR);

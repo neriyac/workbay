@@ -53,6 +53,18 @@ class RoomsPage extends WorkbayPage {
         WorkbayUpgrade.ANNEX_PLATE, WorkbayUpgrade.ANCHOR,
     };
 
+    /** Every square control on this page. One number, so nothing can be a different size by drift. */
+    private static final int BTN = 18;
+    /**
+     * Eight pixels between controls and eight to a row's edge, not two and four.
+     *
+     * <p>At two they read as one welded strip -- and the hover ring is drawn a pixel outside the
+     * control it belongs to, so lighting the swatch also drew a line down the side of the Anchor
+     * next to it. Every control below is written from the one to its right, so moving the last one
+     * moves the row rather than leaving three constants to be re-added by hand.
+     */
+    private static final int GAP = 8;
+
     // Ladder columns. 2..20 is the item, and the four spans below never touch.
     private static final int NAME_X = 22;
     private static final int NAME_W = 96;
@@ -60,28 +72,25 @@ class RoomsPage extends WorkbayPage {
     private static final int DESC_W = 62;
     private static final int COUNT_RIGHT = 214;
     private static final int COUNT_W = 28;
-    private static final int PRICE_RIGHT = 272;
+    private static final int PRICE_RIGHT = 262;
     private static final int PRICE_W = 56;
-    private static final int ADD_X = ROW_W - 20;
+    private static final int ADD_X = ROW_W - GAP - BTN;
 
     // Room columns. The three buttons are fixed to the right edge and the two strings share what is
     // left, so the longest room name and "46x46, 9 chunks" both have their own room.
     private static final int ROOM_NAME_X = 6;
     private static final int ROOM_NAME_W = 84;
-    private static final int ROOM_SIZE_W = 84;
+    private static final int ROOM_SIZE_W = 100;
     /**
-     * Six pixels between the three controls and six to the row's edge, not two and four.
-     *
-     * <p>At two they read as one welded strip -- and the hover ring is drawn a pixel outside the
-     * control it belongs to, so lighting the swatch also drew a line down the side of the Anchor
-     * next to it. Each is now written from the one to its right, so moving the Enter button moves
-     * the row rather than leaving three constants to be re-added by hand.
+     * <b>Three icons, not two icons and a word.</b> "Enter" was a 58-pixel text button beside two
+     * eighteen-pixel ones, which is the shape that made the row read as crowded however much air
+     * went between them: the eye reads a run of same-size squares as a toolbar and a wide slab
+     * beside them as a thing that has been squeezed in. Forty pixels came back to the two strings,
+     * which is where a room's name and size actually needed it.
      */
-    private static final int GAP = 6;
-    private static final int ENTER_W = 58;
-    private static final int ENTER_X = ROW_W - GAP - ENTER_W;
-    private static final int ANCHOR_X = ENTER_X - GAP - 18;
-    private static final int SETTINGS_X = ANCHOR_X - GAP - 18;
+    private static final int ENTER_X = ROW_W - GAP - BTN;
+    private static final int ANCHOR_X = ENTER_X - GAP - BTN;
+    private static final int SETTINGS_X = ANCHOR_X - GAP - BTN;
 
     // The settings window.
     private static final int WIN_W = 200;
@@ -228,14 +237,14 @@ class RoomsPage extends WorkbayPage {
                 maxed ? Draw.TEXT_FAINT : affordable ? Draw.GREEN : Draw.RED);
 
             int addX = px + ADD_X;
-            boolean hover = canInstall && screen.hovered(addX, py, 18, 18, mouseX, mouseY);
-            Draw.button(g, addX, py, 18, 18, hover, maxed, canInstall);
+            boolean hover = canInstall && screen.hovered(addX, py, BTN, BTN, mouseX, mouseY);
+            Draw.button(g, addX, py, BTN, BTN, hover, maxed, canInstall);
             WBIcons.draw(g, WBIcons.PLUS, addX + 3, py + 3,
                 canInstall ? Draw.TEXT : Draw.TEXT_FAINT);
             int ordinal = upgrade.ordinal();
             // The same three tooltip shapes UPGRADES uses, for the same reason: a maxed row has
             // nothing to price and an unaffordable one should not say the price twice.
-            screen.hit(addX, py, 18, 18,
+            screen.hit(addX, py, BTN, BTN,
                 canInstall ? () -> screen.send(WorkbayAction.INSTALL_UPGRADE, ordinal) : () -> { },
                 maxed ? new Component[] {
                     WorkbayScreen.gui(key), WorkbayScreen.gui("upgrades.maxed") }
@@ -301,12 +310,11 @@ class RoomsPage extends WorkbayPage {
                         room.chunkCost()));
             }
 
-            int enterX = px + ENTER_X;
-            boolean hover = screen.hovered(enterX, py, ENTER_W, 18, mouseX, mouseY);
-            Draw.button(g, enterX, py, ENTER_W, 18, hover, false);
-            textCentre(g, WorkbayScreen.gui(room.built() ? "rooms.enter" : "rooms.open").getString(),
-                enterX + ENTER_W / 2, py + TEXT_Y, ENTER_W - 4, Draw.TEXT);
-            screen.hit(enterX, py, ENTER_W, 18,
+            // A door to walk through, or a plus to spend the region on one. Two icons rather than
+            // two words, because "Enter" and "Open" are four letters apart and the thing that
+            // actually differs is whether the room exists yet.
+            iconButton(g, mouseX, mouseY, px + ENTER_X, py,
+                room.built() ? WBIcons.ENTER : WBIcons.PLUS, room.built(),
                 () -> screen.send(WorkbayAction.ENTER_ROOM, room.index()),
                 WorkbayScreen.gui(room.built() ? "rooms.enter" : "rooms.open"),
                 WorkbayScreen.gui("rooms.enter.tip"));
@@ -320,11 +328,11 @@ class RoomsPage extends WorkbayPage {
      */
     private void swatch(GuiGraphics g, int mouseX, int mouseY, int px, int py,
         WorkbaySnapshot.Room room) {
-        boolean hover = screen.hovered(px, py, 18, 18, mouseX, mouseY);
-        Draw.button(g, px, py, 18, 18, hover, open == room.index());
-        g.fill(px + 4, py + 4, px + 14, py + 14, 0xFF000000 | room.colour().tint());
+        boolean hover = screen.hovered(px, py, BTN, BTN, mouseX, mouseY);
+        Draw.button(g, px, py, BTN, BTN, hover, open == room.index());
+        g.fill(px + 4, py + 4, px + BTN - 4, py + BTN - 4, 0xFF000000 | room.colour().tint());
         int index = room.index();
-        screen.hit(px, py, 18, 18, () -> setOpen(open == index ? -1 : index),
+        screen.hit(px, py, BTN, BTN, () -> setOpen(open == index ? -1 : index),
             WorkbayScreen.gui("rooms.settings"),
             WorkbayScreen.gui("rooms.colour",
                 WorkbayScreen.gui("colour." + room.colour().getSerializedName())),
@@ -459,8 +467,8 @@ class RoomsPage extends WorkbayPage {
         WBIcons.draw(g, WBIcons.CROSS, closeX + 1, closeY + 1, Draw.TEXT_DIM);
         screen.hit(closeX, closeY, 14, 14, () -> setOpen(-1),
             WorkbayScreen.gui("rooms.settings.close"));
-        windowTab(g, mouseX, mouseY, closeX - 32, closeY, WBIcons.DOOR, Tab.ROOM, "room");
-        windowTab(g, mouseX, mouseY, closeX - 16, closeY, WBIcons.GUEST, Tab.GUESTS, "guests");
+        windowTab(g, mouseX, mouseY, closeX - 36, closeY, WBIcons.DOOR, Tab.ROOM, "room");
+        windowTab(g, mouseX, mouseY, closeX - 18, closeY, WBIcons.GUEST, Tab.GUESTS, "guests");
         cursor += 12;
 
         if (tab == Tab.GUESTS) {

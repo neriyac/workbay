@@ -14,6 +14,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -317,6 +318,161 @@ public class RoomTests {
                 "a link out in the world was given a room, so every row would claim to be in one");
             helper.succeed();
         });
+    }
+
+    /**
+     * <b>The whole chain, with a room in the middle of it.</b> Six stages: a chest on the floor, a
+     * container in a bay, a second container in a bay, a barrel <em>in a room</em>, a third
+     * container in a bay, and a chest back on the floor. Sixteen iron ingots go in one end and this
+     * test waits for all sixteen to come out of the other.
+     *
+     * <p>The room is the stage that did not exist before. Everything else in this chain was already
+     * proved by {@code BusTests}: a Connector on a chest, an internal bay-to-bay link, a link into
+     * a bay. What is new is that a barrel standing in a room is reachable at all — it needs the
+     * room's chunk loaded off the Workbay, a Connector to have been placeable in there, and the
+     * link's Backshop-to-Backshop hop to resolve — and the only honest way to show that is to make
+     * the item cross it.
+     *
+     * <p>The bay stages are plain containers rather than machines on purpose: a machine turns the
+     * item into a different item, and this test's whole assertion is that <em>the same sixteen
+     * ingots</em> came out the far end. {@code fourLinksRunAMekanismLineFromOutsideTheBay} is the
+     * one that puts real machines in the bays.
+     */
+    @GameTest(timeoutTicks = 1200)
+    @TestHolder(description = "Sixteen iron cross six stages -- chest, bay, bay, a barrel in a room, bay, chest.")
+    public static void anItemCrossesSixStagesIncludingARoom(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(7, 5, 7));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            Site site = site(helper, 1);
+            ServerLevel backshop = site.backshop();
+            RoomRegistry registry = RoomRegistry.get(level.getServer());
+
+            // Three bays, and a container racked in each. Racked directly, the way BusTests racks:
+            // an Expansion Plate item is not what this test is about.
+            WorkbayRecord record = registry.byId(site.record().id()).orElseThrow();
+            registry.put(record.withUpgrades(new WorkbayRecord.Upgrades(2, 0, 0, 0, 1, 0, 0)));
+            record = registry.byId(site.record().id()).orElseThrow();
+            for (int bay = 0; bay < 3; bay++) {
+                com.neryos.workbay.world.BayHosting.rack(backshop, record.bayColumn(), bay,
+                    new ItemStack(Blocks.BARREL), player, Direction.NORTH);
+            }
+
+            // Stage 1 and stage 6, on the floor beside the Workbay.
+            BlockPos source = helper.absolutePos(new BlockPos(4, 1, 0));
+            BlockPos sink = helper.absolutePos(new BlockPos(4, 1, 4));
+            level.setBlock(source, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            level.setBlock(sink, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            ((net.minecraft.world.Container) level.getBlockEntity(source))
+                .setItem(0, new ItemStack(Items.IRON_INGOT, 16));
+
+            // Stage 4: a barrel standing in the room, exactly where a player would put one.
+            helper.assertTrue(RoomVisit.enter(site.player(), record, 0), "opening the room failed");
+            RoomVisit.leave(site.player());
+            RoomRecord room = room(helper, site);
+            BlockPos barrel = RoomGeometry.origin(room.region()).offset(6, 1, 6);
+            backshop.setBlock(barrel, Blocks.BARREL.defaultBlockState(), Block.UPDATE_ALL);
+            helper.assertTrue(backshop.getBlockState(barrel).is(Blocks.BARREL),
+                "the barrel is not in the room, so there is no fourth stage");
+
+            WorkbayBlockEntity workbay =
+                (WorkbayBlockEntity) level.getBlockEntity(site.workbayPos());
+
+            // 1 -> 2. A Connector on the source chest, pulling into bay 1.
+            workbay.addBus(connector(helper, workbay, level, source.above(), Direction.DOWN, 0,
+                player).withMode(com.neryos.workbay.bus.BusConfig.Mode.EXTRACT)
+                .withRate(8).withSpeed(10));
+
+            // 2 -> 3. Bay to bay, no Connector anywhere.
+            player.moveTo(site.workbayPos().getX() + 0.5, site.workbayPos().getY(),
+                site.workbayPos().getZ() + 0.5);
+            com.neryos.workbay.menu.WorkbayMenu menu = new com.neryos.workbay.menu.WorkbayMenu(1,
+                player.getInventory(), workbay,
+                com.neryos.workbay.menu.WorkbayMenu.build(workbay, player, 0));
+            menu.act(com.neryos.workbay.menu.WorkbayAction.SELECT_BAY, 0, java.util.Optional.empty());
+            menu.act(com.neryos.workbay.menu.WorkbayAction.CREATE_INTERNAL_LINK, 1,
+                java.util.Optional.empty());
+            com.neryos.workbay.bus.BusConfig internal = workbay.buses().stream()
+                .filter(com.neryos.workbay.bus.BusConfig::internal).findFirst().orElseThrow();
+            helper.assertValueEqual(internal.target().pos(),
+                com.neryos.workbay.world.BayGeometry.machinePos(record.bayColumn(), 1),
+                "the internal link's target bay");
+            workbay.addBus(internal.withEnabled(true).withRate(8).withSpeed(10));
+
+            // 3 -> 4 and 4 -> 5. Two Connectors on the barrel in the room, on two of its faces:
+            // one paired to bay 2 pushing in, one paired to bay 3 pulling out. This is the pair of
+            // links a room-as-a-stage is made of, and both live in another dimension entirely.
+            workbay.addBus(connector(helper, workbay, backshop, barrel.above(), Direction.DOWN, 1,
+                player).withMode(com.neryos.workbay.bus.BusConfig.Mode.INSERT)
+                .withRate(8).withSpeed(10));
+            workbay.addBus(connector(helper, workbay, backshop, barrel.north(), Direction.SOUTH, 2,
+                player).withMode(com.neryos.workbay.bus.BusConfig.Mode.EXTRACT)
+                .withRate(8).withSpeed(10));
+
+            // 5 -> 6. Back out to a chest on the floor.
+            workbay.addBus(connector(helper, workbay, level, sink.above(), Direction.DOWN, 2,
+                player).withMode(com.neryos.workbay.bus.BusConfig.Mode.INSERT)
+                .withRate(8).withSpeed(10));
+
+            helper.assertValueEqual(workbay.buses().size(), 5, "links on the chain");
+            BlockPos bay1 = com.neryos.workbay.world.BayGeometry.machinePos(record.bayColumn(), 0);
+            BlockPos bay2 = com.neryos.workbay.world.BayGeometry.machinePos(record.bayColumn(), 1);
+            BlockPos bay3 = com.neryos.workbay.world.BayGeometry.machinePos(record.bayColumn(), 2);
+
+            helper.startSequence()
+                .thenWaitUntil(() -> {
+                    int arrived = count(level, sink);
+                    if (arrived < 16) {
+                        throw new net.minecraft.gametest.framework.GameTestAssertException(
+                            "the chain has delivered " + arrived + " of 16 iron. source="
+                                + count(level, source) + " bay1=" + count(backshop, bay1)
+                                + " bay2=" + count(backshop, bay2)
+                                + " room=" + count(backshop, barrel)
+                                + " bay3=" + count(backshop, bay3));
+                    }
+                })
+                .thenExecute(() -> helper.assertValueEqual(count(backshop, barrel), 0,
+                    "iron left behind in the room's barrel"))
+                .thenSucceed();
+        });
+    }
+
+    /**
+     * Pairs a Connector to one bay and sticks it on the block below {@code at}, in whichever level
+     * is named — the Backshop for a Connector inside a room, the overworld for one on a chest.
+     * Returns the link that placing it created, switched on, the way a player switches one on.
+     */
+    private static com.neryos.workbay.bus.BusConfig connector(ExtendedGameTestHelper helper,
+        WorkbayBlockEntity workbay, ServerLevel where, BlockPos at, Direction facing, int bay,
+        GameTestPlayer player) {
+        ItemStack held = new ItemStack(WBBlocks.CONNECTOR.get());
+        com.neryos.workbay.content.workbay.WorkbayBlock.pair(held, workbay.record().orElseThrow(),
+            net.minecraft.core.GlobalPos.of(workbay.getLevel().dimension(), workbay.getBlockPos()),
+            bay);
+        var state = WBBlocks.CONNECTOR.get().defaultBlockState()
+            .setValue(com.neryos.workbay.content.connector.ConnectorBlock.FACING, facing);
+        int before = workbay.buses().size();
+        where.setBlock(at, state, Block.UPDATE_ALL);
+        WBBlocks.CONNECTOR.get().setPlacedBy(where, at, state, player, held);
+        helper.assertValueEqual(workbay.buses().size(), before + 1,
+            "links after placing a paired Connector at " + at + " in "
+                + where.dimension().location());
+        return workbay.buses().getLast().withEnabled(true);
+    }
+
+    private static int count(ServerLevel level, BlockPos pos) {
+        if (!(level.getBlockEntity(pos) instanceof net.minecraft.world.Container container)) {
+            return -1;
+        }
+        int total = 0;
+        for (int slot = 0; slot < container.getContainerSize(); slot++) {
+            if (container.getItem(slot).is(Items.IRON_INGOT)) {
+                total += container.getItem(slot).getCount();
+            }
+        }
+        return total;
     }
 
     // ------------------------------------------------------ owner and guests

@@ -261,6 +261,15 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE && current != null && current.escaped()) {
             return true;
         }
+        // While the search field has the caret it takes the keyboard whole, exactly as the rename
+        // field does. Without it, typing a player's name into the guest field closes the screen the
+        // moment the name contains an <b>e</b>: a letter reaches the box through {@code charTyped},
+        // so {@code EditBox#keyPressed} declines it, and the inventory-key check below is what runs
+        // instead. {@code canConsumeInput} is the guard vanilla uses for this and it is the whole
+        // fix. Found by Neriya, typing a name.
+        if (filter != null && filter.isFocused()) {
+            return filter.keyPressed(key, scan, modifiers) || filter.canConsumeInput();
+        }
         return super.keyPressed(key, scan, modifiers);
     }
 
@@ -268,6 +277,9 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
     public boolean charTyped(char typed, int modifiers) {
         if (renaming != null) {
             return renaming.charTyped(typed, modifiers);
+        }
+        if (filter != null && filter.isFocused()) {
+            return filter.charTyped(typed, modifiers);
         }
         return super.charTyped(typed, modifiers);
     }
@@ -473,11 +485,18 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         // could say what it was.
         for (int i = hits.size() - 1; i >= 0; i--) {
             Hit hit = hits.get(i);
-            if (hit.tooltip() != null && hit.contains(mouseX, mouseY)) {
+            if (!hit.contains(mouseX, mouseY)) {
+                continue;
+            }
+            // The first region that covers the pixel <b>owns</b> it, tooltip or not. Skipping the
+            // ones with nothing to say let whatever was underneath answer instead -- and the
+            // biggest region in the mod with nothing to say is the room window's scrim, so the
+            // page behind an open window was explaining its own buttons through it.
+            if (hit.tooltip() != null) {
                 Draw.tooltip(graphics, font, wrapTooltip(hit.tooltip()), mouseX, mouseY,
                     width, height);
-                return;
             }
+            return;
         }
         // Only when nothing else claimed the pixel. Most cut strings sit inside a row whose own
         // tooltip already names them in full; this is for the ones that do not.
