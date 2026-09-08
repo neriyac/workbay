@@ -22,8 +22,14 @@ set -u
 cd "$(dirname "$0")/.." || exit 1
 
 ALWAYS_BUDGET=600      # read at the start of every session
-REFERENCE_BUDGET=1545  # looked up, never read whole
+REFERENCE_BUDGET=1580  # looked up, never read whole
 
+# 1545 -> 1580 when SPEC gained the rooms design (79 lines: §0's four new closed decisions, §8's
+# Rooms subsection, and §16's v2 order). Rooms are the biggest thing left and this is the only
+# record of why they are shaped the way they are. Most of the raise was paid rather than printed:
+# §15 lost its list of 105 shipped gametests and its answered cross-mod spike, and §6 lost its
+# copies of strings that live in the generated lang file and had already drifted from them (it
+# still said `status.workbay.*`; the built keys are `gui.workbay.status.*`).
 # 1440 -> 1545 when README.md arrived (105 lines): it is the store-page copy, written once per
 # release and looked up when release text is written, never read by a coding session. It is also
 # the only document a stranger reads, so it is the last one that should be squeezed to fit.

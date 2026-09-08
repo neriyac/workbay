@@ -40,5 +40,9 @@ repo/
 !**/src/**/repo/
 run-gametest/
 
-# Deliberately untracked: tracking it puts the always-read doc set over budget.
+# Deliberately untracked: tracking these puts the always-read doc set over budget.
 ROADMAP.md
+# Night-run reports. STATUS.md is written at the end of each phase; MORNING.md is the one
+# file to read afterwards. Neither is a document a coding session reads.
+STATUS.md
+MORNING.md
