@@ -292,6 +292,85 @@ public class MenuTests {
         });
     }
 
+    /**
+     * What the screens draw is a {@link WorkbaySnapshot}, and every box on the flow map takes its
+     * name and its icon from one of two fields in it: a bay's {@code hosted}, and a link's
+     * {@code targetBlock}. When either is empty the box falls back to coordinates — and a map of
+     * number-boxes is a map of nowhere, which is exactly what a world full of links made before
+     * {@link BusConfig#targetBlock} existed looks like.
+     *
+     * <p>So this drives the whole player path on a real Mekanism machine — rack it, pair a
+     * Connector, stick it on a chest — then <b>erases</b> the stamp to make the link look like one
+     * saved by an older version, and asserts the snapshot both answers with the chest and writes
+     * the answer back, so it is answered once and not re-derived on every poll.
+     */
+    @GameTest
+    @TestHolder(description = "Every box the screens draw has a name: a bay knows its machine, and "
+        + "a link that has forgotten what it points at learns it again the first time it is drawn.")
+    public static void theScreenNamesEveryBoxItDraws(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(7, 5, 7));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos chestPos = helper.absolutePos(new BlockPos(4, 1, 4));
+
+            net.minecraft.resources.ResourceLocation machineId =
+                net.minecraft.resources.ResourceLocation.parse("mekanism:enrichment_chamber");
+            Block machine = net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(machineId);
+            if (machine == Blocks.AIR) {
+                helper.fail(machineId + " is not registered. This test is about naming another "
+                    + "mod's machine on the map, so a missing partner mod is a failure, never a "
+                    + "skip: check the gametestRuntimeOnly Mekanism dependency in build.gradle.");
+                return;
+            }
+
+            level.setBlock(chestPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            WorkbayTickets.force(backshop, record.id(), record.bayColumn());
+
+            player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(machine));
+            WorkbayMenu menu = menuFor(workbay, player);
+            menu.act(WorkbayAction.SELECT_BAY, 0, Optional.empty());
+            menu.act(WorkbayAction.RACK, 0, Optional.empty());
+
+            // The link, made the only way a link is ever made.
+            ItemStack connector = new ItemStack(WBBlocks.CONNECTOR.get());
+            WorkbayBlock.pair(connector, workbay.record().orElseThrow(),
+                GlobalPos.of(level.dimension(), workbayPos), 0);
+            BlockPos connectorPos = chestPos.above();
+            BlockState placed = WBBlocks.CONNECTOR.get().defaultBlockState()
+                .setValue(ConnectorBlock.FACING, Direction.DOWN);
+            level.setBlock(connectorPos, placed, Block.UPDATE_ALL);
+            WBBlocks.CONNECTOR.get().setPlacedBy(level, connectorPos, placed, player, connector);
+            helper.assertValueEqual(workbay.buses().size(), 1, "links after placing the Connector");
+
+            // Older than the stamp: this is what every link saved before it looks like on disk.
+            BusConfig link = workbay.buses().get(0);
+            workbay.addBus(link.withTargetBlock(Optional.empty()));
+            helper.assertTrue(workbay.bus(link.id()).orElseThrow().targetBlock().isEmpty(),
+                "the stamp should have been erased, or this test proves nothing");
+
+            WorkbaySnapshot snapshot = WorkbayMenu.build(workbay, player, 0);
+
+            helper.assertValueEqual(snapshot.bays().get(0).hosted().orElse(null), machineId,
+                "the machine the bay box on the flow map draws");
+            helper.assertValueEqual(snapshot.links().get(0).targetBlock().orElse(null),
+                net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(Blocks.CHEST),
+                "the block the link box on the flow map draws");
+            helper.assertValueEqual(
+                workbay.bus(link.id()).orElseThrow().targetBlock().orElse(null),
+                net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(Blocks.CHEST),
+                "the stamp written back onto the link, so the next poll has nothing to re-derive");
+
+            level.setBlock(workbayPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            helper.succeed();
+        });
+    }
+
     private static WorkbayBlockEntity placeWorkbay(ExtendedGameTestHelper helper, BlockPos pos,
         GameTestPlayer player) {
         ServerLevel level = helper.getLevel();

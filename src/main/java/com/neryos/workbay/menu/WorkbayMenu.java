@@ -596,11 +596,18 @@ public class WorkbayMenu extends AbstractContainerMenu {
         }
 
         List<WorkbaySnapshot.Link> links = new ArrayList<>();
-        for (BusConfig link : workbay.buses()) {
-            links.add(new WorkbaySnapshot.Link(link, workbay.busStatus(link.id()),
-                targetBlockOf(player, link),
+        List<BusConfig> backfill = new ArrayList<>();
+        for (BusConfig link : List.copyOf(workbay.buses())) {
+            Optional<ResourceLocation> block = targetBlockOf(player, link);
+            if (link.targetBlock().isEmpty() && isRealBlock(block)) {
+                backfill.add(link.withTargetBlock(block));
+            }
+            links.add(new WorkbaySnapshot.Link(link, workbay.busStatus(link.id()), block,
                 link.internal() ? Optional.of(currentTargetBay(record, link)) : Optional.empty()));
         }
+        // After the loop, not inside it: addBus rewrites the record's list, and one write per link
+        // that has something to learn is still nothing next to a write per poll.
+        backfill.forEach(workbay::addBus);
 
         return new WorkbaySnapshot(record.code(), record.locked(), record.bayCapacity(), selected,
             workbay.energy().getEnergyStored(), workbay.energy().getMaxEnergyStored(),
@@ -671,6 +678,11 @@ public class WorkbayMenu extends AbstractContainerMenu {
      * which is the ordinary case: a link's target is nearly always in a chunk nobody is standing
      * in, and before the fallback existed every such row read as two coordinates and every such
      * flow node drew an empty box.
+     *
+     * <p>A link made before {@link BusConfig#targetBlock} existed remembers <b>nothing</b>, so it
+     * reads as two coordinates for the rest of its life however often anyone stands next to it —
+     * and a flow map of number-boxes is a map of nowhere. {@code build} therefore writes the live
+     * answer back the first time there is one. See {@link #isRealBlock}: air is not one.
      */
     private static Optional<ResourceLocation> targetBlockOf(ServerPlayer player, BusConfig link) {
         ServerLevel level = player.server.getLevel(link.target().dimension());
@@ -679,5 +691,15 @@ public class WorkbayMenu extends AbstractContainerMenu {
         }
         return Optional.ofNullable(
             BuiltInRegistries.BLOCK.getKey(level.getBlockState(link.target().pos()).getBlock()));
+    }
+
+    /**
+     * Air is what a target that has been <em>broken</em> reads as, and what an unloaded position
+     * would read as if anything ever asked one. Stamping it would fix the wrong answer in place
+     * for good, because the backfill only ever fires on an empty stamp.
+     */
+    private static boolean isRealBlock(Optional<ResourceLocation> block) {
+        return block.isPresent()
+            && !block.get().equals(ResourceLocation.withDefaultNamespace("air"));
     }
 }
