@@ -102,8 +102,12 @@ public class BlockPreview {
             }
             int[] at = project(face, cx, cy, size);
             int colour = Draw.roleColour(faces.role(resource, face));
-            graphics.fill(at[0] - 6, at[1] - 6, at[0] + 6, at[1] + 6, Draw.EDGE_DARK);
-            graphics.fill(at[0] - 5, at[1] - 5, at[0] + 5, at[1] + 5, colour);
+            // A chip, cut the way every other shape on these screens is cut. Two square fills
+            // was the whole marker, and on a rounded panel six square chips stuck to a cube were
+            // the one part of the picture that still looked drawn by a different hand.
+            Draw.round(graphics, at[0] - 6, at[1] - 6, 12, 12, 3, Draw.EDGE_DARK);
+            Draw.round(graphics, at[0] - 5, at[1] - 5, 10, 10, 2,
+                Draw.mix(colour, 0xFFFFFFFF, 0.18F), colour);
             String letter = label(face);
             Draw.textCentre(graphics, font, letter, at[0], at[1] - 4, 12, 0xFF101214);
         }

@@ -330,11 +330,13 @@ class FlowPage extends WorkbayPage {
     private void node(GuiGraphics g, Node node) {
         int px = node.px();
         int py = node.py();
-        rounded(g, px, py, nodeW, NODE_H, Draw.EDGE_DARK);
-        rounded(g, px + 1, py + 1, nodeW - 2, NODE_H - 2,
-            node.bay() ? Draw.PANEL_LIGHT : Draw.WELL);
-        g.fill(px + 3, py + 1, px + nodeW - 3, py + 2, 0x22FFFFFF);
-        g.fill(px + 3, py + NODE_H - 2, px + nodeW - 3, py + NODE_H - 1, 0x33000000);
+        // Draw's own rounding, not this page's. A box on the map had its four corner pixels
+        // knocked off by hand while every other shape in the mod was being cut on a real curve --
+        // one file with two ideas of what a rounded rectangle is.
+        int fill = node.bay() ? Draw.PANEL_LIGHT : Draw.WELL;
+        Draw.round(g, px, py, nodeW, NODE_H, 4, Draw.EDGE_DARK);
+        Draw.round(g, px + 1, py + 1, nodeW - 2, NODE_H - 2, 3,
+            Draw.mix(fill, 0xFFFFFFFF, 0.10F), Draw.mix(fill, 0xFF000000, 0.10F));
         if (node.bay()) {
             g.fill(px + 1, py + 3, px + 3, py + NODE_H - 3, Draw.BLUE);
         }
@@ -350,7 +352,11 @@ class FlowPage extends WorkbayPage {
                 textX = px + (node.bay() ? 19 : 18);
             }
         }
-        text(g, node.label(), textX, py + 5, px + nodeW - 4 - textX, Draw.TEXT_DIM);
+        // A bay is one of this Workbay's own and a target is somebody else's block, so they are
+        // not the same weight. Every box was TEXT_DIM, which made the machines the map is about
+        // exactly as loud as the chests they feed.
+        text(g, node.label(), textX, py + 5, px + nodeW - 4 - textX,
+            node.bay() ? Draw.TEXT : Draw.TEXT_DIM);
     }
 
     /** One edge, along the polyline {@link FlowLayout} routed for it, head on its last leg. */
@@ -415,21 +421,6 @@ class FlowPage extends WorkbayPage {
                 break;
             }
         }
-    }
-
-    /**
-     * A rectangle with its four corner pixels taken off. Two pixels of radius is all a
-     * seventeen-pixel-tall box can carry without the corner eating the text, and it is the whole
-     * difference between a box drawn by a program and one drawn on purpose.
-     */
-    private static void rounded(GuiGraphics g, int px, int py, int w, int h, int colour) {
-        g.fill(px + 2, py, px + w - 2, py + h, colour);
-        g.fill(px, py + 2, px + 2, py + h - 2, colour);
-        g.fill(px + w - 2, py + 2, px + w, py + h - 2, colour);
-        g.fill(px + 1, py + 1, px + 2, py + 2, colour);
-        g.fill(px + w - 2, py + 1, px + w - 1, py + 2, colour);
-        g.fill(px + 1, py + h - 2, px + 2, py + h - 1, colour);
-        g.fill(px + w - 2, py + h - 2, px + w - 1, py + h - 1, colour);
     }
 
     /**

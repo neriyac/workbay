@@ -318,28 +318,33 @@ public class BayViewScreen extends AbstractContainerScreen<BayViewMenu> {
     public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
         super.render(g, mouseX, mouseY, partial);
         if (overLimits(mouseX, mouseY)) {
-            g.renderTooltip(font, Draw.tooltip(font, List.of(
+            Draw.tooltip(g, font, Draw.tooltip(font, List.of(
                 WorkbayScreen.gui("bayview.limits.short"),
-                WorkbayScreen.gui("bayview.limits"))), mouseX, mouseY);
+                WorkbayScreen.gui("bayview.limits"))), mouseX, mouseY, width, height);
             return;
         }
         if (overMode(mouseX, mouseY)) {
-            g.renderTooltip(font, Draw.tooltip(font, List.of(
+            Draw.tooltip(g, font, Draw.tooltip(font, List.of(
                 WorkbayScreen.gui(menu.state().mode() == BusConfig.Mode.INSERT
                     ? "bayview.exchange.into" : "bayview.exchange.outof"),
-                WorkbayScreen.gui("bayview.exchange.direction.tip"))), mouseX, mouseY);
+                WorkbayScreen.gui("bayview.exchange.direction.tip"))), mouseX, mouseY,
+                width, height);
             return;
         }
         int slot = machineSlotAt(mouseX, mouseY);
         if (slot >= 0) {
-            g.renderTooltip(font, Draw.tooltip(font, slotTooltip(slot)), mouseX, mouseY);
+            Draw.tooltip(g, font, Draw.tooltip(font, slotTooltip(slot)), mouseX, mouseY,
+                width, height);
             return;
         }
         int row = gaugeAt(mouseX, mouseY);
         if (row >= 0) {
             // Draw#tooltip, not renderComponentTooltip: the mod's tooltips are sentences, and
-            // unwrapped one of them is half the screen wide.
-            g.renderTooltip(font, Draw.tooltip(font, gaugeTooltip(row)), mouseX, mouseY);
+            // unwrapped one of them is half the screen wide. And drawn on Draw's own frame, not
+            // vanilla's -- the vanilla frame is right for the *item* tooltips the slots below
+            // still raise, and wrong for the four this screen writes itself.
+            Draw.tooltip(g, font, Draw.tooltip(font, gaugeTooltip(row)), mouseX, mouseY,
+                width, height);
             return;
         }
         renderTooltip(g, mouseX, mouseY);

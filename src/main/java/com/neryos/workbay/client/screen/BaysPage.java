@@ -56,6 +56,14 @@ class BaysPage extends WorkbayPage {
     private static final int SLOT_PITCH = 20;
     private static final int LIST_X = 40;
     private static final int LIST_W = 268;
+    /**
+     * Where a row's status column starts, and how wide it is. Pushed right from 142 and cut from
+     * 54: its longest word is "No machine" at forty-five pixels, and the eight it gives up plus
+     * the four off its own width are eight more characters of the name beside it — which is the
+     * difference between "Connec..." and "Connector".
+     */
+    private static final int STATUS_X = 150;
+    private static final int STATUS_W = 46;
 
     private final int height;
     private final int rackPitch;
@@ -87,8 +95,6 @@ class BaysPage extends WorkbayPage {
     private static final int POWER_X = 246;
     private static final int POWER_W = 58;
 
-    /** The Levy readout's column: from the machine row's left edge to the faces panel. */
-    private static final int LEVY_W = FACES_X - 4 - 50;
     /** The skim readout, between the sort button and the Add button. */
     private static final int SKIM_W = LIST_W - 46 - 40 - 124;
 
@@ -193,7 +199,7 @@ class BaysPage extends WorkbayPage {
         columns(g);
         rack(g, mouseX, mouseY);
         machine(g, mouseX, mouseY);
-        levy(g, mouseX, mouseY);
+        levy(g);
         faces(g, mouseX, mouseY);
         links(g, mouseX, mouseY);
     }
@@ -475,7 +481,8 @@ class BaysPage extends WorkbayPage {
         actionButton(g, mouseX, mouseY, x(98), WBIcons.REDSTONE, unlocked, gated,
             () -> screen.send(WorkbayAction.CYCLE_REDSTONE),
             WorkbayScreen.gui("redstone." + bay.redstone().getSerializedName()),
-            WorkbayScreen.gui("redstone." + bay.redstone().getSerializedName() + ".tip"));
+            WorkbayScreen.gui("redstone." + bay.redstone().getSerializedName() + ".tip"),
+            WBIcons.REDSTONE_COLOURS);
 
         // Copy and paste. Eight bays running the same machine is the first complaint this mod will
         // get, and Mekanism answers it with a Configuration Card (SPEC.md §7).
@@ -520,61 +527,77 @@ class BaysPage extends WorkbayPage {
      * line under it is the batch filling up, which moves while they watch. With nothing coming it
      * says which nothing it is: no Assay racked, or the dial still at zero.
      */
-    private void levy(GuiGraphics g, int mouseX, int mouseY) {
+    private void levy(GuiGraphics g) {
         WorkbaySnapshot snap = snapshot();
-        var font = screen.font();
         boolean assay = hasAssay(snap);
         boolean earning = skimming(snap);
+        int left = x(50);
+        int right = x(FACES_X - 12);
+        int perLevy = com.neryos.workbay.content.assay.AssayBlock.itemsPerLevy();
 
-        String value = WorkbayScreen.gui("levy", snap.levy()).getString();
-        text(g, value, x(50), y(124), LEVY_W, earning ? Draw.AMBER : Draw.TEXT_DIM);
+        text(g, WorkbayScreen.gui("levy", snap.levy()).getString(), left, y(124), 90,
+            earning ? Draw.AMBER : Draw.TEXT_DIM);
 
-        Component state = !assay ? WorkbayScreen.gui("levy.no_assay")
-            : snap.skimRate() == 0 ? WorkbayScreen.gui("levy.dial_off")
-            : WorkbayScreen.gui("levy.batch", snap.skimmed(),
-                com.neryos.workbay.content.assay.AssayBlock.itemsPerLevy());
-        text(g, state, x(50), y(136), LEVY_W, earning ? Draw.TEXT_DIM : Draw.TEXT_FAINT);
+        // <b>The second line is whichever of the two is worth having.</b> Earning, it is the batch
+        // as a bar — the banked total moves once every two hundred ticks, so the only thing that
+        // can show a player their dial is doing something *now* is a thing that fills. Not
+        // earning, a bar can never fill, and a trough that is permanently empty is a dead control
+        // sitting where the answer should be; so the line carries the reason instead, at the full
+        // width of the column rather than squeezed to the right of the total.
+        if (earning) {
+            textRight(g, WorkbayScreen.gui("levy.batch", snap.skimmed(), perLevy).getString(),
+                right, y(124), right - left - 96, Draw.TEXT_DIM);
+            Draw.bar(g, left, y(138), right - left, 7, snap.skimmed(), perLevy, Draw.AMBER);
+        } else {
+            text(g, assay ? WorkbayScreen.gui("levy.dial_off")
+                : WorkbayScreen.gui("levy.no_assay"), left, y(138), right - left,
+                Draw.TEXT_FAINT);
+        }
 
-        int w = Math.min(LEVY_W, Math.max(Draw.width(font, value), Draw.width(font, state.getString()))) + 4;
-        screen.hit(x(48), y(122), w, 26, () -> { },
+        screen.hit(left - 2, y(120), right - left + 4, 28, () -> { },
             WorkbayScreen.gui("levy.name", snap.levy()),
             WorkbayScreen.gui(earning ? "levy.tip" : assay ? "levy.dial_off.tip" : "levy.no_assay.tip"));
     }
 
-    private static net.minecraft.world.item.ItemStack resourceItem(BusConfig.Resource resource) {
-        return switch (resource) {
-            case ITEM -> new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.GRASS_BLOCK);
-            // The vanilla item that reads as "gas in a bottle", for the same reason water is a
-            // water bottle: a player recognises the picture before they read the tooltip.
-            case CHEMICAL -> new net.minecraft.world.item.ItemStack(
-                net.minecraft.world.item.Items.DRAGON_BREATH);
-            case ENERGY -> new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.COAL);
-            case FLUID -> {
-                var water = new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.POTION);
-                water.set(net.minecraft.core.component.DataComponents.POTION_CONTENTS,
-                    new net.minecraft.world.item.alchemy.PotionContents(
-                        Optional.of(net.minecraft.world.item.alchemy.Potions.WATER),
-                        Optional.empty(), java.util.List.of()));
-                yield water;
-            }
-        };
-    }
-
-    /** Every item render in the mod is 16x16; this scales one down to sit where a glyph used to. */
-    private void resourceIcon(GuiGraphics g, BusConfig.Resource resource, int x, int y, float scale) {
-        g.pose().pushPose();
-        g.pose().translate(x, y, 0);
-        g.pose().scale(scale, scale, 1.0F);
-        g.renderItem(resourceItem(resource), 0, 0);
-        g.pose().popPose();
+    /**
+     * <b>What a link carries, drawn.</b> These four were item sprites standing in for icons that
+     * nobody had drawn yet, and the stand-in showed: <em>items</em> was a <b>grass block</b>, which
+     * says "the first block in the registry" and nothing else; energy was a lump of coal, and a
+     * fluid was a water bottle. All three were the same trick — borrow a picture of a thing that
+     * happens to be made of the stuff, and hope it reads as the category.
+     *
+     * <p>Drawn instead, in {@link WBIcons}: items is three different things together (a gem, a
+     * pinch of dust, an ingot — because no single object means "items"), energy is a bolt, a fluid
+     * is a drop and a chemical is a flask. Each carries its own colour, which is what lets three
+     * shapes at twelve pixels stay three shapes.
+     *
+     * <p>And they land on the pixel grid. An item sprite scaled to 0.75 is a 16x16 texture drawn
+     * across twelve pixels, which is every edge in it landing between two of them.
+     */
+    private void resourceIcon(GuiGraphics g, BusConfig.Resource resource, int x, int y) {
+        switch (resource) {
+            case ITEM -> WBIcons.draw(g, WBIcons.ITEM, x, y, Draw.TEXT, WBIcons.ITEM_COLOURS);
+            case FLUID -> WBIcons.draw(g, WBIcons.FLUID, x, y, Draw.FLUID);
+            case ENERGY -> WBIcons.draw(g, WBIcons.ENERGY, x, y, Draw.ENERGY);
+            case CHEMICAL -> WBIcons.draw(g, WBIcons.CHEMICAL, x, y, Draw.CHEMICAL);
+        }
     }
 
     /** A 20x20 button in the machine row: enabled draws lit and clicks, disabled draws sunken. */
     private void actionButton(GuiGraphics g, int mouseX, int mouseY, int px, String[] icon,
         boolean enabled, boolean lit, Runnable onClick, Component name, Component tip) {
+        actionButton(g, mouseX, mouseY, px, icon, enabled, lit, onClick, name, tip, NO_PALETTE);
+    }
+
+    private static final int[] NO_PALETTE = {};
+
+    /** The same, for an icon that carries its own colours. Only the redstone torch does. */
+    private void actionButton(GuiGraphics g, int mouseX, int mouseY, int px, String[] icon,
+        boolean enabled, boolean lit, Runnable onClick, Component name, Component tip,
+        int[] palette) {
         boolean hover = screen.hovered(px, y(98), 20, 20, mouseX, mouseY);
         Draw.button(g, px, y(98), 20, 20, hover && enabled, lit && enabled, enabled);
-        WBIcons.draw(g, icon, px + 4, y(102), enabled ? Draw.TEXT : Draw.TEXT_FAINT);
+        WBIcons.draw(g, icon, px + 4, y(102), enabled ? Draw.TEXT : Draw.TEXT_FAINT, palette);
         screen.hit(px, y(98), 20, 20, enabled ? onClick : () -> { }, name, tip);
     }
 
@@ -610,7 +633,7 @@ class BaysPage extends WorkbayPage {
             boolean active = faceType == resource;
             boolean hover = screen.hovered(px, py, TYPE_W, 18, mouseX, mouseY);
             Draw.button(g, px, py, TYPE_W, 18, hover, active);
-            resourceIcon(g, resource, px + (TYPE_W - 12) / 2, py + 3, 0.75F);
+            resourceIcon(g, resource, px + (TYPE_W - 12) / 2, py + 3);
             screen.hit(px, py, TYPE_W, 18, () -> faceType = resource,
                 WorkbayScreen.gui("faces." + resource.getSerializedName()),
                 WorkbayScreen.gui("faces.tip"));
@@ -779,12 +802,17 @@ class BaysPage extends WorkbayPage {
 
         // Clear of the heading, which is no longer the fixed-width word "LINKS": it now carries the
         // bay number, and at LIST_X+44 the funnel sat on top of it.
-        iconButton(g, mouseX, mouseY, x(LIST_X + 76), y(linksY), WBIcons.FILTER, true,
+        // Lit only when the list is *not* showing its usual contents. They were both hardcoded
+        // active, which under a flat fill was invisible and under a gradient is two bright blue
+        // buttons claiming to be switched on -- and hid the one thing they could usefully say.
+        iconButton(g, mouseX, mouseY, x(LIST_X + 76), y(linksY), WBIcons.FILTER,
+            filter != Filter.THIS_BAY,
             () -> filter = Filter.values()[Math.floorMod(
                 filter.ordinal() + (screen.back() ? -1 : 1), Filter.values().length)],
             WorkbayScreen.gui("links.filter." + filter.name().toLowerCase(java.util.Locale.ROOT)),
             WorkbayScreen.gui("links.filter.tip"));
-        iconButton(g, mouseX, mouseY, x(LIST_X + 98), y(linksY), WBIcons.SORT, true,
+        iconButton(g, mouseX, mouseY, x(LIST_X + 98), y(linksY), WBIcons.SORT,
+            sort != Sort.ADDED,
             () -> sort = Sort.values()[Math.floorMod(
                 sort.ordinal() + (screen.back() ? -1 : 1), Sort.values().length)],
             WorkbayScreen.gui("links.sort." + sort.name().toLowerCase(java.util.Locale.ROOT)),
@@ -799,9 +827,14 @@ class BaysPage extends WorkbayPage {
         String rate = assay || snap.skimRate() == 0
             ? WorkbayScreen.gui("skim", snap.skimRate()).getString()
             : WorkbayScreen.gui("skim.no_assay.short").getString();
-        text(g, rate, x(LIST_X + 120), y(linksY + 5), SKIM_W,
+        // Right-aligned against the Add button rather than parked at LIST_X+120. On its fixed x
+        // it sat in the middle of the header with a gap on both sides, belonging to neither the
+        // heading and its two icons on the left nor Add and Pair on the right -- one string
+        // floating in the one row of this screen that is otherwise two tidy groups.
+        int rateW = Math.min(SKIM_W, Draw.width(font, rate));
+        textRight(g, rate, addX - 8, y(linksY + 5), rateW,
             skimming(snap) ? Draw.AMBER : Draw.TEXT_FAINT);
-        screen.hit(x(LIST_X + 118), y(linksY + 2), Math.min(SKIM_W, Draw.width(font, rate)) + 4, 14, () -> { },
+        screen.hit(addX - 10 - rateW, y(linksY + 2), rateW + 4, 14, () -> { },
             assay || snap.skimRate() == 0
                 ? WorkbayScreen.gui("skim.name", snap.skimRate())
                 : WorkbayScreen.gui("skim.no_assay"),
@@ -829,7 +862,23 @@ class BaysPage extends WorkbayPage {
         }, WorkbayScreen.gui("links.add"), WorkbayScreen.gui("links.add.tip"));
 
         List<WorkbaySnapshot.Link> visible = visibleLinks(snap);
-        Draw.well(g, x(LIST_X), y(rowY - 4), LIST_W, rows * ROW_PITCH + 8);
+        int listH = rows * ROW_PITCH + 8;
+        Draw.well(g, x(LIST_X), y(rowY - 4), LIST_W, listH);
+
+        if (visible.isEmpty()) {
+            // "No links yet. Pair a Connector" is a lie the moment the list is scoped to one bay
+            // and the links are all on another. Say which case this is.
+            int elsewhere = snap.links().size();
+            Component empty = filter == Filter.THIS_BAY && elsewhere > 0
+                ? WorkbayScreen.gui("links.none.here", elsewhere)
+                : WorkbayScreen.gui("links.none");
+            // <b>And no bands under it.</b> The rules were drawn for every row whether the list
+            // had one or not, so the two-line sentence explaining the empty list had a horizontal
+            // rule struck through its second line -- an empty list, with the explanation crossed
+            // out. Rows are the list's furniture; with no list there is nothing to furnish.
+            emptyList(g, empty, listH);
+            return;
+        }
         // Empty rows are drawn as empty rows. SPEC.md §7: the alternative is growing the panel to
         // fit the list, which moves every control under the player's cursor as links are added.
         for (int emptyRow = 0; emptyRow < rows; emptyRow++) {
@@ -845,24 +894,25 @@ class BaysPage extends WorkbayPage {
             g.fill(x(LIST_X + 4), ruleY, x(LIST_X + LIST_W - 10), ruleY + 1, 0x12FFFFFF);
         }
 
-        if (visible.isEmpty()) {
-            // "No links yet. Pair a Connector" is a lie the moment the list is scoped to one bay
-            // and the links are all on another. Say which case this is.
-            int elsewhere = snap.links().size();
-            Component empty = filter == Filter.THIS_BAY && elsewhere > 0
-                ? WorkbayScreen.gui("links.none.here", elsewhere)
-                : WorkbayScreen.gui("links.none");
-            // Wrapped, not cut: this is the one line on the screen whose whole job is to explain
-            // an empty list, and half of that sentence explains nothing. It is the sentence that
-            // ran off the right-hand edge of the list and out over the world behind the window.
-            wrapped(g, empty, x(LIST_X + 8), y(rowY + 6), LIST_W - 20, Draw.TEXT_FAINT);
-            return;
-        }
         scroll = Math.clamp(scroll, 0, Math.max(0, visible.size() - rows));
         scrollbar(g, visible.size());
         for (int visibleRow = 0; visibleRow < rows && visibleRow + scroll < visible.size(); visibleRow++) {
             row(g, mouseX, mouseY, visible.get(visibleRow + scroll), y(rowY + visibleRow * ROW_PITCH));
         }
+    }
+
+    /**
+     * The sentence a list says when it has nothing in it: wrapped, and centred in the well rather
+     * than pinned to the top left of it. A well two hundred pixels tall with one line of grey text
+     * in its corner reads as a list that failed to load; the same line in the middle of it reads
+     * as an answer.
+     */
+    private void emptyList(GuiGraphics g, Component said, int listH) {
+        int room = LIST_W - 40;
+        int lines = screen.font().split(
+            said.copy().withStyle(style -> style.withFont(Draw.UI_FONT)), room).size();
+        wrapped(g, said, x(LIST_X + 20), y(rowY - 4) + (listH - lines * 10) / 2, room,
+            Draw.TEXT_FAINT);
     }
 
     /**
@@ -906,7 +956,7 @@ class BaysPage extends WorkbayPage {
         screen.hit(px + 16, py + 4, 10, 10, () -> { },
             statusName(link.status()), statusHelp(link.status()));
 
-        resourceIcon(g, config.resource(), px + 30, py + 3, 0.75F);
+        resourceIcon(g, config.resource(), px + 30, py + 3);
         screen.hit(px + 30, py + 3, 12, 12,
             () -> screen.send(WorkbayAction.LINK_CYCLE_RESOURCE, config.id()),
             WorkbayScreen.gui("links.type." + config.resource().getSerializedName()),
@@ -922,11 +972,20 @@ class BaysPage extends WorkbayPage {
             WorkbayScreen.gui("links.mode." + config.mode().getSerializedName()),
             WorkbayScreen.gui("links.mode.tip"));
 
-        // Which bay, because the list shows every bay's links by default now.
-        String badge = "B" + (config.bay() + 1);
-        text(g, badge, px + 62, py + 5, 16, Draw.TEXT_DIM);
-        screen.hit(px + 62, py + 3, 16, 12, () -> { },
-            WorkbayScreen.gui("links.bay", config.bay() + 1), WorkbayScreen.gui("links.bay.tip"));
+        // Which bay — <b>only when the list is actually showing more than one.</b> Scoped to this
+        // bay, which is the default, every row carried the same "B1" under a heading that already
+        // said BAY 1: sixteen pixels and a hit region spent saying a thing twice, on the row whose
+        // name column was too narrow to finish the word "Connector". A column that answers the
+        // same for every row is not a column.
+        boolean showBay = filter != Filter.THIS_BAY;
+        int cursor = px + 62;
+        if (showBay) {
+            text(g, "B" + (config.bay() + 1), cursor, py + 5, 14, Draw.TEXT_DIM);
+            screen.hit(cursor, py + 3, 14, 12, () -> { },
+                WorkbayScreen.gui("links.bay", config.bay() + 1),
+                WorkbayScreen.gui("links.bay.tip"));
+            cursor += 18;
+        }
 
         // The name, and where it comes from when the player has not given one: the bay an internal
         // link points at, or the target block's own name. Four rows all called "Bay link" was the
@@ -946,17 +1005,7 @@ class BaysPage extends WorkbayPage {
         String cut = taxed
             ? WorkbayScreen.gui("skim.row", snapshot().skimRate()).getString() : "";
         int cutW = taxed ? Math.min(Draw.width(font, cut), 22) : 0;
-        if (taxed) {
-            textRight(g, cut, px + 138, py + 5, cutW, Draw.AMBER);
-            screen.hit(px + 138 - cutW, py + 3, cutW, 12, () -> { },
-                WorkbayScreen.gui("skim.name", snapshot().skimRate()),
-                WorkbayScreen.gui("skim.row.tip"));
-        }
-        // Fifty-six, not fifty. A target with no name to borrow is drawn as its position, and at
-        // fifty pixels two links a thousand blocks apart both read "1005 10..." -- which is the
-        // fault this column was just fixed for, wearing different words. The six came off the
-        // status column, which needs forty-five for its longest word and had sixty.
-        int nameW = taxed ? 54 - cutW : 56;
+        int nameW;
         // What the link is pointed at, as the block itself. A name answers "which one" only if you
         // read it; a chest reads as a chest before you have finished the row. It sits in front of
         // the name rather than in a column of its own because the row is at SPEC.md §4's ceiling
@@ -967,21 +1016,33 @@ class BaysPage extends WorkbayPage {
         // ever carries and the one that needed fifty-six in the first place. So the column gives up
         // width exactly when the label got shorter, and never otherwise.
         Optional<ResourceLocation> icon = targetIcon(link);
-        int nameX = px + 80;
+        int nameX = cursor;
         if (icon.isPresent()) {
             var item = BuiltInRegistries.ITEM.get(icon.get());
             if (item != net.minecraft.world.item.Items.AIR) {
                 g.pose().pushPose();
-                g.pose().translate(px + 80, py + 3, 0);
+                g.pose().translate(cursor, py + 3, 0);
                 g.pose().scale(0.75F, 0.75F, 1.0F);
                 g.renderItem(new ItemStack(item), 0, 0);
                 g.pose().popPose();
-                screen.hit(px + 80, py + 3, 12, 12, () -> { },
+                screen.hit(cursor, py + 3, 12, 12, () -> { },
                     displayName(icon.get()), WorkbayScreen.gui("links.target.tip"));
-                nameX = px + 94;
-                nameW -= 14;
+                nameX = cursor + 14;
             }
         }
+        // <b>The name gets everything that is left, measured rather than written down.</b> It was
+        // a fixed fifty-six, so "Connector" -- the name of one of this mod's own two blocks, and
+        // the name half these rows carry -- arrived as "Connec...". The status column beside it
+        // was sixty wide for a longest word of "No machine", which measures forty-five.
+        int nameRight = px + STATUS_X - 4;
+        if (taxed) {
+            textRight(g, cut, nameRight, py + 5, cutW, Draw.AMBER);
+            screen.hit(nameRight - cutW, py + 3, cutW, 12, () -> { },
+                WorkbayScreen.gui("skim.name", snapshot().skimRate()),
+                WorkbayScreen.gui("skim.row.tip"));
+            nameRight -= cutW + 4;
+        }
+        nameW = nameRight - nameX;
         if (!screen.renaming()) {
             text(g, label, nameX, py + 5, nameW, on ? Draw.TEXT : Draw.TEXT_FAINT);
         }
@@ -1007,19 +1068,19 @@ class BaysPage extends WorkbayPage {
         // what the link is doing, which is the thing no other text on the row carries -- the
         // status swatch is a 10px chip a player scanning thirty rows does not read.
         boolean broken = link.status().isProblem();
-        text(g, statusShort(link.status()).getString(), px + 142, py + 5, 54,
+        text(g, statusShort(link.status()).getString(), px + STATUS_X, py + 5, STATUS_W,
             statusColour(link.status()));
         if (config.internal()) {
             // Bay to bay is the one target a player may change from the row: there is no Connector
             // in the world to move, so the click has to live somewhere and this column is where
             // the target used to be drawn. The name column still says which bay.
-            screen.hit(px + 142, py + 2, 54, ROW_PITCH - 4,
+            screen.hit(px + STATUS_X, py + 2, STATUS_W, ROW_PITCH - 4,
                 () -> screen.send(WorkbayAction.LINK_CYCLE_TARGET_BAY, config.id()),
                 statusName(link.status()),
                 broken ? statusHelp(link.status())
                     : WorkbayScreen.gui("links.internal.retarget.tip"));
         } else {
-            screen.hit(px + 142, py + 2, 54, ROW_PITCH - 4, () -> { },
+            screen.hit(px + STATUS_X, py + 2, STATUS_W, ROW_PITCH - 4, () -> { },
                 statusName(link.status()), statusHelp(link.status()));
         }
 
@@ -1112,40 +1173,56 @@ class BaysPage extends WorkbayPage {
         BusConfig config = link.config();
         com.neryos.workbay.bus.BusFilter filter = config.filter();
 
+        // <b>Its controls travel with it.</b> The heading, the mode button and Back used to sit on
+        // the list's own header line while the panel they belong to was a hundred and thirty
+        // pixels lower — a title orphaned from its box, which is the one arrangement that reads
+        // worse than the dead slab this panel was centred to get away from. It is a dialog; a
+        // dialog moves in one piece.
+        int panelH = SLOT_PITCH + 26;
+        int blockH = 18 + 6 + panelH;
+        int blockY = y(linksY) + (18 + rows * ROW_PITCH + 12 - blockH) / 2;
+
         // Heading and link name as one string. They used to sit at opposite ends of the row with
         // the mode button between them, and the first screenshot of this panel read the middle and
         // the right as one phrase, "Only these Chest", which is a sentence the mod does not mean.
         String label = labelOf(link);
-        text(g, "FILTER \u00B7 " + label, x(LIST_X + 4), y(linksY + 5), 100, Draw.TEXT);
+        text(g, "FILTER \u00B7 " + label, x(LIST_X + 4), blockY + 5, 100, Draw.TEXT);
 
         int modeX = x(LIST_X + 108);
-        boolean modeHover = screen.hovered(modeX, y(linksY), 110, 18, mouseX, mouseY);
-        Draw.button(g, modeX, y(linksY), 110, 18, modeHover, false);
+        boolean modeHover = screen.hovered(modeX, blockY, 110, 18, mouseX, mouseY);
+        Draw.button(g, modeX, blockY, 110, 18, modeHover, false);
         textCentre(g, WorkbayScreen.gui(filter.deny() ? "filter.deny" : "filter.allow").getString(),
-            modeX + 55, y(linksY + 5), 106, filter.deny() ? Draw.AMBER : Draw.BLUE);
-        screen.hit(modeX, y(linksY), 110, 18,
+            modeX + 55, blockY + 5, 106, filter.deny() ? Draw.AMBER : Draw.BLUE);
+        screen.hit(modeX, blockY, 110, 18,
             () -> screen.send(WorkbayAction.TOGGLE_FILTER_DENY, config.id()),
             WorkbayScreen.gui(filter.deny() ? "filter.deny" : "filter.allow"),
             WorkbayScreen.gui("filter.mode.tip"));
 
         int backX = x(LIST_X + LIST_W - 46);
-        boolean backHover = screen.hovered(backX, y(linksY), 46, 18, mouseX, mouseY);
-        Draw.button(g, backX, y(linksY), 46, 18, backHover, false);
-        textCentre(g, "Back", backX + 23, y(linksY + 5), 42, Draw.TEXT);
-        screen.hit(backX, y(linksY), 46, 18, this::closeFilter,
+        boolean backHover = screen.hovered(backX, blockY, 46, 18, mouseX, mouseY);
+        Draw.button(g, backX, blockY, 46, 18, backHover, false);
+        textCentre(g, "Back", backX + 23, blockY + 5, 42, Draw.TEXT);
+        screen.hit(backX, blockY, 46, 18, this::closeFilter,
             WorkbayScreen.gui("filter.close"), WorkbayScreen.gui("filter.close.tip"));
 
         // A well the size of what is in it. SPEC.md section 7 draws empty rows as empty rows, but
         // that is about the links list, which is a list; nine slots and a sentence are not, and
         // stretching the box to the list height gave this panel four fifths of a void, which is
         // exactly what the first screenshot of it showed.
-        Draw.well(g, x(LIST_X), y(rowY - 4), LIST_W, SLOT_PITCH + 26);
+        //
+        // <b>And centred in the space the list would have had</b>, rather than pinned to its top.
+        // The page does not shrink when the panel does -- it cannot, the header and the rack are
+        // above it -- so the room the list gave up has to go somewhere, and above and below a
+        // dialog is somewhere. Pinned to the top it was a strip of controls with a hundred and
+        // sixty pixels of nothing under it, which is the shape of a screen that broke.
+        int panelY = blockY + 24;
+        Draw.well(g, x(LIST_X), panelY, LIST_W, panelH);
         // Centred, for the same reason. Nine slots pinned to the left edge of a 268-wide box read
         // as a list that ran out rather than as the whole of the filter.
         int slotsW = (com.neryos.workbay.bus.BusFilter.MAX - 1) * SLOT_PITCH + 18;
         int slotsX = LIST_X + (LIST_W - slotsW) / 2;
         for (int slot = 0; slot < com.neryos.workbay.bus.BusFilter.MAX; slot++) {
-            filterEntry(g, x(slotsX + slot * SLOT_PITCH), y(rowY + 2), config, slot);
+            filterEntry(g, x(slotsX + slot * SLOT_PITCH), panelY + 6, config, slot);
         }
         // One sentence, and it has to be true of what is on screen. It said "Nothing listed. This
         // link carries everything." over a slot with something in it -- caught on the first
@@ -1156,7 +1233,7 @@ class BaysPage extends WorkbayPage {
             : filter.isEmpty() ? "filter.empty"
             : filter.deny() ? "filter.listed.deny" : "filter.listed.allow";
         textCentre(g, WorkbayScreen.gui(said).getString(),
-            x(LIST_X + LIST_W / 2), y(rowY + SLOT_PITCH + 6), LIST_W - 16,
+            x(LIST_X + LIST_W / 2), panelY + SLOT_PITCH + 12, LIST_W - 16,
             carrying ? Draw.SELECT : Draw.TEXT_FAINT);
     }
 
@@ -1186,7 +1263,7 @@ class BaysPage extends WorkbayPage {
         // replaces it, which is what somebody who has just picked something up expects.
         boolean carrying = !screen.carried().isEmpty();
         if (carrying) {
-            Draw.bevel(g, px, py, 18, 18, true, Draw.SELECT, Draw.SELECT);
+            Draw.ring(g, px, py, 18, 18, 3, Draw.SELECT);
         }
         if (entry.isPresent()) {
             entryIcon(g, config.resource(), entry.get(), px + 1, py + 1);
@@ -1350,12 +1427,12 @@ class BaysPage extends WorkbayPage {
             .boxed()
             .toList();
 
-        Draw.well(g, x(LIST_X), y(rowY - 4), LIST_W, rows * ROW_PITCH + 8);
+        int listH = rows * ROW_PITCH + 8;
+        Draw.well(g, x(LIST_X), y(rowY - 4), LIST_W, listH);
         int total = addTab == AddTab.CONNECTORS ? loose.size() : bays.size();
         if (total == 0) {
-            wrapped(g, WorkbayScreen.gui(addTab == AddTab.CONNECTORS
-                    ? "links.add.none.links" : "links.add.none.bays"),
-                x(LIST_X + 8), y(rowY + 6), LIST_W - 20, Draw.TEXT_FAINT);
+            emptyList(g, WorkbayScreen.gui(addTab == AddTab.CONNECTORS
+                ? "links.add.none.links" : "links.add.none.bays"), listH);
             return;
         }
         scroll = Math.clamp(scroll, 0, Math.max(0, total - rows));
@@ -1378,7 +1455,7 @@ class BaysPage extends WorkbayPage {
                     com.neryos.workbay.client.LinkHighlight.set(config.target());
                 }
                 checkbox(g, px, py + 3, ticked);
-                resourceIcon(g, config.resource(), px + 18, py + 3, 0.75F);
+                resourceIcon(g, config.resource(), px + 18, py + 3);
                 String label = labelOf(link);
                 text(g, label, px + 34, py + 5, 70, ticked ? Draw.TEXT : Draw.TEXT_DIM);
                 // An internal link's target is a machine in the Backshop, which this client has
@@ -1388,9 +1465,13 @@ class BaysPage extends WorkbayPage {
                     ? link.targetBay().map(b -> "\u2192 Bay " + (b + 1))
                         .orElse(WorkbayScreen.gui("links.unknown").getString())
                     : targetName(link);
-                text(g, from, px + 110, py + 5, 90,
+                // Right-aligned against the badge rather than parked on a fixed x: the two
+                // strings are "what it is" and "where it points", and a fixed column left a
+                // forty-pixel hole between them on every row whose name was short.
+                textRight(g, from, px + 202, py + 5, 92,
                     config.internal() ? Draw.BLUE : Draw.TEXT_DIM);
-                text(g, "B" + (config.bay() + 1), px + 206, py + 5, 20, Draw.TEXT_FAINT);
+                textRight(g, "B" + (config.bay() + 1), px + LIST_W - 18, py + 5, 20,
+                    Draw.TEXT_FAINT);
                 screen.hit(px, py, LIST_W - 14, ROW_PITCH - 2, () -> {
                     if (!pickedLinks.remove(config.id())) {
                         pickedLinks.add(config.id());
@@ -1405,9 +1486,9 @@ class BaysPage extends WorkbayPage {
                 WBIcons.draw(g, WBIcons.ARROW_RIGHT, px + 18, py + 3, Draw.BLUE);
                 String label = "Bay " + (bay + 1)
                     + (other == null || other.name().isEmpty() ? "" : " \u00b7 " + other.name());
-                text(g, label, px + 34, py + 5, 120, ticked ? Draw.TEXT : Draw.TEXT_DIM);
-                text(g, WorkbayScreen.gui("links.add.nowire"), px + 160, py + 5, 90,
-                    Draw.TEXT_FAINT);
+                text(g, label, px + 34, py + 5, 150, ticked ? Draw.TEXT : Draw.TEXT_DIM);
+                textRight(g, WorkbayScreen.gui("links.add.nowire").getString(),
+                    px + LIST_W - 18, py + 5, 70, Draw.TEXT_FAINT);
                 screen.hit(px, py, LIST_W - 14, ROW_PITCH - 2, () -> {
                     if (!pickedBays.remove(Integer.valueOf(bay))) {
                         pickedBays.add(bay);

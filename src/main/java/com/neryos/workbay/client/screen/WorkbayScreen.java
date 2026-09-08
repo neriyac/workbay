@@ -405,9 +405,8 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
                 Draw.reset("ring", 0);
             }
             float lit = Draw.approach("ring", 1.0F, 16.0F);
-            Draw.bevel(g, hit.x() - 1, hit.y() - 1, hit.w() + 2, hit.h() + 2, true,
-                (Draw.SELECT & 0x00FFFFFF) | ((int) (lit * 0x80) << 24),
-                (Draw.SELECT & 0x00FFFFFF) | ((int) (lit * 0x40) << 24));
+            Draw.ring(g, hit.x() - 1, hit.y() - 1, hit.w() + 2, hit.h() + 2,
+                Math.min(5, Math.min(hit.w(), hit.h()) / 3 + 1), Draw.alpha(Draw.SELECT, lit * 0.55F));
             return;
         }
     }
@@ -421,17 +420,20 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
             notice = null;
             return;
         }
-        int h = font.lineHeight + 6;
-        int px = leftPos + 4;
-        int py = topPos + imageHeight - h - 4;
+        int h = font.lineHeight + 8;
+        int px = leftPos + 8;
+        int py = topPos + imageHeight - h - 6;
         // Above the page, including its item sprites: an item is rendered on its own layer well in
         // front of everything a page fills, so a strip drawn flat came out with a chest sprite
         // showing through the word it was covering. Measured, in a client. The carried stack does
         // the same thing at 400.
         graphics.pose().pushPose();
         graphics.pose().translate(0, 0, 300);
-        Draw.well(graphics, px, py, imageWidth - 8, h);
-        Draw.text(graphics, font, notice.getString(), px + 4, py + 4, imageWidth - 16, Draw.AMBER);
+        // Its own amber-edged card rather than a plain well: a refusal is the one thing on the
+        // screen the player did not ask to see, so it has to read as laid *over* the page rather
+        // than as a row of it.
+        Draw.notice(graphics, px, py, imageWidth - 16, h);
+        Draw.text(graphics, font, notice.getString(), px + 6, py + 5, imageWidth - 28, Draw.AMBER);
         graphics.pose().popPose();
     }
 
@@ -461,7 +463,8 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         for (int i = hits.size() - 1; i >= 0; i--) {
             Hit hit = hits.get(i);
             if (hit.tooltip() != null && hit.contains(mouseX, mouseY)) {
-                graphics.renderTooltip(font, wrapTooltip(hit.tooltip()), mouseX, mouseY);
+                Draw.tooltip(graphics, font, wrapTooltip(hit.tooltip()), mouseX, mouseY,
+                    width, height);
                 return;
             }
         }
@@ -469,7 +472,8 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         // tooltip already names them in full; this is for the ones that do not.
         for (Overflow cut : overflows) {
             if (cut.contains(mouseX, mouseY)) {
-                graphics.renderTooltip(font, wrapTooltip(List.of(cut.full())), mouseX, mouseY);
+                Draw.tooltip(graphics, font, wrapTooltip(List.of(cut.full())), mouseX, mouseY,
+                    width, height);
                 return;
             }
         }

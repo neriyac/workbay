@@ -70,8 +70,18 @@ public class RoomDoorScreen extends AbstractContainerScreen<RoomDoorMenu> {
         Draw.panel(g, leftPos, topPos, imageWidth, imageHeight);
         int px = leftPos + MARGIN;
 
-        Draw.text(g, font, WorkbayLang.gui("door.title").getString(), px, topPos + TITLE_Y,
-            ROW_W, Draw.TEXT);
+        // <b>The room's own name is the title.</b> It used to say "Way out", which is what the
+        // button underneath it says -- one of the two was furniture. And the fact this screen was
+        // missing is the one a player standing in a grey box actually wants: which room this is.
+        // The list below says where you could go; nothing said where you were.
+        List<WorkbaySnapshot.Room> all = menu.view().rooms();
+        int current = menu.view().current();
+        String title = current >= 0 && current < all.size()
+            ? (all.get(current).name().isEmpty()
+                ? WorkbayLang.gui("rooms.name", all.get(current).index() + 1).getString()
+                : all.get(current).name())
+            : WorkbayLang.gui("door.title").getString();
+        Draw.text(g, font, title, px, topPos + TITLE_Y, ROW_W, Draw.TEXT);
 
         // Out: the answer to the question that made somebody click a wall, at twice a row's height
         // and the full width of the panel.
@@ -81,7 +91,7 @@ public class RoomDoorScreen extends AbstractContainerScreen<RoomDoorMenu> {
             px + ROW_W / 2, topPos + LEAVE_Y + (LEAVE_H - font.lineHeight) / 2 + 1,
             ROW_W - 8, Draw.TEXT);
 
-        List<WorkbaySnapshot.Room> rooms = menu.view().rooms();
+        List<WorkbaySnapshot.Room> rooms = all;
         if (rooms.size() <= 1) {
             return;
         }

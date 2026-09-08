@@ -78,9 +78,19 @@ class RoomsPage extends WorkbayPage {
     // The settings window.
     private static final int WIN_W = 200;
     private static final int WIN_PAD = 8;
-    private static final int SWATCH = 16;
-    private static final int SWATCH_PITCH = 18;
-    private static final int SWATCHES_PER_ROW = 8;
+    /**
+     * Twenty on a thirty pitch, so six of them span the window rather than leaving a third of the
+     * Walls row empty — and a swatch is the one control here whose whole job is to be looked at,
+     * so bigger is the point rather than a side effect.
+     */
+    private static final int SWATCH = 20;
+    private static final int SWATCH_PITCH = 30;
+    /**
+     * Six, not eight. Eleven colours in rows of eight is eight and then three — a full row and a
+     * stub, which reads as a grid that ran out rather than as the whole set. Six and five is two
+     * rows that look like they were meant.
+     */
+    private static final int SWATCHES_PER_ROW = 6;
     private static final int BIOME_H = 13;
     /**
      * How many biomes the list shows at once. <b>The window's height does not depend on how many
@@ -217,7 +227,10 @@ class RoomsPage extends WorkbayPage {
                 ? WorkbayScreen.gui(room.chunkCost() == 1 ? "rooms.size.one" : "rooms.size",
                     room.interior(), room.interior(), room.chunkCost()).getString()
                 : WorkbayScreen.gui("rooms.empty").getString();
-            text(g, size, px + ROOM_SIZE_X, py + TEXT_Y, ROOM_SIZE_W,
+            // Right-aligned against the controls rather than parked on a fixed x. "Not opened
+            // yet" is 62 pixels in a 96-wide column, so an unopened room drew its one fact in the
+            // middle of the row with a hundred pixels of nothing on either side of it.
+            textRight(g, size, px + SETTINGS_X - 8, py + TEXT_Y, ROOM_SIZE_W,
                 room.built() ? Draw.TEXT_DIM : Draw.TEXT_FAINT);
 
             // Only a built room has a shell to paint or chunks to write a biome over, and an
@@ -362,7 +375,7 @@ class RoomsPage extends WorkbayPage {
                 // A ring, not a shade. Draw.button's active fill sits *behind* a swatch that is
                 // ten solid pixels of colour, so the one the room is actually painted could not be
                 // picked out of the eleven.
-                Draw.bevel(g, cx, cy, SWATCH, SWATCH, true, Draw.SELECT, Draw.SELECT);
+                Draw.ring(g, cx, cy, SWATCH, SWATCH, 4, Draw.SELECT);
             }
             long packed = room.index() | ((long) i << 16);
             screen.hit(cx, cy, SWATCH, SWATCH,
@@ -419,9 +432,12 @@ class RoomsPage extends WorkbayPage {
             Draw.text(g, screen.font(), biomeName(id).getString(), bx + 5, by + 3, rowW - 10,
                 chosen ? Draw.TEXT : Draw.TEXT_DIM);
             long index = room.index();
+            // The name, not the id. Every other row on this page is titled by what it is called;
+            // this one alone said "minecraft:taiga" in bold over a list that had just drawn the
+            // word Taiga, which is the mod showing a player its own plumbing.
             screen.hit(bx, by, rowW, BIOME_H,
                 () -> screen.sendText(WorkbayAction.SET_ROOM_BIOME, index, id),
-                Component.literal(id), WorkbayScreen.gui("rooms.biome.tip"));
+                biomeName(id), WorkbayScreen.gui("rooms.biome.tip"));
         }
         if (bar) {
             // Six wide and drawn as two flat fills. At four, with a bevel on the knob, the whole

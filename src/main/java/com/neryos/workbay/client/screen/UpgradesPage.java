@@ -217,8 +217,11 @@ class UpgradesPage extends WorkbayPage {
         var font = screen.font();
         WorkbaySnapshot snap = snapshot();
         g.fill(x(12), y(HEIGHT - 26), x(WIDTH - 12), y(HEIGHT - 25), Draw.EDGE_DARK);
+        // Amber, like every other Levy figure in the mod. This is the number every price on the
+        // page is being compared against, and it was the one drawn in the same plain white as a
+        // row's name -- so the balance read as furniture and the prices read as the decision.
         text(g, WorkbayScreen.gui("upgrades.levy", snap.levy()), x(12), y(HEIGHT - 19),
-            WIDTH - 24 - 80, snap.levy() > 0 ? Draw.TEXT : Draw.TEXT_DIM);
+            WIDTH - 24 - 80, snap.levy() > 0 ? Draw.AMBER : Draw.TEXT_DIM);
 
         // The dial. Left-click steps up by five, right-click down, the way every cycling control in
         // this mod works — and it clamps at both ends rather than wrapping, because a dial that

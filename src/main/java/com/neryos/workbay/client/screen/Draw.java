@@ -64,6 +64,13 @@ public final class Draw {
      * a face and "running" on a row — one shade for two ideas is how a swatch stops answering.
      */
     public static final int ENERGY = 0xFF3BFB98;
+    /**
+     * The other two resources, for the same reason {@link #ENERGY} exists: a link's kind is read
+     * off its icon's colour before its shape, and three kinds sharing {@link #BLUE} would each be
+     * saying what the direction arrow beside them already says.
+     */
+    public static final int FLUID = 0xFF4FA8E0;
+    public static final int CHEMICAL = 0xFFB07BD6;
     public static final int SELECT = 0xFF5AA9E6;
 
 
@@ -189,6 +196,19 @@ public final class Draw {
     }
 
     /**
+     * The card a refusal is drawn on: dark, rounded, with an amber edge along the top.
+     *
+     * <p>A refusal is the one thing on the screen the player did not ask to see, so it must read
+     * as laid <em>over</em> the page rather than as another row of it. A plain well did not — it
+     * is the same shape the links list is drawn in, one row lower.
+     */
+    public static void notice(GuiGraphics g, int x, int y, int w, int h) {
+        shadow(g, x, y, w, h, 4);
+        round(g, x, y, w, h, 4, 0xFF2A2620, 0xFF1E1B17);
+        rim(g, x, y, w, h, 4, alpha(AMBER, 0.75F), 0x60000000);
+    }
+
+    /**
      * A one-pixel rim on a rounded box: lit along the top, shaded along the bottom. Drawn as the
      * ends of the same rows the fill uses rather than as four lines, because a rounded shape has
      * no corners for four lines to meet in.
@@ -221,9 +241,27 @@ public final class Draw {
     /**
      * The wash over something present but not usable. One colour, one call, so "unavailable" looks
      * the same everywhere — SPEC.md §7's rule that a disabled thing must not read as an enabled one.
+     *
+     * <p>Rounded, because everything it is laid over now is: a square wash inside a rounded slot
+     * puts four bright corner pixels back that the slot had just taken off, and five locked bays
+     * in a column is twenty of them.
      */
     public static void disabled(GuiGraphics g, int x, int y, int w, int h) {
-        g.fill(x, y, x + w, y + h, 0x66101216);
+        round(g, x, y, w, h, Math.min(3, Math.min(w, h) / 4), 0x66101216);
+    }
+
+    /**
+     * <b>A ring around a rounded box.</b> The one thing on these screens that is drawn around
+     * something else rather than as something itself: the hover outline, the selected swatch, the
+     * slot that will take what the cursor is carrying.
+     *
+     * <p>It has to follow the same curve the fill does or it does not read as belonging to it —
+     * a square outline one pixel outside a rounded button is four bright corners hanging in the
+     * air, and with the hover ring on every one of forty regions that is the whole screen
+     * flickering square corners as the cursor moves.
+     */
+    public static void ring(GuiGraphics g, int x, int y, int w, int h, int r, int colour) {
+        rim(g, x, y, w, h, r, colour, colour);
     }
 
     public static void button(GuiGraphics g, int x, int y, int w, int h, boolean hovered, boolean active) {
@@ -266,10 +304,15 @@ public final class Draw {
     public static void bar(GuiGraphics g, int x, int y, int w, int h, int value, int max, int argb) {
         int r = Math.min(4, h / 2);
         round(g, x, y, w, h, r, mix(TUBE, 0xFF000000, 0.4F), TUBE);
+        // The empty channel carries a breath of the bar's own colour. Without it an empty bar is a
+        // black box with three white tally marks in it, which is what "0 / 100.0k" photographed as
+        // on the very first screen a player sees -- the graduations became the brightest thing in
+        // the shape and the shape stopped being a gauge.
+        round(g, x + 1, y + 1, w - 2, h - 2, Math.max(1, r - 1), alpha(argb, 0.10F));
         rim(g, x, y, w, h, r, 0x40000000, 0x14FFFFFF);
         for (int mark = 1; mark < 4; mark++) {
             int mx = x + 1 + (w - 2) * mark / 4;
-            g.fill(mx, y + 2, mx + 1, y + h - 2, GRADUATION);
+            g.fill(mx, y + 2, mx + 1, y + h - 2, 0x26FFFFFF);
         }
         if (max <= 0 || value <= 0) {
             return;
@@ -389,8 +432,9 @@ public final class Draw {
      * with nothing in it at all.
      */
     private static void gaugeTube(GuiGraphics g, int x, int y, int w, int h) {
-        g.fill(x, y, x + w, y + h, TUBE);
-        bevel(g, x, y, w, h, false);
+        int r = Math.min(3, Math.min(w, h) / 4);
+        round(g, x, y, w, h, r, mix(TUBE, 0xFF000000, 0.4F), TUBE);
+        rim(g, x, y, w, h, r, 0x40000000, 0x14FFFFFF);
     }
 
     /**
@@ -632,6 +676,58 @@ public final class Draw {
         }
         return wrapped;
     }
+
+    /**
+     * <b>The tooltip frame, drawn by this mod rather than borrowed from the game.</b>
+     *
+     * <p>It is the last square-cornered bitmap-font rectangle on these screens, and it was the
+     * loudest one: a tooltip is what the player is looking straight at while they read it, so a
+     * purple-bordered vanilla box popping out of a rounded, antialiased panel is the seam nobody
+     * can miss. {@code GuiGraphics#renderTooltip} owns its own frame and its own text pass, so the
+     * only way to change either is not to call it.
+     *
+     * <p>Vanilla's own tooltips stay vanilla and should: an item's tooltip belongs to the game,
+     * and a mod restyling every tooltip in the pack is what the Modern UI option was rejected for.
+     * This draws the ones <em>this mod</em> writes, on <em>this mod's</em> screens.
+     *
+     * <p>Positioned the way vanilla positions one — below and right of the cursor, flipped when it
+     * would leave the window — and drawn at Z 400, above every item sprite a page renders.
+     */
+    public static void tooltip(GuiGraphics g, Font font,
+        List<net.minecraft.util.FormattedCharSequence> lines, int mouseX, int mouseY,
+        int screenW, int screenH) {
+        if (lines.isEmpty()) {
+            return;
+        }
+        int text = 0;
+        for (var line : lines) {
+            text = Math.max(text, font.width(line));
+        }
+        int w = text + TOOLTIP_PAD * 2;
+        // Ten between lines, which is the pitch {@link #wrapped} uses and the pitch vanilla's own
+        // tooltip uses. At font.lineHeight the wrapped sentences these tooltips are made of close
+        // up into a block.
+        int h = lines.size() * 10 + TOOLTIP_PAD * 2 - 2;
+        int x = mouseX + 12;
+        int y = mouseY - 12;
+        if (x + w > screenW) {
+            x = Math.max(2, mouseX - 16 - w);
+        }
+        y = Math.clamp(y, 2, Math.max(2, screenH - h - 2));
+        g.pose().pushPose();
+        g.pose().translate(0, 0, 400);
+        shadow(g, x, y, w, h, RADIUS);
+        round(g, x, y, w, h, RADIUS, 0xF21E2128, 0xF2141619);
+        rim(g, x, y, w, h, RADIUS, 0x40FFFFFF, 0x60000000);
+        for (int i = 0; i < lines.size(); i++) {
+            g.drawString(font, lines.get(i), x + TOOLTIP_PAD,
+                y + TOOLTIP_PAD + i * 10, i == 0 ? TEXT : TEXT_DIM, false);
+        }
+        g.pose().popPose();
+    }
+
+    /** Room around a tooltip's text. Six, so a rounded corner has something to be rounded out of. */
+    private static final int TOOLTIP_PAD = 6;
 
     private static final int TOOLTIP_WIDTH = 200;
 
