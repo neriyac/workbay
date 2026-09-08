@@ -23,7 +23,7 @@ public class WBLanguageProvider extends LanguageProvider {
 
         addBlock(WBBlocks.WORKBAY, "Workbay");
         addBlock(WBBlocks.PORT, "Port");
-        addBlock(WBBlocks.EXIT, "Exit");
+        addBlock(WBBlocks.ROOM_WALL, "Room Wall");
         addItem(WBItems.SHOPSTEEL, "Shopsteel");
         addItem(WBItems.HOUSING, "Housing");
         addBlock(WBBlocks.CONNECTOR, "Connector");
@@ -418,6 +418,32 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("rooms.anchored.tip"), "This room keeps running while you are away, "
             + "and holds %s chunks loaded to do it. Click to switch it off.");
         add(WorkbayLang.guiKey("rooms.unanchored"), "Not anchored");
+        add(WorkbayLang.guiKey("door.title"), "Way out");
+        add(WorkbayLang.guiKey("door.elsewhere"), "Or go straight to");
+        add(WorkbayLang.guiKey("door.leave"), "Leave");
+        add(WorkbayLang.guiKey("door.leave.tip"), "Back to exactly where you were standing when "
+            + "you came in.");
+        add(WorkbayLang.guiKey("door.here"), "You are here");
+        add(WorkbayLang.guiKey("door.go"), "Go");
+        add(WorkbayLang.guiKey("door.go.tip"), "Straight into that room. You still come out where "
+            + "you first came in.");
+        add(WorkbayLang.guiKey("door.open"), "Open");
+        add(WorkbayLang.guiKey("rooms.colour"), "Walls: %s");
+        add(WorkbayLang.guiKey("rooms.colour.tip"), "What this room's shell is painted. Click for "
+            + "the next colour, right-click for the previous one.");
+        // The palette lives in RoomColour and these are its names. Ten strings rather than ten
+        // textures is the whole point of tinting one greyscale wall.
+        add(WorkbayLang.guiKey("colour.slate"), "Slate");
+        add(WorkbayLang.guiKey("colour.charcoal"), "Charcoal");
+        add(WorkbayLang.guiKey("colour.bone"), "Bone");
+        add(WorkbayLang.guiKey("colour.sand"), "Sand");
+        add(WorkbayLang.guiKey("colour.clay"), "Clay");
+        add(WorkbayLang.guiKey("colour.rose"), "Rose");
+        add(WorkbayLang.guiKey("colour.plum"), "Plum");
+        add(WorkbayLang.guiKey("colour.sky"), "Sky");
+        add(WorkbayLang.guiKey("colour.teal"), "Teal");
+        add(WorkbayLang.guiKey("colour.sage"), "Sage");
+        add(WorkbayLang.guiKey("colour.overworld"), "Overworld");
         add(WorkbayLang.guiKey("rooms.biome"), "Biome: %s");
         add(WorkbayLang.guiKey("rooms.biome.tip"), "What a machine in this room reads for "
             + "temperature and rainfall. Click to step to the next one. Nothing falls from the "

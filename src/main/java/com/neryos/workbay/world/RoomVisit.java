@@ -13,6 +13,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 
 import java.util.Set;
@@ -144,6 +145,32 @@ public final class RoomVisit {
         player.teleportTo(level, home.where().x, home.where().y, home.where().z, Set.of(),
             home.yRot(), home.xRot());
         return true;
+    }
+
+    /**
+     * A player who logs in <b>already inside</b> a room has their room brought up to date, because
+     * nothing else will: {@link RoomBuilder#ensure} runs on entry, and this player is not entering.
+     *
+     * <p>It is not a nicety. A room built by an older version of the mod has an older version's
+     * shell, and the way out is a property of the shell — somebody who logged out in a room and
+     * came back after an update would be standing in a box whose walls do not open.
+     */
+    @SubscribeEvent
+    public static void loggedIn(PlayerEvent.PlayerLoggedInEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player) || !isInside(player)) {
+            return;
+        }
+        ServerLevel backshop = player.server.getLevel(WorkbayDimensions.BACKSHOP);
+        RoomRegistry registry = RoomRegistry.get(player.server);
+        RoomRecord room = registry.room(player.getData(WBAttachments.ROOM_RETURN.get()).room())
+            .orElse(null);
+        if (backshop == null || room == null) {
+            return;
+        }
+        RoomRecord fixed = RoomBuilder.ensure(backshop, room, room.builtTier());
+        if (fixed != room) {
+            registry.putRoom(fixed);
+        }
     }
 
     /**

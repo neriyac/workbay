@@ -22,8 +22,14 @@ set -u
 cd "$(dirname "$0")/.." || exit 1
 
 ALWAYS_BUDGET=600      # read at the start of every session
-REFERENCE_BUDGET=1580  # looked up, never read whole
+REFERENCE_BUDGET=1600  # looked up, never read whole
 
+# 1580 -> 1600 when the room shell became a thing a player looks at: §8 gained the block, the
+# colour, the light and the 2x2 door, and ART.md gained the five greyscale textures' own rules
+# (why they are greyscale, why smooth took two tries, why the door is drawn shut). Most of it was
+# paid rather than printed: §16's v2 order went, being a build order for finished work, and §15's
+# four purpose-built test machines went with it -- they were the fallback for "what if no foreign
+# mod can be tested against", and Mekanism loading into gameTestServer answered that.
 # 1545 -> 1580 when SPEC gained the rooms design (79 lines: §0's four new closed decisions, §8's
 # Rooms subsection, and §16's v2 order). Rooms are the biggest thing left and this is the only
 # record of why they are shaped the way they are. Most of the raise was paid rather than printed:

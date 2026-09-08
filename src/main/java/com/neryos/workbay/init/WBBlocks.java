@@ -5,7 +5,7 @@ import com.neryos.workbay.content.assay.AssayBlock;
 import com.neryos.workbay.content.connector.ConnectorBlock;
 import com.neryos.workbay.content.connector.ConnectorItem;
 import com.neryos.workbay.content.port.PortBlock;
-import com.neryos.workbay.content.room.ExitBlock;
+import com.neryos.workbay.content.room.RoomWallBlock;
 import com.neryos.workbay.content.workbay.WorkbayBlock;
 import com.neryos.workbay.content.workbay.WorkbayItem;
 import net.minecraft.world.level.block.Block;
@@ -58,18 +58,21 @@ public class WBBlocks {
             .isValidSpawn((state, level, pos, type) -> false)));
 
     /**
-     * The way out of a room, generated onto its entry pad. No BlockItem, so it cannot be crafted,
-     * picked or given, and -1 hardness so it cannot be broken: SPEC.md §2 makes it a block and
-     * never an item precisely because the known failure it answers is losing the item.
+     * A room's shell, generated with the room and painted by its record. No BlockItem, -1 hardness
+     * and its own refusal to be destroyed, for the reason bedrock had before it: a hole in a shell
+     * is a hole into the void. SPEC.md §8.
      */
-    public static final DeferredBlock<ExitBlock> EXIT = BLOCKS.register("exit", () ->
-        new ExitBlock(BlockBehaviour.Properties.of()
-            .mapColor(MapColor.COLOR_GREEN)
-            .sound(SoundType.METAL)
+    public static final DeferredBlock<RoomWallBlock> ROOM_WALL = BLOCKS.register("room_wall", () ->
+        new RoomWallBlock(BlockBehaviour.Properties.of()
+            .mapColor(MapColor.STONE)
+            .sound(SoundType.STONE)
+            // A room lights itself. The Backshop has ambient light, so nothing was ever pitch
+            // black, but "not black" is not "lit": an empty room read as a grey box and a player
+            // had to floor it with torches before it looked like anywhere. 11 is under a torch's
+            // 14 and over the 9 crops want, so a bare room grows things and still leaves a reason
+            // to hang a lamp. It is BLOCK light, not sky -- nothing here feeds a solar panel.
+            .lightLevel(state -> 11)
             .strength(-1.0F, 3600000.0F)
-            // The one lit thing in an unlit dimension: a room is dark until the player lights it,
-            // and the way out must be findable in the dark from anywhere in a 46-block room.
-            .lightLevel(state -> 12)
             .noLootTable()
             .pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK)
             .isValidSpawn((state, level, pos, type) -> false)));

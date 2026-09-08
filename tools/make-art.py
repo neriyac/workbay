@@ -636,8 +636,120 @@ def impeller():
     return im
 
 
+# ==================================================================== the room shell
+#
+# Every one of these is GREYSCALE and nothing else. The block colour handler multiplies them by
+# whichever RoomColour the room wears, so a hue baked in here would tint on top of the room's own
+# and turn sage into moss. They are also the only textures in the mod a player sees by the
+# thousand at once, which is why there is no speckle on them: noise that reads as texture on one
+# block reads as static on a wall forty-six across.
+#
+# The mid grey is high -- around 0.78 -- because a multiply only ever darkens. Drawn at the steel
+# faces' brightness these go to mud under every colour in the palette.
+
+SHELL = (198, 198, 198, 255)
+# Barely there. An 18-unit edge made a wall read as a tiled grid marching to the horizon, which is
+# the warehouse look "smooth" was asked for instead. Six units is enough to keep a block boundary
+# from vanishing under smooth lighting and not enough to draw a line.
+SHELL_L = (204, 204, 204, 255)
+SHELL_D = (192, 192, 192, 255)
+SHELL_XD = (140, 140, 140, 255)
+SHELL_DEEP = (104, 104, 104, 255)
+
+
+def room_wall():
+    """A room's wall and ceiling: smooth.
+
+    The first draft was a bevelled panel with a seam across it, and at wall scale it read as a
+    chequerboard -- a grid of squares marching to the horizon, which is what makes a big room look
+    like a warehouse. This is one flat surface with a soft edge and nothing inside it, so a wall
+    reads as a wall and whatever the player builds against it is the thing being looked at."""
+    im = blank()
+    d = ImageDraw.Draw(im)
+    rect(d, 0, 0, 15, 15, SHELL)
+    # A single-pixel edge, light on top-left and dark on bottom-right. It is what stops a run of
+    # these dissolving into one unbroken field with no sense of scale -- and it is all there is.
+    d.line([(0, 0), (15, 0)], fill=SHELL_L)
+    d.line([(0, 0), (0, 15)], fill=SHELL_L)
+    d.line([(0, 15), (15, 15)], fill=SHELL_D)
+    d.line([(15, 0), (15, 15)], fill=SHELL_D)
+    return im
+
+
+def room_floor():
+    """The one face a player stands on, and the one the OVERWORLD colour paints green.
+
+    A shade darker than the walls with a wider edge, because a floor that matches its walls exactly
+    leaves a room with no horizon and is genuinely disorienting to walk in -- the corner between
+    floor and wall disappears."""
+    im = blank()
+    d = ImageDraw.Draw(im)
+    rect(d, 0, 0, 15, 15, (190, 190, 190, 255))
+    d.line([(0, 0), (15, 0)], fill=(196, 196, 196, 255))
+    d.line([(0, 0), (0, 15)], fill=(196, 196, 196, 255))
+    return im
+
+
+def _door_sheet():
+    """One 32x32 door, sliced into four blocks by the callers below.
+
+    Two leaves in a recessed frame, meeting on a bright seam, with a handle on each. It does not
+    open and it never will -- SPEC.md's way out is the whole shell, and this is the picture that
+    tells a player where to look. So it is drawn SHUT, with no hinge pin and no gap at the floor:
+    every affordance of a door that works is deliberately absent, and what is left is the shape."""
+    im = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    # The wall it is set into, so the frame reads as cut in rather than stuck on.
+    rect(d, 0, 0, 31, 31, SHELL)
+    # Frame: two steps down into the wall.
+    rect(d, 2, 1, 29, 31, SHELL_D)
+    rect(d, 3, 2, 28, 31, SHELL_XD)
+    # The two leaves.
+    rect(d, 4, 3, 27, 31, SHELL)
+    # Recessed panels on each leaf: one tall rectangle per leaf, which is what a door has and a
+    # hatch does not.
+    for x0, x1 in ((6, 14), (17, 25)):
+        rect(d, x0, 6, x1, 27, SHELL_D)
+        rect(d, x0 + 1, 7, x1 - 1, 26, SHELL)
+        d.line([(x0 + 1, 7), (x1 - 1, 7)], fill=SHELL_XD)
+        d.line([(x0 + 1, 7), (x0 + 1, 26)], fill=SHELL_XD)
+    # The seam where the leaves meet: the darkest line on the door, dead centre, so the eye reads
+    # two leaves and not one slab.
+    d.line([(15, 3), (15, 31)], fill=SHELL_DEEP)
+    d.line([(16, 3), (16, 31)], fill=SHELL_XD)
+    # A handle either side of the seam, at the height a hand is.
+    for x in (13, 18):
+        d.line([(x, 17), (x, 19)], fill=SHELL_DEEP)
+        px(d, x, 16, SHELL_L)
+    return im
+
+
+def _door_quarter(x, y):
+    sheet = _door_sheet()
+    return sheet.crop((x * 16, y * 16, x * 16 + 16, y * 16 + 16))
+
+
+def room_door_tl():
+    return _door_quarter(0, 0)
+
+
+def room_door_tr():
+    return _door_quarter(1, 0)
+
+
+def room_door_bl():
+    return _door_quarter(0, 1)
+
+
+def room_door_br():
+    return _door_quarter(1, 1)
+
+
 BLOCK_ART = {"connector": connector, "port": port,
-             "assay_face": assay_face, "assay_edge": assay_edge}
+             "assay_face": assay_face, "assay_edge": assay_edge,
+             "room_wall": room_wall, "room_floor": room_floor,
+             "room_door_tl": room_door_tl, "room_door_tr": room_door_tr,
+             "room_door_bl": room_door_bl, "room_door_br": room_door_br}
 ITEM_ART = {"shopsteel": shopsteel, "housing": housing,
             "expansion_plate": expansion_plate, "resonator": resonator,
             "multichannel": multichannel, "impeller": impeller}

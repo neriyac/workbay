@@ -61,9 +61,10 @@ class RoomsPage extends WorkbayPage {
     // Room columns. The three buttons are fixed to the right edge and the two strings share what is
     // left, so the longest room name and "46x46, 9 chunks" both have their own room.
     private static final int ROOM_NAME_X = 6;
-    private static final int ROOM_NAME_W = 84;
-    private static final int ROOM_SIZE_X = 94;
+    private static final int ROOM_NAME_W = 64;
+    private static final int ROOM_SIZE_X = 74;
     private static final int ROOM_SIZE_W = 96;
+    private static final int COLOUR_X = ROW_W - 122;
     private static final int BIOME_X = ROW_W - 102;
     private static final int ANCHOR_X = ROW_W - 82;
     private static final int ENTER_X = ROW_W - 62;
@@ -178,9 +179,11 @@ class RoomsPage extends WorkbayPage {
             text(g, size, px + ROOM_SIZE_X, py + TEXT_Y, ROOM_SIZE_W,
                 room.built() ? Draw.TEXT_DIM : Draw.TEXT_FAINT);
 
-            // Only a built room has chunks to write a biome over, and an unopened one has no record
-            // to remember the choice on -- SPEC.md §8 spends the region on first entry.
+            // Only a built room has a shell to paint or chunks to write a biome over, and an
+            // unopened one has no record to remember either choice on -- SPEC.md §8 spends the
+            // region on first entry.
             if (room.built()) {
+                swatch(g, mouseX, mouseY, px + COLOUR_X, py, room);
                 iconButton(g, mouseX, mouseY, px + BIOME_X, py, WBIcons.BIOME, false,
                     () -> screen.send(WorkbayAction.CYCLE_ROOM_BIOME, room.index()),
                     WorkbayScreen.gui("rooms.biome", biomeName(room.biome())),
@@ -208,6 +211,23 @@ class RoomsPage extends WorkbayPage {
                 WorkbayScreen.gui(room.built() ? "rooms.enter" : "rooms.open"),
                 WorkbayScreen.gui("rooms.enter.tip"));
         }
+    }
+
+    /**
+     * The room's colour, drawn as the colour itself rather than as an icon of one. A swatch is the
+     * one control on this page whose whole job is to show a value the player can only judge by
+     * looking at it, so the button <b>is</b> the value.
+     */
+    private void swatch(GuiGraphics g, int mouseX, int mouseY, int px, int py,
+        WorkbaySnapshot.Room room) {
+        boolean hover = screen.hovered(px, py, 18, 18, mouseX, mouseY);
+        Draw.button(g, px, py, 18, 18, hover, false);
+        g.fill(px + 4, py + 4, px + 14, py + 14, 0xFF000000 | room.colour().tint());
+        screen.hit(px, py, 18, 18,
+            () -> screen.send(WorkbayAction.CYCLE_ROOM_COLOUR, room.index()),
+            WorkbayScreen.gui("rooms.colour",
+                WorkbayScreen.gui("colour." + room.colour().getSerializedName())),
+            WorkbayScreen.gui("rooms.colour.tip"));
     }
 
     /**

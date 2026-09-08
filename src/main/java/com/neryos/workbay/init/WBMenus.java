@@ -30,6 +30,14 @@ public class WBMenus {
         BAY_VIEW = MENUS.register("bay_view",
             () -> IMenuTypeExtension.create(com.neryos.workbay.menu.BayViewMenu::new));
 
+    /**
+     * The screen a room's wall opens. Its own type because it is built from a player and a block
+     * rather than from a Workbay block entity: a room has to work with no Workbay in the world.
+     */
+    public static final DeferredHolder<MenuType<?>, MenuType<com.neryos.workbay.menu.RoomDoorMenu>>
+        ROOM_DOOR = MENUS.register("room_door",
+            () -> IMenuTypeExtension.create(com.neryos.workbay.menu.RoomDoorMenu::new));
+
     public static void register(IEventBus bus) {
         MENUS.register(bus);
     }

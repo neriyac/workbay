@@ -56,6 +56,14 @@ public record ActionPacket(int containerId, WorkbayAction action, long arg,
         if (context.player().containerMenu instanceof WorkbayMenu menu
             && menu.containerId == packet.containerId()) {
             menu.act(packet.action(), packet.arg(), packet.link(), packet.text(), packet.back());
+            return;
+        }
+        // The room door's two buttons ride the same packet and the same guard. A second payload
+        // type for "leave" and "go next door" would be this container-id check written twice.
+        if (context.player() instanceof net.minecraft.server.level.ServerPlayer player
+            && player.containerMenu instanceof com.neryos.workbay.menu.RoomDoorMenu door
+            && door.containerId == packet.containerId()) {
+            door.act(packet.action(), (int) packet.arg(), player);
         }
     }
 }

@@ -1,5 +1,7 @@
 package com.neryos.workbay.world;
 
+import com.neryos.workbay.content.room.RoomPart;
+import com.neryos.workbay.content.room.RoomWallBlock;
 import com.neryos.workbay.init.WBBlocks;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -8,58 +10,135 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 
 /**
- * Builds and grows a room in the Backshop. SPEC.md §8.
+ * Builds, grows and paints a room in the Backshop. SPEC.md §8.
  *
- * <p>Shell bedrock, interior air, one Exit block on the entry pad, and nothing else: a floor the
- * player did not choose is a floor they have to dig up. The chunks generate empty — {@code
- * FlatLevelSource} with no layers — so a room is a block write and never a worldgen cost.
+ * <p>Shell and interior air, and nothing else: a floor the player did not choose is a floor they
+ * have to dig up. The chunks generate empty — {@code FlatLevelSource}
+ * with no layers — so a room is a block write and never a worldgen cost.
  *
- * <p><b>Growth only ever moves the far walls outward.</b> Because the shell is corner-anchored at
- * the region origin, expanding turns the old walls into air and writes new ones where there was
- * only air. Nothing a player built can be in the way, and the old wall is cleared <em>only where it
- * is still bedrock</em>, so a creative player who built into it loses nothing.
+ * <p><b>Growth only ever moves the far walls outward and the ceiling up.</b> Because the shell is
+ * corner-anchored at the region origin and every tier is a cube, expanding turns the old walls and
+ * ceiling into air and writes new ones where there was only air. Nothing a player built can be in
+ * the way, and the old shell is cleared <em>only where it is still shell</em>, so a creative player
+ * who built into it loses nothing.
  */
 public final class RoomBuilder {
     private RoomBuilder() {}
 
-    private static final BlockState WALL = Blocks.BEDROCK.defaultBlockState();
     private static final BlockState AIR = Blocks.AIR.defaultBlockState();
 
     /**
-     * Makes the room in the world match {@code tier}, and returns the record that says so.
+     * The tallest a room ever was: every tier used to be 32 high before they became cubes. Rooms
+     * are a cube now, so a repaint has to sweep the shell an old room left <b>above</b> the new
+     * ceiling — otherwise the first Frame upgrade puts that old bedrock box back inside the bigger
+     * room, in mid-air, where it looks exactly like a bug. One number, and it goes when nothing
+     * can have been built before cubes.
+     */
+    private static final int LEGACY_TOP = 33;
+
+    /** One piece of this room's shell, wearing the record's colour. */
+    private static BlockState shellState(RoomRecord room, RoomPart part) {
+        return WBBlocks.ROOM_WALL.get().defaultBlockState()
+            .setValue(RoomWallBlock.COLOUR, room.colour())
+            .setValue(RoomWallBlock.PART, part);
+    }
+
+    /**
+     * True for anything that is shell rather than something a player put there. Bedrock is in it
+     * because rooms were built out of bedrock before they had a colour, and those rooms have to be
+     * able to grow and to be repainted without leaving a bedrock ring where the old wall was.
+     */
+    private static boolean isShell(BlockState state) {
+        return state.is(WBBlocks.ROOM_WALL.get()) || state.is(Blocks.BEDROCK);
+    }
+
+    /**
+     * Makes the room in the world match {@code tier} and the record's colour, and returns the
+     * record that says so.
      *
-     * <p>Idempotent, and cheap in the common case: a room already at the right tier is one block
-     * read. Called on every entry, because a room whose Frame was upgraded while nobody was in it
-     * has to grow before anyone stands in it.
+     * <p>Called on every entry, so it is deliberately cheap in the common case: a room already the
+     * right size and the right colour is <b>two block reads</b> — one corner of the shell and one
+     * of its doorways.
      */
     public static RoomRecord ensure(ServerLevel backshop, RoomRecord room, int tier) {
-        if (tier <= 0 || tier == room.builtTier()) {
+        if (tier <= 0 || tier < room.builtTier()) {
+            // Frames only ever go up (SPEC.md §1 has no removal path), so a smaller tier is a
+            // datapack or a config edit shrinking the ladder under a room that is already bigger.
+            // Shrinking would put a wall through somebody's factory; leaving it alone costs a few
+            // extra chunks.
+            return tier <= 0 ? room : repair(backshop, room);
+        }
+        if (tier > room.builtTier()) {
+            if (room.built()) {
+                clearShell(backshop, room, room.builtTier());
+            }
+            RoomRecord grown = room.withBuiltTier(tier);
+            paint(backshop, grown);
+            // After the shell, and on every growth: a bigger room reaches chunks that were never
+            // written, and they would otherwise carry whatever the Backshop generates.
+            RoomBiomes.apply(backshop, grown);
+            return grown;
+        }
+        return repair(backshop, room);
+    }
+
+    /**
+     * Puts right whatever is wrong with a room that is already the right size: a shell built out of
+     * bedrock before rooms had a colour, or one repainted while nobody was in it. Two reads when
+     * there is nothing to do.
+     */
+    private static RoomRecord repair(ServerLevel backshop, RoomRecord room) {
+        if (!room.built()) {
             return room;
         }
-        if (tier < room.builtTier()) {
-            // Frames only ever go up (SPEC.md §1 has no removal path), so this is a datapack or a
-            // config edit shrinking the ladder under a room that is already bigger. Shrinking would
-            // put bedrock through somebody's factory; leaving it alone costs a few extra chunks.
-            return room;
+        // One corner and one door panel are enough: every path that writes a shell writes all of
+        // it, so the shell is never half one colour and never half doorless.
+        var doors = RoomGeometry.doors(room.region(), room.builtTier()).entrySet().iterator().next();
+        if (!backshop.getBlockState(RoomGeometry.origin(room.region()))
+                .equals(shellState(room, RoomPart.FLOOR))
+            || !backshop.getBlockState(doors.getKey()).equals(shellState(room, doors.getValue()))) {
+            paint(backshop, room);
         }
-        if (room.built()) {
-            clearWalls(backshop, room.region(), room.builtTier());
+        return room;
+    }
+
+    /** The shell at the record's tier and colour, doorways included. */
+    private static void paint(ServerLevel backshop, RoomRecord room) {
+        sweepAboveCeiling(backshop, room);
+        shell(backshop, room, room.builtTier());
+    }
+
+    /**
+     * Clears shell left standing above this room's ceiling. Only shell: a creative player who built
+     * up there before the ceiling came down keeps what they built, sealed above it.
+     */
+    private static void sweepAboveCeiling(ServerLevel backshop, RoomRecord room) {
+        int side = RoomGeometry.footprint(room.builtTier());
+        int from = RoomGeometry.height(room.builtTier()) + 2;
+        if (side == 0 || from > LEGACY_TOP) {
+            return;
         }
-        shell(backshop, room.region(), tier);
-        backshop.setBlock(RoomGeometry.exitPos(room.region()),
-            WBBlocks.EXIT.get().defaultBlockState(), Block.UPDATE_CLIENTS);
-        RoomRecord grown = room.withBuiltTier(tier);
-        // After the shell, and on every growth: a bigger room reaches chunks that were never
-        // written, and they would otherwise carry whatever the Backshop generates.
-        RoomBiomes.apply(backshop, grown);
-        return grown;
+        BlockPos origin = RoomGeometry.origin(room.region());
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        for (int x = 0; x < side; x++) {
+            for (int z = 0; z < side; z++) {
+                for (int y = from; y <= LEGACY_TOP; y++) {
+                    pos.set(origin.getX() + x, origin.getY() + y, origin.getZ() + z);
+                    if (isShell(backshop.getBlockState(pos))) {
+                        backshop.setBlock(pos, AIR, Block.UPDATE_CLIENTS);
+                    }
+                }
+            }
+        }
     }
 
     /** Writes the six faces of the shell, leaving everything inside them alone. */
-    private static void shell(ServerLevel backshop, int region, int tier) {
+    private static void shell(ServerLevel backshop, RoomRecord room, int tier) {
         int side = RoomGeometry.footprint(tier);
-        int top = RoomGeometry.HEIGHT + 1;
-        BlockPos origin = RoomGeometry.origin(region);
+        int top = RoomGeometry.height(tier) + 1;
+        BlockState wall = shellState(room, RoomPart.WALL);
+        BlockState floor = shellState(room, RoomPart.FLOOR);
+        BlockPos origin = RoomGeometry.origin(room.region());
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
         for (int x = 0; x < side; x++) {
             for (int z = 0; z < side; z++) {
@@ -69,27 +148,34 @@ public final class RoomBuilder {
                         continue;
                     }
                     pos.set(origin.getX() + x, origin.getY() + y, origin.getZ() + z);
+                    // The floor is the one face a player stands on, and the one the OVERWORLD
+                    // colour paints differently from the walls around it.
+                    BlockState piece = y == 0 ? floor : wall;
                     // UPDATE_CLIENTS, not UPDATE_ALL: nothing observes the Backshop and neighbour
                     // updates across ten thousand blocks are pure cost.
-                    if (!backshop.getBlockState(pos).is(WALL.getBlock())) {
-                        backshop.setBlock(pos, WALL, Block.UPDATE_CLIENTS);
+                    if (!backshop.getBlockState(pos).equals(piece)) {
+                        backshop.setBlock(pos, piece, Block.UPDATE_CLIENTS);
                     }
                 }
             }
         }
+        // The four doors last, so they are never overwritten by the loop that drew the wall they
+        // are set into.
+        RoomGeometry.doors(room.region(), tier).forEach((at, part) ->
+            backshop.setBlock(at, shellState(room, part), Block.UPDATE_CLIENTS));
     }
 
     /**
      * Takes down the four side walls and the ceiling of the smaller room, so the bigger one's air
      * reaches them. The floor stays — it is the floor at every tier.
      *
-     * <p>Only bedrock is cleared. Anything else standing where a wall was is a block a creative
+     * <p>Only shell is cleared. Anything else standing where a wall was is a block a creative
      * player put there, and this is not the code that decides it should go.
      */
-    private static void clearWalls(ServerLevel backshop, int region, int tier) {
+    private static void clearShell(ServerLevel backshop, RoomRecord room, int tier) {
         int side = RoomGeometry.footprint(tier);
-        int top = RoomGeometry.HEIGHT + 1;
-        BlockPos origin = RoomGeometry.origin(region);
+        int top = RoomGeometry.height(tier) + 1;
+        BlockPos origin = RoomGeometry.origin(room.region());
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
         for (int x = 0; x < side; x++) {
             for (int z = 0; z < side; z++) {
@@ -99,7 +185,7 @@ public final class RoomBuilder {
                         continue;
                     }
                     pos.set(origin.getX() + x, origin.getY() + y, origin.getZ() + z);
-                    if (backshop.getBlockState(pos).is(WALL.getBlock())) {
+                    if (isShell(backshop.getBlockState(pos))) {
                         backshop.setBlock(pos, AIR, Block.UPDATE_CLIENTS);
                     }
                 }
@@ -107,9 +193,10 @@ public final class RoomBuilder {
         }
     }
 
-    /** True when the shell is standing: the Exit block is the last thing {@link #ensure} writes. */
+    /** True when the shell is standing in the world, whatever the record believes. */
     public static boolean isBuilt(ServerLevel backshop, RoomRecord room) {
         return room.built()
-            && backshop.getBlockState(RoomGeometry.exitPos(room.region())).is(WBBlocks.EXIT.get());
+            && backshop.getBlockState(RoomGeometry.origin(room.region()))
+                .is(WBBlocks.ROOM_WALL.get());
     }
 }

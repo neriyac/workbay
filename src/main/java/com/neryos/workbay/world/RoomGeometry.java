@@ -1,5 +1,6 @@
 package com.neryos.workbay.world;
 
+import com.neryos.workbay.content.room.RoomPart;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.phys.AABB;
@@ -30,10 +31,19 @@ public final class RoomGeometry {
     /** The highest tier there is, and the footprint every region reserves. */
     public static final int MAX_TIER = INTERIOR.length - 1;
 
-    /** Interior height, the same at every tier because height costs no chunks. */
-    public static final int HEIGHT = 32;
+    /**
+     * Interior height: <b>the same as the interior side</b>, so every room is a cube.
+     *
+     * <p>Height still costs no chunks — a ticket is a column, and that is why the <em>price</em>
+     * is the footprint and nothing else. What does not follow from a free axis is that it should
+     * be 32 at every tier: 14 across and 32 tall is a shaft, not a room. Compact Machines' sizes
+     * are cubes for the same reason, and a cube is the one proportion nobody has to think about.
+     */
+    public static int height(int tier) {
+        return interior(tier);
+    }
 
-    /** The shell's floor. The interior is y 1..HEIGHT and the ceiling is the one above it. */
+    /** The shell's floor. The interior is y 1..height(tier) and the ceiling is the one above. */
     public static final int FLOOR_Y = 0;
 
     /**
@@ -81,32 +91,62 @@ public final class RoomGeometry {
 
     /** The shell's ceiling layer. */
     public static int ceilingY(int tier) {
-        return FLOOR_Y + HEIGHT + 1;
+        return FLOOR_Y + height(tier) + 1;
     }
 
     /**
-     * The Exit block, on the entry pad at the interior's low corner. It is at the region origin
-     * offset, so no upgrade ever moves it — which is the point of anchoring the shell at a corner.
+     * The four doors, as a block position to the part it draws. One <b>2×2 door</b> in the middle
+     * of each of the four walls, sitting on the floor.
+     *
+     * <p>Two wide because a wall is a whole number of chunks across and sixteen has no middle
+     * block: a one-block doorway is off-centre by half a block, which is exactly what it looks
+     * like. Two straddles the seam and is dead centre. Left and right are named looking
+     * <em>into</em> the room, which is the only side anybody ever sees.
      */
-    public static BlockPos exitPos(int region) {
-        return origin(region).offset(1, 1, 1);
+    public static java.util.Map<BlockPos, RoomPart> doors(int region, int tier) {
+        int side = footprint(tier);
+        java.util.Map<BlockPos, RoomPart> out = new java.util.LinkedHashMap<>();
+        if (side < 4) {
+            return out;
+        }
+        int a = side / 2 - 1;
+        int b = side / 2;
+        BlockPos o = origin(region);
+        for (int i = 0; i < 2; i++) {
+            int y = 1 + i;
+            RoomPart left = i == 0 ? RoomPart.DOOR_BOTTOM_LEFT : RoomPart.DOOR_TOP_LEFT;
+            RoomPart right = i == 0 ? RoomPart.DOOR_BOTTOM_RIGHT : RoomPart.DOOR_TOP_RIGHT;
+            // West wall (x = 0), seen looking east: -z is on the viewer's left.
+            out.put(o.offset(0, y, a), left);
+            out.put(o.offset(0, y, b), right);
+            // East wall, seen looking west: the order flips.
+            out.put(o.offset(side - 1, y, b), left);
+            out.put(o.offset(side - 1, y, a), right);
+            // North wall (z = 0), seen looking south.
+            out.put(o.offset(b, y, 0), left);
+            out.put(o.offset(a, y, 0), right);
+            // South wall.
+            out.put(o.offset(a, y, side - 1), left);
+            out.put(o.offset(b, y, side - 1), right);
+        }
+        return out;
     }
 
-    /** Where a visitor arrives: beside the Exit block, looking at it. */
+    /** Where a visitor arrives: on the pad in the low corner. */
     public static Vec3 entrySpot(int region) {
         BlockPos pad = origin(region).offset(2, 1, 2);
         return new Vec3(pad.getX() + 0.5, pad.getY(), pad.getZ() + 0.5);
     }
 
-    /** Facing the Exit block from {@link #entrySpot}: north-west, so both of it is in view. */
-    public static final float ENTRY_YAW = 135.0F;
+    /** Facing into the room from {@link #entrySpot}, which is its low corner. */
+    public static final float ENTRY_YAW = -45.0F;
 
     /** The air a player may stand in. Everything outside it in the Backshop is not theirs. */
     public static AABB interiorBox(int region, int tier) {
         int inside = interior(tier);
         BlockPos low = origin(region).offset(1, 1, 1);
         return new AABB(low.getX(), low.getY(), low.getZ(),
-            low.getX() + inside, low.getY() + HEIGHT, low.getZ() + inside);
+            low.getX() + inside, low.getY() + height(tier), low.getZ() + inside);
     }
 
     /** True when a position is inside the room's air, walls excluded. */
@@ -114,7 +154,7 @@ public final class RoomGeometry {
         int inside = interior(tier);
         BlockPos low = origin(region).offset(1, 1, 1);
         return pos.getX() >= low.getX() && pos.getX() < low.getX() + inside
-            && pos.getY() >= low.getY() && pos.getY() < low.getY() + HEIGHT
+            && pos.getY() >= low.getY() && pos.getY() < low.getY() + height(tier)
             && pos.getZ() >= low.getZ() && pos.getZ() < low.getZ() + inside;
     }
 

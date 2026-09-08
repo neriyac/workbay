@@ -7,6 +7,7 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
+import net.neoforged.neoforge.client.event.RegisterColorHandlersEvent;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 
 /** The client half of the mod. Nothing here may be reachable from the server side. */
@@ -22,11 +23,27 @@ public final class WorkbayClient {
             com.neryos.workbay.init.WBBlockEntities.WORKBAY.get(), WorkbayPips::new);
     }
 
+    /**
+     * A room's shell is <b>one greyscale texture multiplied by the room's colour</b>, not ten
+     * textures. Ten PNGs would be ten files to redraw the day the wall art changes, and a
+     * player-chosen eleventh colour would be a new PNG rather than a new line in
+     * {@link com.neryos.workbay.content.room.RoomColour}.
+     */
+    @SubscribeEvent
+    static void blockColours(RegisterColorHandlersEvent.Block event) {
+        event.register((state, level, pos, tint) -> tint == 0
+            ? state.getValue(com.neryos.workbay.content.room.RoomWallBlock.COLOUR)
+                .tint(state.getValue(com.neryos.workbay.content.room.RoomWallBlock.PART).isFloor())
+            : -1, com.neryos.workbay.init.WBBlocks.ROOM_WALL.get());
+    }
+
     @SubscribeEvent
     static void screens(RegisterMenuScreensEvent event) {
         event.register(WBMenus.WORKBAY.get(), WorkbayScreen::new);
         event.register(WBMenus.BAY_VIEW.get(),
             com.neryos.workbay.client.screen.BayViewScreen::new);
+        event.register(WBMenus.ROOM_DOOR.get(),
+            com.neryos.workbay.client.screen.RoomDoorScreen::new);
     }
 
     /**

@@ -217,6 +217,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
             }
             case TOGGLE_ROOM_ANCHOR -> toggleRoomAnchor(serverPlayer, record, (int) arg);
             case CYCLE_ROOM_BIOME -> cycleRoomBiome(serverPlayer, record, (int) arg);
+            case CYCLE_ROOM_COLOUR -> cycleRoomColour(serverPlayer, record, (int) arg, back);
             case ENTER_BAY -> {
                 // The screen where the player stands first, and the trip only if that cannot
                 // happen: a host with the mixins off (SPEC.md §0), a client with them off (arg),
@@ -639,6 +640,33 @@ public class WorkbayMenu extends AbstractContainerMenu {
         }
     }
 
+    /**
+     * Repaints one room. Only a built room has a shell to paint, which is also why the swatch is
+     * only drawn on one.
+     */
+    private void cycleRoomColour(ServerPlayer serverPlayer, WorkbayRecord record, int index,
+        boolean backwards) {
+        if (!record.owner().equals(serverPlayer.getUUID())) {
+            serverPlayer.displayClientMessage(com.neryos.workbay.WorkbayLang.message("locked"), true);
+            return;
+        }
+        com.neryos.workbay.world.RoomRegistry registry =
+            com.neryos.workbay.world.RoomRegistry.get(serverPlayer.server);
+        List<com.neryos.workbay.world.RoomRecord> rooms = registry.roomsOf(record);
+        if (index < 0 || index >= rooms.size() || !rooms.get(index).built()) {
+            return;
+        }
+        com.neryos.workbay.world.RoomRecord painted =
+            rooms.get(index).withColour(rooms.get(index).colour().next(backwards));
+        registry.putRoom(painted);
+        ServerLevel backshop = serverPlayer.server.getLevel(WorkbayDimensions.BACKSHOP);
+        if (backshop != null) {
+            // The room's own tier, not the network's: repainting must never also grow it, or a
+            // colour click would rebuild a shell somebody is standing in.
+            com.neryos.workbay.world.RoomBuilder.ensure(backshop, painted, painted.builtTier());
+        }
+    }
+
     // -------------------------------------------------------------- snapshot
 
     /**
@@ -713,7 +741,8 @@ public class WorkbayMenu extends AbstractContainerMenu {
                 room == null ? 0 : room.chunkCost(),
                 room != null && room.built(),
                 room != null && room.anchored(),
-                room == null ? "" : room.effectiveBiome().location().toString()));
+                room == null ? "" : room.effectiveBiome().location().toString(),
+                room == null ? com.neryos.workbay.content.room.RoomColour.DEFAULT : room.colour()));
         }
         return out;
     }

@@ -1,6 +1,7 @@
 package com.neryos.workbay.world;
 
 import com.mojang.serialization.Codec;
+import com.neryos.workbay.content.room.RoomColour;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.registries.Registries;
@@ -23,7 +24,7 @@ import java.util.UUID;
  * currently is, which is the only way expanding in place knows which walls to clear.
  */
 public record RoomRecord(UUID id, int region, Optional<String> name, int builtTier,
-    boolean anchored, Optional<ResourceKey<Biome>> biome) {
+    boolean anchored, Optional<ResourceKey<Biome>> biome, RoomColour colour) {
 
     public static final Codec<RoomRecord> CODEC = RecordCodecBuilder.create(i -> i.group(
         UUIDUtil.CODEC.fieldOf("Id").forGetter(RoomRecord::id),
@@ -31,7 +32,11 @@ public record RoomRecord(UUID id, int region, Optional<String> name, int builtTi
         Codec.STRING.optionalFieldOf("Name").forGetter(RoomRecord::name),
         Codec.INT.optionalFieldOf("BuiltTier", 0).forGetter(RoomRecord::builtTier),
         Codec.BOOL.optionalFieldOf("Anchored", false).forGetter(RoomRecord::anchored),
-        ResourceKey.codec(Registries.BIOME).optionalFieldOf("Biome").forGetter(RoomRecord::biome)
+        ResourceKey.codec(Registries.BIOME).optionalFieldOf("Biome").forGetter(RoomRecord::biome),
+        // Absent on every room saved before rooms had a colour, and those rooms are bedrock: the
+        // default is the shade that reads closest to it, so nothing visibly changes under them
+        // until somebody chooses.
+        RoomColour.CODEC.optionalFieldOf("Colour", RoomColour.DEFAULT).forGetter(RoomRecord::colour)
     ).apply(i, RoomRecord::new));
 
     /**
@@ -39,7 +44,8 @@ public record RoomRecord(UUID id, int region, Optional<String> name, int builtTi
      * the shell on first entry, so a Frame installed and never used costs nothing.
      */
     public static RoomRecord fresh(UUID id, int region) {
-        return new RoomRecord(id, region, Optional.empty(), 0, false, Optional.empty());
+        return new RoomRecord(id, region, Optional.empty(), 0, false, Optional.empty(),
+            RoomColour.DEFAULT);
     }
 
     /** True once the shell exists in the Backshop. An unbuilt room lists as {@code Empty}. */
@@ -61,18 +67,22 @@ public record RoomRecord(UUID id, int region, Optional<String> name, int builtTi
     }
 
     public RoomRecord withBuiltTier(int tier) {
-        return new RoomRecord(id, region, name, tier, anchored, biome);
+        return new RoomRecord(id, region, name, tier, anchored, biome, colour);
     }
 
     public RoomRecord withName(Optional<String> nowName) {
-        return new RoomRecord(id, region, nowName, builtTier, anchored, biome);
+        return new RoomRecord(id, region, nowName, builtTier, anchored, biome, colour);
     }
 
     public RoomRecord withAnchored(boolean nowAnchored) {
-        return new RoomRecord(id, region, name, builtTier, nowAnchored, biome);
+        return new RoomRecord(id, region, name, builtTier, nowAnchored, biome, colour);
+    }
+
+    public RoomRecord withColour(RoomColour nowColour) {
+        return new RoomRecord(id, region, name, builtTier, anchored, biome, nowColour);
     }
 
     public RoomRecord withBiome(ResourceKey<Biome> nowBiome) {
-        return new RoomRecord(id, region, name, builtTier, anchored, Optional.of(nowBiome));
+        return new RoomRecord(id, region, name, builtTier, anchored, Optional.of(nowBiome), colour);
     }
 }

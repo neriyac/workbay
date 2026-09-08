@@ -102,7 +102,7 @@ public record WorkbaySnapshot(
      * the row names a modded biome correctly without this mod shipping a string for it.
      */
     public record Room(int index, String name, int interior, int chunkCost, boolean built,
-        boolean anchored, String biome) {
+        boolean anchored, String biome, com.neryos.workbay.content.room.RoomColour colour) {
         public static final Codec<Room> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.INT.fieldOf("Index").forGetter(Room::index),
             Codec.STRING.fieldOf("Name").forGetter(Room::name),
@@ -110,7 +110,9 @@ public record WorkbaySnapshot(
             Codec.INT.fieldOf("ChunkCost").forGetter(Room::chunkCost),
             Codec.BOOL.fieldOf("Built").forGetter(Room::built),
             Codec.BOOL.fieldOf("Anchored").forGetter(Room::anchored),
-            Codec.STRING.optionalFieldOf("Biome", "").forGetter(Room::biome)
+            Codec.STRING.optionalFieldOf("Biome", "").forGetter(Room::biome),
+            com.neryos.workbay.content.room.RoomColour.CODEC.optionalFieldOf("Colour",
+                com.neryos.workbay.content.room.RoomColour.DEFAULT).forGetter(Room::colour)
         ).apply(i, Room::new));
     }
 

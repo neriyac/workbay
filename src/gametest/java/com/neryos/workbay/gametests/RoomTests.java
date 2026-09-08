@@ -99,14 +99,17 @@ public class RoomTests {
                 "the player is at " + site.player().blockPosition() + ", outside the room's interior");
 
             BlockPos feet = site.player().blockPosition();
-            helper.assertTrue(site.backshop().getBlockState(feet.below()).is(Blocks.BEDROCK),
+            helper.assertTrue(site.backshop().getBlockState(feet.below())
+                    .is(WBBlocks.ROOM_WALL.get()),
                 "the player is standing on " + site.backshop().getBlockState(feet.below())
-                    + " instead of the room's bedrock floor");
+                    + " instead of the room's own floor");
             helper.assertTrue(site.backshop().getBlockState(feet).isAir()
                 && site.backshop().getBlockState(feet.above()).isAir(),
                 "the entry pad is not two blocks of air");
-            helper.assertTrue(site.backshop().getBlockState(RoomGeometry.exitPos(room.region()))
-                .is(WBBlocks.EXIT.get()), "no Exit block on the entry pad");
+            RoomGeometry.doors(room.region(), room.builtTier()).forEach((at, part) ->
+                helper.assertTrue(site.backshop().getBlockState(at)
+                        .getValue(com.neryos.workbay.content.room.RoomWallBlock.PART) == part,
+                    "the wall at " + at + " is not the " + part + " of a door"));
 
             // Sixteen ticks: eight times longer than the bay rule's grace, so a room that is going
             // to be evicted has been evicted.
@@ -122,20 +125,40 @@ public class RoomTests {
         });
     }
 
-    /** The Exit block is the way out, and it puts the player back exactly where they were. */
+    /**
+     * <b>The whole shell is the way out.</b> There was one Exit block on the entry pad and it was
+     * wrong twice: it could be broken, and in a 46-block room it had to be walked back to. So the
+     * click under test is on a plain wall in the far corner -- the piece of the room least likely
+     * to be special -- and it has to open the same way out as the marked doorways do.
+     */
     @GameTest
-    @TestHolder(description = "Right-clicking the Exit block returns the player to the spot and facing they left.")
-    public static void theExitBlockPutsThePlayerBackWhereTheyWere(final DynamicTest test) {
+    @TestHolder(description = "Right-clicking any wall opens the way out, and it returns the player to the spot and facing they left.")
+    public static void anyWallIsTheWayOut(final DynamicTest test) {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
 
         test.onGameTest(ExtendedGameTestHelper.class, helper -> {
             Site site = site(helper, 1);
             helper.assertTrue(RoomVisit.enter(site.player(), site.record(), 0), "entering was refused");
-            BlockPos exit = RoomGeometry.exitPos(room(helper, site).region());
+            RoomRecord room = room(helper, site);
+            // The far corner of the floor: shell, and nothing anybody would have marked.
+            BlockPos plain = RoomGeometry.origin(room.region())
+                .offset(RoomGeometry.footprint(1) - 2, 0, RoomGeometry.footprint(1) - 2);
+            helper.assertTrue(site.backshop().getBlockState(plain).is(WBBlocks.ROOM_WALL.get())
+                    && site.backshop().getBlockState(plain)
+                        .getValue(com.neryos.workbay.content.room.RoomWallBlock.PART)
+                        == com.neryos.workbay.content.room.RoomPart.FLOOR,
+                "the far corner is not a plain piece of shell, so this test proves nothing");
 
             // The click a player makes, not a call to leave(): the block is the feature.
-            site.backshop().getBlockState(exit).useWithoutItem(site.backshop(), site.player(),
-                new BlockHitResult(Vec3.atCenterOf(exit), Direction.UP, exit, false));
+            site.backshop().getBlockState(plain).useWithoutItem(site.backshop(), site.player(),
+                new BlockHitResult(Vec3.atCenterOf(plain), Direction.UP, plain, false));
+            helper.assertTrue(site.player().containerMenu
+                    instanceof com.neryos.workbay.menu.RoomDoorMenu,
+                "clicking a wall opened " + site.player().containerMenu.getClass().getSimpleName()
+                    + " instead of the way out");
+
+            ((com.neryos.workbay.menu.RoomDoorMenu) site.player().containerMenu)
+                .act(com.neryos.workbay.menu.WorkbayAction.LEAVE_ROOM, 0, site.player());
 
             helper.assertTrue(site.player().level().dimension().equals(helper.getLevel().dimension()),
                 "the player is in " + site.player().level().dimension().location() + ", not back home");
@@ -169,8 +192,8 @@ public class RoomTests {
             BlockPos chest = origin.offset(RoomGeometry.interior(1), 1, RoomGeometry.interior(1));
             site.backshop().setBlock(chest, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
             BlockPos oldWall = origin.offset(RoomGeometry.footprint(1) - 1, 1, 1);
-            helper.assertTrue(site.backshop().getBlockState(oldWall).is(Blocks.BEDROCK),
-                "the tier 1 wall is not bedrock before the upgrade");
+            helper.assertTrue(site.backshop().getBlockState(oldWall).is(WBBlocks.ROOM_WALL.get()),
+                "the tier 1 wall is not shell before the upgrade");
 
             RoomVisit.leave(site.player());
             RoomBuilder.ensure(site.backshop(), room, 2);
@@ -180,10 +203,12 @@ public class RoomTests {
             helper.assertTrue(site.backshop().getBlockState(oldWall).isAir(),
                 "the old wall is still standing inside the bigger room");
             BlockPos newWall = origin.offset(RoomGeometry.footprint(2) - 1, 1, 1);
-            helper.assertTrue(site.backshop().getBlockState(newWall).is(Blocks.BEDROCK),
+            helper.assertTrue(site.backshop().getBlockState(newWall).is(WBBlocks.ROOM_WALL.get()),
                 "the tier 2 room has no wall at its own footprint");
-            helper.assertTrue(site.backshop().getBlockState(RoomGeometry.exitPos(region))
-                .is(WBBlocks.EXIT.get()), "the Exit block moved when the room grew");
+            RoomGeometry.doors(region, 2).forEach((at, part) ->
+                helper.assertTrue(site.backshop().getBlockState(at)
+                        .getValue(com.neryos.workbay.content.room.RoomWallBlock.PART) == part,
+                    "the grown room has no door panel at " + at));
             helper.succeed();
         });
     }
@@ -284,6 +309,117 @@ public class RoomTests {
                 helper.assertTrue(site.backshop().getBiome(middle).value().coldEnoughToSnow(middle),
                     "chunk " + pos + " was added by growth and never got the room's biome");
             }
+            helper.succeed();
+        });
+    }
+
+    /**
+     * The one failure a room must never have is "sealed in with no way out", and -1 hardness does
+     * not answer it: hardness stops a pick, not a creative click, which breaks bedrock too. Every
+     * block of the shell refuses the destroy, so there is no single block to lose.
+     */
+    @GameTest
+    @TestHolder(description = "A room's shell cannot be broken, in creative either.")
+    public static void aRoomCanNeverBeSealedWithThePlayerInside(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            Site site = site(helper, 1);
+            helper.assertTrue(RoomVisit.enter(site.player(), site.record(), 0), "entering was refused");
+            RoomVisit.leave(site.player());
+            RoomRecord room = room(helper, site);
+            BlockPos door = RoomGeometry.doors(room.region(), room.builtTier())
+                .keySet().iterator().next();
+            BlockPos floor = RoomGeometry.origin(room.region()).offset(3, 0, 3);
+
+            // The creative path, which is the one that broke bedrock: ServerPlayerGameMode.
+            site.player().setGameMode(GameType.CREATIVE);
+            for (BlockPos at : java.util.List.of(door, floor)) {
+                site.player().gameMode.destroyBlock(at);
+                helper.assertTrue(site.backshop().getBlockState(at).is(WBBlocks.ROOM_WALL.get()),
+                    "a creative click destroyed the shell at " + at);
+            }
+
+            // And a room whose shell is wrong -- an older save built out of bedrock, say -- is put
+            // right by the visit that finds it, because that is the visit somebody is trying to end.
+            site.backshop().setBlock(door, Blocks.BEDROCK.defaultBlockState(), Block.UPDATE_CLIENTS);
+            RoomRegistry registry = RoomRegistry.get(helper.getLevel().getServer());
+            helper.assertTrue(RoomVisit.enter(site.player(),
+                registry.byId(site.record().id()).orElseThrow(), 0), "re-entering was refused");
+            RoomVisit.leave(site.player());
+            helper.assertTrue(site.backshop().getBlockState(door).is(WBBlocks.ROOM_WALL.get())
+                    && site.backshop().getBlockState(door)
+                        .getValue(com.neryos.workbay.content.room.RoomWallBlock.PART)
+                        != com.neryos.workbay.content.room.RoomPart.WALL,
+                "a shell left with a bedrock hole in it was not put right on the next visit");
+            helper.succeed();
+        });
+    }
+
+    /**
+     * The door is <b>centred</b>, and that is why it is two blocks wide: a wall is a whole number
+     * of chunks across and sixteen has no middle block, so a one-block doorway sits off-centre by
+     * half a block. The assertion is the symmetry, because that is the thing that would silently
+     * break if the footprints ever changed.
+     */
+    @GameTest
+    @TestHolder(description = "Each wall's door is two blocks wide and exactly centred.")
+    public static void everyDoorIsCentredOnItsWall(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            for (int tier = 1; tier <= RoomGeometry.MAX_TIER; tier++) {
+                int side = RoomGeometry.footprint(tier);
+                var doors = RoomGeometry.doors(0, tier);
+                helper.assertTrue(doors.size() == 16,
+                    "tier " + tier + " has " + doors.size() + " door blocks, not four 2x2 doors");
+                BlockPos origin = RoomGeometry.origin(0);
+                for (BlockPos at : doors.keySet()) {
+                    int dx = at.getX() - origin.getX();
+                    int dz = at.getZ() - origin.getZ();
+                    // On a wall, the run along it must straddle the middle: the two columns either
+                    // side of the seam are side/2 - 1 and side/2, and they mirror each other.
+                    int along = (dx == 0 || dx == side - 1) ? dz : dx;
+                    helper.assertTrue(along + (side - 1 - along) == side - 1
+                            && (along == side / 2 - 1 || along == side / 2),
+                        "a door block at " + at + " is not centred on its wall of " + side);
+                    helper.assertTrue(at.getY() == 1 || at.getY() == 2,
+                        "a door block at " + at + " is not on the floor");
+                }
+            }
+            helper.succeed();
+        });
+    }
+
+    /**
+     * Every tier is a cube. Height costs no chunks, which is why the <em>price</em> is the
+     * footprint -- but a free axis is not a reason to make a 14-wide room 32 tall, which reads as
+     * a shaft. The assertion is the proportion, not the number, so changing the ladder cannot
+     * silently un-cube it.
+     */
+    @GameTest
+    @TestHolder(description = "Every room tier is a cube, walls and ceiling included.")
+    public static void everyRoomIsACube(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            Site site = site(helper, 1);
+            helper.assertTrue(RoomVisit.enter(site.player(), site.record(), 0), "entering was refused");
+            RoomVisit.leave(site.player());
+            RoomRecord room = room(helper, site);
+            for (int tier = 1; tier <= RoomGeometry.MAX_TIER; tier++) {
+                helper.assertTrue(RoomGeometry.height(tier) == RoomGeometry.interior(tier),
+                    "tier " + tier + " is " + RoomGeometry.interior(tier) + " across and "
+                        + RoomGeometry.height(tier) + " tall");
+            }
+            // And the shell in the world agrees: a ceiling one above the interior's top, air below.
+            BlockPos origin = RoomGeometry.origin(room.region());
+            int top = RoomGeometry.height(1) + 1;
+            helper.assertTrue(site.backshop().getBlockState(origin.offset(3, top, 3))
+                    .is(WBBlocks.ROOM_WALL.get()),
+                "there is no ceiling at y " + top);
+            helper.assertTrue(site.backshop().getBlockState(origin.offset(3, top - 1, 3)).isAir(),
+                "the block under the ceiling is not air");
             helper.succeed();
         });
     }

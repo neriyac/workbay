@@ -2,6 +2,7 @@ package com.neryos.workbay.datagen;
 
 import com.neryos.workbay.Workbay;
 import com.neryos.workbay.content.connector.ConnectorBlock;
+import com.neryos.workbay.content.room.RoomWallBlock;
 import com.neryos.workbay.content.workbay.WorkbayBlock;
 import com.neryos.workbay.content.workbay.WorkbayState;
 import com.neryos.workbay.init.WBBlocks;
@@ -92,9 +93,27 @@ public class WBBlockStateProvider extends BlockStateProvider {
         // six of them seal one hosted machine, so the face has to read as a door from the inside.
         simpleBlock(WBBlocks.PORT.get(), models().cubeAll("port", blockTexture("port")));
 
-        // The way out of a room, and the only lit thing in an unlit dimension. The doorway is on
-        // every face on purpose: a player halfway up a 32-block room looks down and sees it.
-        simpleBlock(WBBlocks.EXIT.get(), models().cubeAll("exit", blockTexture("exit")));
+        // A room's shell: one greyscale cube per part, and a variant per (colour, part) pointing
+        // at it. cubeAll() cannot be used -- it writes no tintindex, and without one the block
+        // colour handler is never asked and every room is grey whatever its record says.
+        java.util.Map<com.neryos.workbay.content.room.RoomPart, ModelFile> parts =
+            new java.util.EnumMap<>(com.neryos.workbay.content.room.RoomPart.class);
+        for (com.neryos.workbay.content.room.RoomPart part
+                : com.neryos.workbay.content.room.RoomPart.values()) {
+            parts.put(part, tintedCube(part.texture(), part.texture()));
+        }
+        getVariantBuilder(WBBlocks.ROOM_WALL.get()).forAllStates(state -> ConfiguredModel.builder()
+            .modelFile(parts.get(state.getValue(RoomWallBlock.PART))).build());
+    }
+
+    /** A full cube of one texture with a tint index on every face, which {@code cubeAll} omits. */
+    private ModelFile tintedCube(String name, String texture) {
+        return models().withExistingParent(name, mcBlock("block"))
+            .texture("particle", blockTexture(texture))
+            .texture("all", blockTexture(texture))
+            .element().from(0, 0, 0).to(16, 16, 16)
+            .allFaces((face, builder) -> builder.texture("#all").tintindex(0).cullface(face))
+            .end();
     }
 
     private static ResourceLocation mcBlock(String path) {

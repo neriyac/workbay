@@ -84,5 +84,15 @@ public enum WorkbayAction {
      * it over the room's chunks. Appended at the end for the same reason {@link #SET_LINK_NAME} is:
      * an action travels as its ordinal.
      */
-    CYCLE_ROOM_BIOME
+    CYCLE_ROOM_BIOME,
+    /**
+     * Repaints room {@code arg}'s shell. A right-click steps backwards, the way {@link #SET_SKIM}
+     * does: ten colours is five clicks either way instead of nine one way.
+     */
+    CYCLE_ROOM_COLOUR,
+    /**
+     * Out of the room the player is standing in, back to where they entered from. Only
+     * {@link RoomDoorMenu} sends it -- the Workbay screen has no way to be open in a room.
+     */
+    LEAVE_ROOM
 }
