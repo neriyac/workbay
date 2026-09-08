@@ -72,8 +72,16 @@ public class WorkbayBlockEntity extends BlockEntity {
 
     private final BusRunner runner = new BusRunner(() -> !isRemoved());
 
-    /** Whether this Workbay currently holds SPEC.md §12's mirroring ticket on its bay column. */
-    private boolean mirroring;
+    /**
+     * The Backshop chunks this Workbay currently holds a mirroring ticket on: its bay column,
+     * plus every room of its network that has a Connector standing in it. SPEC.md §12.
+     *
+     * <p>A set rather than a flag because the second half changes while the block lives — placing
+     * a Connector in a room is what puts that room on the list and breaking it is what takes it
+     * off, and neither is a moment this block hears about.
+     */
+    private final java.util.Set<net.minecraft.world.level.ChunkPos> mirrored =
+        new java.util.HashSet<>();
 
     /**
      * How long the Assay has been working on the Levy it is currently making. Only counts while
@@ -416,20 +424,67 @@ public class WorkbayBlockEntity extends BlockEntity {
      * that the machine is unreachable, and the mod does not work outside a test that force-loads
      * the chunk for itself.
      *
+     * <p><b>And a room with a Connector in it, on the same terms.</b> A room is a stage in a chain,
+     * not only a place to stand: a barrel in one feeds the next bay along, and a stage that stops
+     * when nobody is looking at it is not a stage. The same decision applied twice costs a server
+     * nothing it was not already paying — a hosted machine costs what it would cost on the floor,
+     * and so does a barrel in a room. Compact Machines does not do this, which is why their rooms
+     * need a chunkloader and this mod's do not; the Anchor is left with one clear job, which is
+     * running the room while <em>nobody is online at all</em>.
+     *
+     * <p>A room with no Connector in it is not mirrored. Nothing in it can do anything, so loading
+     * it would be a ticket spent on scenery.
+     *
      * <p>On the tick rather than in {@code onLoad}: forcing sync-loads a chunk in another
      * dimension, which is not something to do from inside a chunk load.
      */
     private void mirror(ServerLevel server) {
-        if (mirroring) {
-            return;
-        }
         ServerLevel backshop = server.getServer().getLevel(WorkbayDimensions.BACKSHOP);
         WorkbayRecord record = record().orElse(null);
         if (backshop == null || record == null) {
             return;
         }
-        WorkbayTickets.force(backshop, record.id(), record.bayColumn());
-        mirroring = true;
+        // The steady state of every Workbay that owns no room: one ticket, already held, nothing
+        // to allocate. Without it this method builds a set per tick to answer a question that
+        // cannot have changed.
+        if (record.rooms().isEmpty() && mirrored.size() == 1
+            && mirrored.contains(record.bayColumn())) {
+            return;
+        }
+        java.util.Set<net.minecraft.world.level.ChunkPos> wanted = new java.util.HashSet<>();
+        wanted.add(record.bayColumn());
+        if (!record.rooms().isEmpty()) {
+            java.util.List<com.neryos.workbay.world.RoomRecord> rooms =
+                RoomRegistry.get(server.getServer()).roomsOf(record);
+            for (BusConfig bus : record.buses()) {
+                if (!bus.connector().dimension().equals(WorkbayDimensions.BACKSHOP)) {
+                    continue;
+                }
+                for (com.neryos.workbay.world.RoomRecord room : rooms) {
+                    if (room.built() && com.neryos.workbay.world.RoomGeometry.inside(
+                        bus.connector().pos(), room.region(), room.builtTier())) {
+                        wanted.addAll(com.neryos.workbay.world.RoomGeometry.chunks(
+                            room.region(), room.builtTier()));
+                        break;
+                    }
+                }
+            }
+        }
+        if (wanted.equals(mirrored)) {
+            return;
+        }
+        for (net.minecraft.world.level.ChunkPos chunk : wanted) {
+            if (mirrored.add(chunk)) {
+                WorkbayTickets.force(backshop, record.id(), chunk);
+            }
+        }
+        mirrored.removeIf(chunk -> {
+            if (wanted.contains(chunk)) {
+                return false;
+            }
+            WorkbayTickets.release(backshop, record.id(), chunk);
+            return true;
+        });
     }
 
     /**
@@ -440,14 +495,15 @@ public class WorkbayBlockEntity extends BlockEntity {
     @Override
     public void setRemoved() {
         super.setRemoved();
-        if (mirroring && level instanceof ServerLevel server) {
-            mirroring = false;
+        if (!mirrored.isEmpty() && level instanceof ServerLevel server) {
             ServerLevel backshop = server.getServer().getLevel(WorkbayDimensions.BACKSHOP);
             record().ifPresent(record -> {
                 if (backshop != null) {
-                    WorkbayTickets.release(backshop, record.id(), record.bayColumn());
+                    mirrored.forEach(chunk ->
+                        WorkbayTickets.release(backshop, record.id(), chunk));
                 }
             });
+            mirrored.clear();
         }
         // Every endpoint cache holds a ServerLevel reference. Dropping them here is what stops a
         // removed Workbay keeping another dimension's level object alive.

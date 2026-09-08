@@ -102,7 +102,13 @@ public record WorkbaySnapshot(
      * the row names a modded biome correctly without this mod shipping a string for it.
      */
     public record Room(int index, String name, int interior, int chunkCost, boolean built,
-        boolean anchored, String biome, com.neryos.workbay.content.room.RoomColour colour) {
+        boolean anchored, String biome, com.neryos.workbay.content.room.RoomColour colour,
+        /**
+         * Who has been invited into this room, in the order the room lists them, so the screen can
+         * name each one and step its level. Only ever this network's own rooms travel on a
+         * snapshot, so this cannot leak a guest list to anybody the list is not about.
+         */
+        java.util.List<com.neryos.workbay.world.RoomRecord.Guest> guests) {
         public static final Codec<Room> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.INT.fieldOf("Index").forGetter(Room::index),
             Codec.STRING.fieldOf("Name").forGetter(Room::name),
@@ -112,7 +118,9 @@ public record WorkbaySnapshot(
             Codec.BOOL.fieldOf("Anchored").forGetter(Room::anchored),
             Codec.STRING.optionalFieldOf("Biome", "").forGetter(Room::biome),
             com.neryos.workbay.content.room.RoomColour.CODEC.optionalFieldOf("Colour",
-                com.neryos.workbay.content.room.RoomColour.DEFAULT).forGetter(Room::colour)
+                com.neryos.workbay.content.room.RoomColour.DEFAULT).forGetter(Room::colour),
+            com.neryos.workbay.world.RoomRecord.Guest.CODEC.listOf()
+                .optionalFieldOf("Guests", java.util.List.of()).forGetter(Room::guests)
         ).apply(i, Room::new));
     }
 
@@ -122,6 +130,21 @@ public record WorkbaySnapshot(
     /** How many links are in a state the player has to do something about. The header's red count. */
     public int problems() {
         return (int) links.stream().filter(link -> link.status().isProblem()).count();
+    }
+
+    /**
+     * What a room is called wherever it is named: the name the player gave it, or its slot.
+     *
+     * <p>Here rather than on ROOMS because three screens say it now — the ROOMS row, a LINKS row
+     * into that room, and the flow map's node for it — and a room called "Ore Room" on one page
+     * and "Room 2" on another is two rooms as far as the player can tell.
+     */
+    public net.minecraft.network.chat.Component roomLabel(int index) {
+        String named = rooms.stream().filter(room -> room.index() == index)
+            .map(Room::name).findFirst().orElse("");
+        return named.isBlank()
+            ? com.neryos.workbay.WorkbayLang.gui("rooms.name", index + 1)
+            : net.minecraft.network.chat.Component.literal(named);
     }
 
     public Bay bay(int index) {
@@ -155,7 +178,19 @@ public record WorkbaySnapshot(
      * gear opens the same fields and a second, thinner copy would drift from the first.
      */
     public record Link(BusConfig config, BusRunner.BusStatus status,
-        Optional<ResourceLocation> targetBlock, Optional<Integer> targetBay) {
+        Optional<ResourceLocation> targetBlock, Optional<Integer> targetBay,
+        /**
+         * Which of this network's rooms this link's Connector stands in, by <b>slot</b>. Present
+         * only for a link into a room, and computed server-side for the same reason
+         * {@code targetBay} is: the client cannot invert a Backshop position into a room, and
+         * without this the one thing on the screen that says <em>where</em> the barrel is would be
+         * a pair of six-figure coordinates in a dimension the player cannot walk to.
+         *
+         * <p>The slot and not the name, so a room the player renamed reads the same here as it
+         * does on ROOMS without the server having to render a string the client already knows how
+         * to build — {@link #rooms()} is on this same snapshot.
+         */
+        Optional<Integer> targetRoom) {
 
         public static final Codec<Link> CODEC = RecordCodecBuilder.create(i -> i.group(
             BusConfig.CODEC.fieldOf("Config").forGetter(Link::config),
@@ -163,7 +198,8 @@ public record WorkbaySnapshot(
             ResourceLocation.CODEC.optionalFieldOf("TargetBlock").forGetter(Link::targetBlock),
             // Only ever present for an internal (bay-to-bay) link, computed server-side because the
             // client has no way to invert a Backshop position back into a bay index.
-            Codec.INT.optionalFieldOf("TargetBay").forGetter(Link::targetBay)
+            Codec.INT.optionalFieldOf("TargetBay").forGetter(Link::targetBay),
+            Codec.INT.optionalFieldOf("TargetRoom").forGetter(Link::targetRoom)
         ).apply(i, Link::new));
 
         /**

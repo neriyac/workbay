@@ -43,12 +43,17 @@ public class ConnectorBlockEntity extends BlockEntity {
     }
 
     /**
-     * The Workbay this Connector belongs to, or empty when it is unpaired, its Workbay's chunk is
-     * not loaded, or the block that used to be there is a different Workbay now.
+     * The Workbay this Connector belongs to, or empty when it is unpaired or the block that used to
+     * be there is a different Workbay now.
      *
      * <p>Only ever called from a player action — placing, using or breaking the Connector — never
      * from a tick, because {@code getBlockEntity} on an arbitrary position can trigger a synchronous
-     * chunk load on the server thread (SPEC.md §9).
+     * chunk load on the server thread (SPEC.md §9). <b>That load is now allowed to happen.</b> It
+     * used to be refused, which read as caution and was the one thing stopping a Connector from
+     * being placed inside a room: getting into a room means leaving the dimension the Workbay is
+     * in, so by the time the player is standing where they want the barrel, the chunk the Workbay
+     * is in has usually gone. The refusal turned that into "connector_no_workbay" on a perfectly
+     * ordinary placement. One chunk, once, on a click a player made.
      */
     public Optional<WorkbayBlockEntity> workbay() {
         if (pairing == null || !(level instanceof ServerLevel server)) {
@@ -56,7 +61,7 @@ public class ConnectorBlockEntity extends BlockEntity {
         }
         GlobalPos at = pairing.workbayPos();
         ServerLevel workbayLevel = server.getServer().getLevel(at.dimension());
-        if (workbayLevel == null || !workbayLevel.isLoaded(at.pos())) {
+        if (workbayLevel == null) {
             return Optional.empty();
         }
         if (!(workbayLevel.getBlockEntity(at.pos()) instanceof WorkbayBlockEntity workbay)) {

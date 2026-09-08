@@ -129,6 +129,27 @@ public class RoomRegistry extends SavedData {
             .findFirst();
     }
 
+    /**
+     * Whose room this is: the owner of the network whose record lists it.
+     *
+     * <p>Derived rather than stored on the room. A room is created by
+     * {@link RoomVisit} out of a Workbay's own record and can only ever be reached through one, so
+     * a second copy of the owner here could only ever be a copy that had gone wrong — and the one
+     * case where it would differ is the one this must get right: an <b>orphaned</b> room, listed by
+     * nobody, which correctly has no owner and therefore nobody who may stand in it.
+     *
+     * <p>Iterates {@code byId} directly and not {@link #all()}, which copies: this is asked once
+     * per tick for every player in the Backshop.
+     */
+    public Optional<UUID> ownerOf(RoomRecord room) {
+        for (WorkbayRecord record : byId.values()) {
+            if (record.rooms().contains(room.id())) {
+                return Optional.of(record.owner());
+            }
+        }
+        return Optional.empty();
+    }
+
     // ---------------------------------------------------------------- writing
 
     /** Mints a Workbay: a fresh id, a code nobody else has, and a bay column nobody else uses. */

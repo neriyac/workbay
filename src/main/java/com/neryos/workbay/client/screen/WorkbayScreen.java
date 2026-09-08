@@ -202,6 +202,17 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         }
     }
 
+    /**
+     * Empties the search field without closing it. What the field <em>means</em> changes between
+     * the room window's two tabs -- a biome to look for, a player to invite -- so a word typed for
+     * one must not be sitting in it as the other's first move.
+     */
+    public void clearFilter() {
+        if (filter != null) {
+            filter.setValue("");
+        }
+    }
+
     public void closeFilter() {
         if (filter != null) {
             removeWidget(filter);

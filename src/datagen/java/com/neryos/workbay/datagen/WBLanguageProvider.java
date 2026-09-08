@@ -52,6 +52,16 @@ public class WBLanguageProvider extends LanguageProvider {
             + "The machines keep running \u2014 place any fresh Workbay to get back in.");
         add(WorkbayLang.messageKey("locked"), "This Workbay is locked.");
 
+        // Rooms have an owner, and a guest list per room. SPEC.md 8. Each of these says who
+        // decides, because the answer is never "the server" and never "wait a bit".
+        add(WorkbayLang.messageKey("room_not_yours"), "That room isn't yours. Ask its owner to "
+            + "invite you from the room's own settings.");
+        add(WorkbayLang.messageKey("room_look_only"), "You were invited to look at this room, not "
+            + "to change it. Its owner can raise that to Build.");
+        add(WorkbayLang.messageKey("guest_unknown"), "This server has never seen a player called "
+            + "%s. They have to have logged in once before they can be invited.");
+        add(WorkbayLang.messageKey("guest_is_owner"), "That is you. The room is already yours.");
+
         // Insert rejections. Action bar, RED. SPEC.md §6: say what happened, then why, then what
         // to do - and never blame the player for trying.
         add(WorkbayLang.messageKey("reject.not_a_block"), "%s isn't a block. A bay holds machines.");
@@ -311,6 +321,10 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("filter.close.tip"), "The filter is saved as you change it. There "
             + "is nothing to confirm.");
         add(WorkbayLang.guiKey("links.unknown"), "not loaded");
+        // What a link into a room is called, on the LINKS row and on the flow map's node. The
+        // block first, because the room is the thing that repeats down a chain and the block is
+        // the thing that tells one stage from the next.
+        add(WorkbayLang.guiKey("links.in_room"), "%s in %s");
 
         // The row's column is 60 pixels. The long names above are tooltip titles and do not fit
         // it; "No face for this" arrived on screen as "No face f". Same split as bay.short.*.
@@ -408,6 +422,30 @@ public class WBLanguageProvider extends LanguageProvider {
             + "runs while somebody is standing in it, unless you anchor it.");
         add(WorkbayLang.guiKey("rooms.none"), "Install a Room Frame above for your first room.");
         add(WorkbayLang.guiKey("rooms.name"), "Room %s");
+
+        // The room window's two tabs, and everything on the guests one.
+        add(WorkbayLang.guiKey("rooms.tab.room"), "Room");
+        add(WorkbayLang.guiKey("rooms.tab.room.tip"), "What this room looks like: its colour and "
+            + "its biome.");
+        add(WorkbayLang.guiKey("rooms.tab.guests"), "Guests");
+        add(WorkbayLang.guiKey("rooms.tab.guests.tip"), "Who else may be in this room.");
+        add(WorkbayLang.guiKey("rooms.guests.label"), "Guests");
+        add(WorkbayLang.guiKey("rooms.guests.tip"), "An invitation is to this room only \u2014 "
+            + "never to your other rooms, and never to the dimension.");
+        add(WorkbayLang.guiKey("rooms.guests.name"), "player name");
+        add(WorkbayLang.guiKey("rooms.guests.none"), "Nobody but you.");
+        add(WorkbayLang.guiKey("rooms.guests.invite"), "Invite");
+        add(WorkbayLang.guiKey("rooms.guests.invite.tip"), "Invites them to look at this room. "
+            + "Raise them to Build afterwards if they are here to work.");
+        add(WorkbayLang.guiKey("rooms.guests.remove"), "Remove %s");
+        add(WorkbayLang.guiKey("rooms.guests.remove.tip"), "They are put out of the room at once, "
+            + "even if they are standing in it.");
+        add(WorkbayLang.guiKey("rooms.guest.look"), "Look only");
+        add(WorkbayLang.guiKey("rooms.guest.look.tip"), "May stand here. No blocks broken or "
+            + "placed, and no containers opened. Click to raise to Build.");
+        add(WorkbayLang.guiKey("rooms.guest.build"), "May build");
+        add(WorkbayLang.guiKey("rooms.guest.build.tip"), "May do anything in this room that you "
+            + "can. Click to drop back to Look only.");
         add(WorkbayLang.guiKey("rooms.size"), "%sx%s, %s chunks");
         add(WorkbayLang.guiKey("rooms.size.one"), "%sx%s, %s chunk");
         add(WorkbayLang.guiKey("rooms.empty"), "Not opened yet");

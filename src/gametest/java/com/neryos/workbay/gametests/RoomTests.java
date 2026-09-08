@@ -192,6 +192,296 @@ public class RoomTests {
         });
     }
 
+    // ------------------------------------------------- a room is a stage
+
+    /**
+     * <b>A room with a Connector in it is loaded exactly while its Workbay's chunk is.</b>
+     * SPEC.md §12's mirroring, applied a second time.
+     *
+     * <p>Compact Machines does not do this — their rooms sit in a dimension nobody is in, and their
+     * standing complaint is that a room stops the moment you walk away, so players bolt a
+     * chunkloader to the outside. Ours costs nothing extra: a barrel in a room is exactly as
+     * expensive as a barrel on the floor next to the Workbay.
+     *
+     * <p><b>Neither room is ever built by this test.</b> {@code RoomBuilder} would load the chunk
+     * to lay the shell in it and the positive half would then pass whatever the mod did — so both
+     * rooms are stamped as built in the registry and the shells are never poured. The only thing
+     * in this test that can load a Backshop chunk is the mirroring under test, and the second room
+     * is the proof of that: same tier, same registry, no Connector in it, still cold.
+     */
+    @GameTest
+    @TestHolder(description = "A room holding a Connector is force-loaded off the Workbay; an identical room with no Connector is not.")
+    public static void aRoomWithALinkInItIsMirroredAndOneWithoutIsNot(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            Site site = site(helper, 1, 1, 0);
+            ServerLevel backshop = site.backshop();
+            RoomRegistry registry = RoomRegistry.get(helper.getLevel().getServer());
+
+            // Two rooms, both "built" as far as the registry is concerned and neither poured.
+            RoomRecord staged = registry.createRoom().withBuiltTier(1);
+            RoomRecord idle = registry.createRoom().withBuiltTier(1);
+            registry.putRoom(staged);
+            registry.putRoom(idle);
+            registry.put(registry.byId(site.record().id()).orElseThrow()
+                .withRooms(java.util.List.of(staged.id(), idle.id())));
+
+            net.minecraft.world.level.ChunkPos hot =
+                RoomGeometry.chunks(staged.region(), 1).getFirst();
+            net.minecraft.world.level.ChunkPos cold =
+                RoomGeometry.chunks(idle.region(), 1).getFirst();
+            helper.assertFalse(backshop.getChunkSource().hasChunk(hot.x, hot.z),
+                "the staged room's chunk was already loaded before anything asked for it, so this "
+                    + "test could not tell mirroring from a chunk somebody else pulled in");
+            helper.assertFalse(backshop.getChunkSource().hasChunk(cold.x, cold.z),
+                "the idle room's chunk was already loaded, so the control proves nothing");
+
+            // A Connector standing in the staged room, pointed at whatever is next to it. Nothing
+            // has to be there: the link's existence is what puts the room on the list.
+            BlockPos inside = RoomGeometry.origin(staged.region()).offset(4, 1, 4);
+            WorkbayBlockEntity workbay =
+                (WorkbayBlockEntity) helper.getLevel().getBlockEntity(site.workbayPos());
+            workbay.addBus(com.neryos.workbay.bus.BusConfig.create(java.util.UUID.randomUUID(), 0,
+                com.neryos.workbay.bus.BusConfig.Resource.ITEM,
+                com.neryos.workbay.bus.BusConfig.Mode.INSERT,
+                net.minecraft.core.GlobalPos.of(WorkbayDimensions.BACKSHOP, inside),
+                net.minecraft.core.GlobalPos.of(WorkbayDimensions.BACKSHOP, inside.east())));
+
+            helper.startSequence()
+                .thenIdle(4)
+                .thenExecute(() -> {
+                    helper.assertTrue(backshop.getChunkSource().hasChunk(hot.x, hot.z),
+                        "the room holding a Connector is not loaded, so nothing in it can run "
+                            + "while its Workbay is");
+                    helper.assertFalse(backshop.getChunkSource().hasChunk(cold.x, cold.z),
+                        "a room with nothing in it was loaded too, which is a ticket spent on "
+                            + "scenery");
+                })
+                .thenSucceed();
+        });
+    }
+
+    /**
+     * A link into a room is named by the <b>room</b>, not by two coordinates.
+     *
+     * <p>The Backshop position of a barrel is six figures in a dimension the player cannot walk to,
+     * and every stage of a chain holds the same kind of block — so "Barrel, Barrel, Barrel" on the
+     * flow map is a map of one thing. The room is the only part of the answer that is different
+     * per stage, and the client cannot work it out: only the server can invert a Backshop position
+     * into a room, which is why it rides the snapshot.
+     */
+    @GameTest
+    @TestHolder(description = "A link whose Connector stands in a room carries that room's slot on the snapshot.")
+    public static void aLinkIntoARoomIsNamedByTheRoom(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            Site site = site(helper, 1, 1, 0);
+            RoomRegistry registry = RoomRegistry.get(helper.getLevel().getServer());
+            RoomRecord first = registry.createRoom().withBuiltTier(1);
+            RoomRecord second = registry.createRoom().withBuiltTier(1);
+            registry.putRoom(first);
+            registry.putRoom(second);
+            registry.put(registry.byId(site.record().id()).orElseThrow()
+                .withRooms(java.util.List.of(first.id(), second.id())));
+
+            WorkbayBlockEntity workbay =
+                (WorkbayBlockEntity) helper.getLevel().getBlockEntity(site.workbayPos());
+            BlockPos inSecond = RoomGeometry.origin(second.region()).offset(4, 1, 4);
+            BlockPos outside = helper.absolutePos(new BlockPos(2, 1, 2));
+            workbay.addBus(com.neryos.workbay.bus.BusConfig.create(java.util.UUID.randomUUID(), 0,
+                com.neryos.workbay.bus.BusConfig.Resource.ITEM,
+                com.neryos.workbay.bus.BusConfig.Mode.INSERT,
+                net.minecraft.core.GlobalPos.of(WorkbayDimensions.BACKSHOP, inSecond),
+                net.minecraft.core.GlobalPos.of(WorkbayDimensions.BACKSHOP, inSecond.east())));
+            workbay.addBus(com.neryos.workbay.bus.BusConfig.create(java.util.UUID.randomUUID(), 0,
+                com.neryos.workbay.bus.BusConfig.Resource.ITEM,
+                com.neryos.workbay.bus.BusConfig.Mode.INSERT,
+                net.minecraft.core.GlobalPos.of(helper.getLevel().dimension(), outside),
+                net.minecraft.core.GlobalPos.of(helper.getLevel().dimension(), outside.east())));
+
+            com.neryos.workbay.menu.WorkbaySnapshot snapshot =
+                com.neryos.workbay.menu.WorkbayMenu.build(workbay, site.player(), 0);
+            helper.assertTrue(snapshot.links().size() == 2,
+                "expected two links on the snapshot, got " + snapshot.links().size());
+            java.util.Optional<Integer> inRoom = snapshot.links().stream()
+                .filter(link -> link.config().connector().pos().equals(inSecond))
+                .findFirst().orElseThrow().targetRoom();
+            helper.assertTrue(inRoom.isPresent() && inRoom.get() == 1,
+                "the link into room 2 says " + inRoom + " instead of slot 1, so the row and the "
+                    + "flow map fall back to a Backshop coordinate");
+            helper.assertFalse(snapshot.links().stream()
+                .filter(link -> link.config().connector().pos().equals(outside))
+                .findFirst().orElseThrow().targetRoom().isPresent(),
+                "a link out in the world was given a room, so every row would claim to be in one");
+            helper.succeed();
+        });
+    }
+
+    // ------------------------------------------------------ owner and guests
+
+    /**
+     * <b>A Workbay is a block anybody may right-click, and its rooms are not.</b>
+     *
+     * <p>Every other action on the screen checked the owner and this one did not — not even the
+     * lock — so standing at somebody's Workbay was standing in every room they owned. Regions are
+     * 512 blocks apart, which is nothing to somebody who has just launched himself upward.
+     */
+    @GameTest
+    @TestHolder(description = "A stranger is refused a room they were not invited to; an invited guest is let in.")
+    public static void onlyTheOwnerAndTheirGuestsMayEnterARoom(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            Site site = site(helper, 1);
+            GameTestPlayer stranger = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            RoomRegistry registry = RoomRegistry.get(helper.getLevel().getServer());
+            WorkbayRecord record = registry.byId(site.record().id()).orElseThrow();
+
+            helper.assertTrue(RoomVisit.enter(site.player(), record, 0),
+                "the owner was refused their own room");
+            RoomVisit.leave(site.player());
+
+            record = registry.byId(site.record().id()).orElseThrow();
+            helper.assertFalse(RoomVisit.enter(stranger, record, 0),
+                "a stranger was let into somebody else's room");
+            helper.assertFalse(stranger.level().dimension().equals(WorkbayDimensions.BACKSHOP),
+                "a stranger was refused and is standing in the Backshop anyway");
+
+            RoomRecord room = room(helper, site);
+            registry.putRoom(room.withGuest(stranger.getUUID(),
+                stranger.getGameProfile().getName(), com.neryos.workbay.world.RoomGuest.LOOK));
+            record = registry.byId(site.record().id()).orElseThrow();
+            helper.assertTrue(RoomVisit.enter(stranger, record, 0),
+                "an invited guest was refused the room they were invited to");
+            helper.succeed();
+        });
+    }
+
+    /**
+     * A {@link com.neryos.workbay.world.RoomGuest#LOOK} guest changes nothing, and the owner does.
+     *
+     * <p>Both halves, because a guard that refuses everybody is not a permission — it is a room
+     * nobody can build in. The chest is broken through {@code ServerPlayerGameMode#destroyBlock},
+     * which is the call a real left-click makes and the one that fires the event the guard listens
+     * to; asserting on the guard's own method instead would prove only that the method compiles.
+     */
+    @GameTest
+    @TestHolder(description = "A look-only guest cannot break a block in the room; the owner can.")
+    public static void aLookOnlyGuestChangesNothingInTheRoom(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            Site site = site(helper, 1);
+            GameTestPlayer guest = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            RoomRegistry registry = RoomRegistry.get(helper.getLevel().getServer());
+            helper.assertTrue(RoomVisit.enter(site.player(), site.record(), 0), "entering was refused");
+            RoomRecord room = room(helper, site);
+            registry.putRoom(room.withGuest(guest.getUUID(), guest.getGameProfile().getName(),
+                com.neryos.workbay.world.RoomGuest.LOOK));
+
+            BlockPos chest = RoomGeometry.origin(room.region()).offset(5, 1, 5);
+            site.backshop().setBlock(chest, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            helper.assertTrue(site.backshop().getBlockState(chest).is(Blocks.CHEST),
+                "the chest was not placed, so neither half of this test means anything");
+
+            RoomVisit.enter(guest, registry.byId(site.record().id()).orElseThrow(), 0);
+            helper.assertTrue(guest.level().dimension().equals(WorkbayDimensions.BACKSHOP),
+                "the guest is not in the room, so refusing their break proves nothing");
+            guest.gameMode.destroyBlock(chest);
+            helper.assertTrue(site.backshop().getBlockState(chest).is(Blocks.CHEST),
+                "a look-only guest broke a block in somebody else's room");
+
+            site.player().gameMode.destroyBlock(chest);
+            helper.assertFalse(site.backshop().getBlockState(chest).is(Blocks.CHEST),
+                "the owner cannot break a block in their own room, so the guard refuses everybody");
+            helper.succeed();
+        });
+    }
+
+    /**
+     * <b>Over the wall is out of the room.</b>
+     *
+     * <p>Regions are 512 blocks apart and a room is at most 46 tall, so an item from another mod
+     * that launches a player upward puts them above their own ceiling and pointed at the next
+     * region along. The bounds half of the standing rule is what catches that, and nothing else
+     * would: the walls cannot, because the player is no longer between them.
+     */
+    @GameTest
+    @TestHolder(description = "A player who leaves his own room's bounds is put back on the next tick.")
+    public static void leavingARoomsBoundsSendsYouHome(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            Site site = site(helper, 1);
+            helper.assertTrue(RoomVisit.enter(site.player(), site.record(), 0), "entering was refused");
+            RoomRecord room = room(helper, site);
+            // Straight up, well past a tier-1 room's 14-block ceiling, and still in the Backshop.
+            BlockPos over = RoomGeometry.origin(room.region()).offset(8, 60, 8);
+            site.player().teleportTo(site.backshop(), over.getX() + 0.5, over.getY(),
+                over.getZ() + 0.5, java.util.Set.of(), 0.0F, 0.0F);
+            helper.assertFalse(
+                RoomGeometry.inside(site.player().blockPosition(), room.region(), room.builtTier()),
+                "the player is still inside the room after being moved 60 blocks up, so this test "
+                    + "proves nothing");
+
+            helper.startSequence()
+                .thenIdle(4)
+                .thenExecute(() -> {
+                    helper.assertFalse(
+                        site.player().level().dimension().equals(WorkbayDimensions.BACKSHOP),
+                        "a player who launched himself over his own wall is loose in the Backshop, "
+                            + "512 blocks from somebody else's room");
+                    helper.assertFalse(RoomVisit.isInside(site.player()),
+                        "the player is out but still recorded as being in a room");
+                })
+                .thenSucceed();
+        });
+    }
+
+    /**
+     * Un-inviting somebody takes effect <b>where they are standing</b>, not the next time they ask.
+     *
+     * <p>The same check runs on login, which is the case nobody would find by playing: somebody who
+     * logs out in a room and is removed from it while they are away must not wake up in it.
+     */
+    @GameTest
+    @TestHolder(description = "A guest removed while standing in a room is put out on the next tick.")
+    public static void removingAGuestPutsThemOutOfTheRoom(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            Site site = site(helper, 1);
+            GameTestPlayer guest = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            RoomRegistry registry = RoomRegistry.get(helper.getLevel().getServer());
+            helper.assertTrue(RoomVisit.enter(site.player(), site.record(), 0), "entering was refused");
+            RoomRecord room = room(helper, site);
+            registry.putRoom(room.withGuest(guest.getUUID(), guest.getGameProfile().getName(),
+                com.neryos.workbay.world.RoomGuest.BUILD));
+            helper.assertTrue(
+                RoomVisit.enter(guest, registry.byId(site.record().id()).orElseThrow(), 0),
+                "the guest was refused a room they were invited to");
+
+            helper.startSequence()
+                .thenIdle(4)
+                .thenExecute(() -> {
+                    helper.assertTrue(guest.level().dimension().equals(WorkbayDimensions.BACKSHOP),
+                        "the guest was thrown out while they were still invited");
+                    registry.putRoom(registry.room(room.id()).orElseThrow()
+                        .withoutGuest(guest.getUUID()));
+                })
+                .thenIdle(4)
+                .thenExecute(() -> {
+                    helper.assertFalse(guest.level().dimension().equals(WorkbayDimensions.BACKSHOP),
+                        "a guest who was un-invited is still standing in the room");
+                    helper.assertFalse(RoomVisit.isInside(guest),
+                        "the guest is out of the Backshop but still recorded as being in a room");
+                })
+                .thenSucceed();
+        });
+    }
+
     /** The right-click a player makes, not a call to the menu: the block is the feature. */
     private static void click(Site site, BlockPos at) {
         site.backshop().getBlockState(at).useWithoutItem(site.backshop(), site.player(),

@@ -103,5 +103,21 @@ public enum WorkbayAction {
      */
     SET_ROOM_BIOME,
     /** The same for the shell's colour; the high half is a {@code RoomColour} ordinal. */
-    SET_ROOM_COLOUR
+    SET_ROOM_COLOUR,
+    /**
+     * Invites a player into room {@code arg} at {@link com.neryos.workbay.world.RoomGuest#LOOK}.
+     * {@code text} is the name they are known by, resolved to a UUID server-side -- the client has
+     * no profile cache and could only ever send a name.
+     *
+     * <p>Appended at the end for the same reason every other room action was: an action travels as
+     * its ordinal, so inserting one renames every action after it on the wire.
+     */
+    INVITE_ROOM_GUEST,
+    /**
+     * Steps one guest's level. {@code arg} packs the room in its low 16 bits and the guest's
+     * position in that room's list in the next 16.
+     */
+    CYCLE_ROOM_GUEST,
+    /** Un-invites one guest. Packed the same way as {@link #CYCLE_ROOM_GUEST}. */
+    REMOVE_ROOM_GUEST
 }

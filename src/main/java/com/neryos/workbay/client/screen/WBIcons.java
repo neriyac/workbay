@@ -467,6 +467,27 @@ public static final String[] EXTRACT = {
         "...######...",
     };
 
+    /**
+     * A guest. Head and shoulders, solid, with the head outlined and the shoulders filled.
+     * Rendered at 1x and 4x against three rejected drafts, the way every icon in this set was: an
+     * outlined bust vanishes at twelve pixels, one with arms reads as a robot, and one with a gap
+     * between head and shoulders reads as two shapes rather than as a person.
+     */
+    public static final String[] GUEST = {
+        "............",
+        "....####....",
+        "...##..##...",
+        "...##..##...",
+        "....####....",
+        "...######...",
+        "..########..",
+        ".##########.",
+        ".##########.",
+        ".##########.",
+        "............",
+        "............",
+    };
+
     public static final String[] PLUS = {
         "............",
         "............",

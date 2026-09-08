@@ -386,8 +386,15 @@ public final class BayVisit {
         if (event.getEntity() instanceof ServerPlayer player
             && player.level().dimension().equals(WorkbayDimensions.BACKSHOP)) {
             // Somebody who logged out in a room comes back standing in it: a room is a place, and
-            // logging out in one is not an interrupted visit. SPEC.md §14.
+            // logging out in one is not an interrupted visit. SPEC.md §14. Unless they were taken
+            // off its guest list while they were away, in which case RoomVisit puts them out --
+            // the tick rule would too, but a player who sees somebody else's room for a frame
+            // before being ejected has still seen it.
             if (RoomVisit.isInside(player)) {
+                if (!RoomVisit.mayStay(player)) {
+                    RoomVisit.leave(player);
+                    forgetReopen(player);
+                }
                 return;
             }
             if (!leave(player)) {

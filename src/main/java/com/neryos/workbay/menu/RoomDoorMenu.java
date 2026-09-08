@@ -112,7 +112,8 @@ public class RoomDoorMenu extends AbstractContainerMenu {
         RoomRegistry registry = RoomRegistry.get(player.server);
         RoomRecord here = RoomVisit.roomOf(player).flatMap(registry::room).orElse(null);
         WorkbayRecord record = networkOf(player).orElse(null);
-        if (record == null || here == null || !record.rooms().contains(here.id())) {
+        if (record == null || here == null || !record.rooms().contains(here.id())
+            || !RoomVisit.mayEnter(registry, player.getUUID(), here)) {
             return;
         }
         View view = view(player, record, here);
@@ -125,6 +126,12 @@ public class RoomDoorMenu extends AbstractContainerMenu {
     /**
      * The network whose room the player is in. Read from the room they are recorded as occupying
      * rather than from the block, because that is the record the standing rule already trusts.
+     *
+     * <p><b>Whoever owns it, not whoever is standing in it.</b> It used to search only the records
+     * this player owns, which was fine while the only person who could be in a room was its owner
+     * and is a door that will not open for a guest the moment one exists -- and the way out is on
+     * this screen. Which of the network's rooms the guest may then step to is
+     * {@link RoomVisit#enter}'s question, and it asks it.
      */
     private static Optional<WorkbayRecord> networkOf(ServerPlayer player) {
         RoomRegistry registry = RoomRegistry.get(player.server);
@@ -132,19 +139,30 @@ public class RoomDoorMenu extends AbstractContainerMenu {
         if (room.isEmpty()) {
             return Optional.empty();
         }
-        return registry.ownedBy(player.getUUID()).stream()
+        return registry.all().stream()
             .filter(record -> record.rooms().contains(room.get()))
             .findFirst();
     }
 
     private static View view(ServerPlayer player, WorkbayRecord record, RoomRecord here) {
-        List<RoomRecord> known = RoomRegistry.get(player.server).roomsOf(record);
+        RoomRegistry registry = RoomRegistry.get(player.server);
+        List<RoomRecord> known = registry.roomsOf(record);
         List<WorkbaySnapshot.Room> rooms = new java.util.ArrayList<>();
         int current = -1;
         for (int index = 0; index < record.roomCapacity(); index++) {
             RoomRecord room = index < known.size() ? known.get(index) : null;
+            // Only the rooms this player may be in. A guest invited to one room is looking at a
+            // list of doors, and every one of them he cannot open is the name of a room he was
+            // never told about -- the invitation was to a room, not to the network. An unopened
+            // slot is nobody's room yet, so it stays on the list for the owner and for nobody else.
+            if (room != null && !RoomVisit.mayEnter(registry, player.getUUID(), room)) {
+                continue;
+            }
+            if (room == null && !record.owner().equals(player.getUUID())) {
+                continue;
+            }
             if (room != null && room.id().equals(here.id())) {
-                current = index;
+                current = rooms.size();
             }
             rooms.add(new WorkbaySnapshot.Room(index, room == null ? "" : room.name().orElse(""),
                 room == null ? 0 : RoomGeometry.interior(room.builtTier()),
@@ -152,7 +170,10 @@ public class RoomDoorMenu extends AbstractContainerMenu {
                 room != null && room.built(),
                 room != null && room.anchored(),
                 room == null ? "" : room.effectiveBiome().location().toString(),
-                room == null ? com.neryos.workbay.content.room.RoomColour.DEFAULT : room.colour()));
+                room == null ? com.neryos.workbay.content.room.RoomColour.DEFAULT : room.colour(),
+                // Never to the door screen. It is a list of doors, and a guest list on it would be
+                // this room telling one guest who else was invited.
+                List.of()));
         }
         return new View(rooms, current);
     }

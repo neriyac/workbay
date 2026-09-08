@@ -1631,7 +1631,7 @@ class BaysPage extends WorkbayPage {
      * Never the link's <em>state</em> — the status column beside it is already saying that, and the
      * name column has fifty pixels it can spend on something the row is not otherwise carrying.
      */
-    private static String labelOf(WorkbaySnapshot.Link link) {
+    private String labelOf(WorkbaySnapshot.Link link) {
         return link.label().orElseGet(() -> targetName(link));
     }
 
@@ -1665,12 +1665,20 @@ class BaysPage extends WorkbayPage {
      * treated the same way as an unloaded chunk on purpose: a target that has been broken is one
      * the status column calls "Gone", and printing "Air" would be a third word for it.
      */
-    private static String targetName(WorkbaySnapshot.Link link) {
-        return link.targetBlock()
+    private String targetName(WorkbaySnapshot.Link link) {
+        Optional<String> block = link.targetBlock()
             .filter(id -> !id.equals(ResourceLocation.withDefaultNamespace("air")))
-            .map(BaysPage::displayName).map(Component::getString)
-            .orElseGet(() -> link.config().target().pos().getX() + " "
-                + link.config().target().pos().getZ());
+            .map(BaysPage::displayName).map(Component::getString);
+        // A link into a room is named by the room, because that is the only thing about it a
+        // player can act on: the Backshop position is six figures in a dimension they cannot walk
+        // to, and "Barrel" alone is the same word on every stage of the chain.
+        if (link.targetRoom().isPresent()) {
+            String room = snapshot().roomLabel(link.targetRoom().get()).getString();
+            return block.map(name -> WorkbayScreen.gui("links.in_room", name, room).getString())
+                .orElse(room);
+        }
+        return block.orElseGet(() -> link.config().target().pos().getX() + " "
+            + link.config().target().pos().getZ());
     }
 
     private static Component displayName(ResourceLocation id) {

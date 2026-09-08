@@ -68,12 +68,20 @@ class RoomsPage extends WorkbayPage {
     // left, so the longest room name and "46x46, 9 chunks" both have their own room.
     private static final int ROOM_NAME_X = 6;
     private static final int ROOM_NAME_W = 84;
-    private static final int ROOM_SIZE_X = 94;
-    private static final int ROOM_SIZE_W = 96;
-    private static final int SETTINGS_X = ROW_W - 102;
-    private static final int ANCHOR_X = ROW_W - 82;
-    private static final int ENTER_X = ROW_W - 62;
+    private static final int ROOM_SIZE_W = 84;
+    /**
+     * Six pixels between the three controls and six to the row's edge, not two and four.
+     *
+     * <p>At two they read as one welded strip -- and the hover ring is drawn a pixel outside the
+     * control it belongs to, so lighting the swatch also drew a line down the side of the Anchor
+     * next to it. Each is now written from the one to its right, so moving the Enter button moves
+     * the row rather than leaving three constants to be re-added by hand.
+     */
+    private static final int GAP = 6;
     private static final int ENTER_W = 58;
+    private static final int ENTER_X = ROW_W - GAP - ENTER_W;
+    private static final int ANCHOR_X = ENTER_X - GAP - 18;
+    private static final int SETTINGS_X = ANCHOR_X - GAP - 18;
 
     // The settings window.
     private static final int WIN_W = 200;
@@ -105,14 +113,52 @@ class RoomsPage extends WorkbayPage {
     /** The scrollbar track down the right of the list, drawn only when there is more than fits. */
     private static final int SCROLLBAR_W = 6;
 
+    /**
+     * How many guests the window shows at once. Four rather than the biome list's six, so the
+     * GUESTS tab is the shorter of the two and the window never grows when you switch to it — a
+     * window that changes height under the cursor moves the tab you just pressed.
+     */
+    private static final int GUEST_ROWS = 4;
+
     /** Which room's settings window is open, or -1. Client-side and never sent anywhere. */
     private int open = -1;
+
+    /**
+     * Which half of the settings window is showing.
+     *
+     * <p>Two tabs rather than one long window. What a room <em>is</em> and who may be <em>in</em>
+     * it are two questions, and stacking both would make a window taller than the 240 the page
+     * itself is not allowed to exceed — a window that overflows the panel is a window with controls
+     * drawn outside the thing they belong to.
+     */
+    private enum Tab { ROOM, GUESTS }
+
+    private Tab tab = Tab.ROOM;
 
     /** First visible row of the biome list. Reset whenever the search narrows it. */
     private int scroll;
 
     /** The search text as of the last frame, so a change can reset the scroll. */
     private String lastQuery = "";
+
+    /**
+     * The biome scrollbar's track as it was last drawn, or -1 for "there is none".
+     *
+     * <p>Kept because a press has to find the bar <b>before</b> the hit list runs. The window's
+     * scrim is a full-page hit that closes it, and the bar was not a hit at all, so dragging the
+     * one control on the window that has to be dragged closed the window instead.
+     */
+    private int barX = -1;
+    private int barY;
+    private int barH;
+    private int barTotal;
+    private int barRows = BIOME_ROWS;
+
+    /**
+     * Where the pointer is while the knob is being dragged, or -1. Carried rather than read,
+     * because {@code mouseDragged} is handed deltas and never a position.
+     */
+    private double barAt = -1;
 
     RoomsPage(WorkbayScreen screen) {
         super(screen);
@@ -140,6 +186,10 @@ class RoomsPage extends WorkbayPage {
 
     @Override
     void render(GuiGraphics g, int mouseX, int mouseY) {
+        // Forgotten every frame and re-established by the window if it still draws one, so a bar
+        // that stopped existing -- the search narrowed the list, the window closed -- cannot leave
+        // a live rectangle behind for the next press to land in.
+        barX = -1;
         header(g, mouseX, mouseY, "ROOMS");
         ladder(g, mouseX, mouseY);
         rooms(g, mouseX, mouseY);
@@ -284,8 +334,10 @@ class RoomsPage extends WorkbayPage {
     /** Opening or closing the window, and the search field that belongs to it, in one place. */
     private void setOpen(int index) {
         open = index;
+        tab = Tab.ROOM;
         scroll = 0;
         lastQuery = "";
+        barAt = -1;
         if (index < 0) {
             screen.closeFilter();
         }
@@ -316,6 +368,52 @@ class RoomsPage extends WorkbayPage {
     }
 
     /**
+     * The knob, grabbed. Returning true here is the whole fix: the screen consults the page's press
+     * before its hit list, so this takes the click off the scrim that would otherwise close the
+     * window under the cursor. Anywhere on the track jumps the knob there first, which is what
+     * every scrollbar in the game does.
+     */
+    @Override
+    boolean mousePressed(double mouseX, double mouseY, int button) {
+        if (button != 0 || barX < 0 || mouseX < barX || mouseX >= barX + SCROLLBAR_W
+            || mouseY < barY || mouseY >= barY + barH) {
+            return false;
+        }
+        barAt = mouseY;
+        scrollToKnob();
+        return true;
+    }
+
+    @Override
+    boolean mouseDragged(double dragX, double dragY) {
+        if (barAt < 0) {
+            return false;
+        }
+        barAt += dragY;
+        scrollToKnob();
+        return true;
+    }
+
+    @Override
+    boolean mouseReleased(double mouseX, double mouseY) {
+        boolean was = barAt >= 0;
+        barAt = -1;
+        return was;
+    }
+
+    private int knobHeight() {
+        return Math.max(8, barH * barRows / Math.max(1, barTotal));
+    }
+
+    /** Puts the row under the knob's centre where the pointer is. */
+    private void scrollToKnob() {
+        int max = Math.max(0, barTotal - barRows);
+        int travel = Math.max(1, barH - knobHeight());
+        scroll = Math.clamp(
+            Math.round((barAt - barY - knobHeight() / 2.0) * max / travel), 0, max);
+    }
+
+    /**
      * One room's settings, over the page. <b>A window, not two cycle buttons.</b>
      *
      * <p>The cycle buttons were built first and were the wrong control twice over: the biome one
@@ -333,6 +431,9 @@ class RoomsPage extends WorkbayPage {
         }
         int rows = (RoomColour.values().length + SWATCHES_PER_ROW - 1) / SWATCHES_PER_ROW;
         int listH = BIOME_ROWS * BIOME_H + 2;
+        // The ROOM tab is the taller of the two, and both windows are drawn at that height: the
+        // tabs are at the top, so a window that shrank under the pointer would move the control
+        // that had just been clicked.
         int h = WIN_PAD * 2 + 12 + 10 + rows * SWATCH_PITCH + 8 + SEARCH_H + 2 + listH;
         int wx = x((WIDTH - WIN_W) / 2);
         int wy = y(Math.max(2, (height() - h) / 2));
@@ -358,7 +459,14 @@ class RoomsPage extends WorkbayPage {
         WBIcons.draw(g, WBIcons.CROSS, closeX + 1, closeY + 1, Draw.TEXT_DIM);
         screen.hit(closeX, closeY, 14, 14, () -> setOpen(-1),
             WorkbayScreen.gui("rooms.settings.close"));
+        windowTab(g, mouseX, mouseY, closeX - 32, closeY, WBIcons.DOOR, Tab.ROOM, "room");
+        windowTab(g, mouseX, mouseY, closeX - 16, closeY, WBIcons.GUEST, Tab.GUESTS, "guests");
         cursor += 12;
+
+        if (tab == Tab.GUESTS) {
+            guests(g, mouseX, mouseY, room, wx, cursor, h + wy - cursor - WIN_PAD);
+            return;
+        }
 
         Draw.text(g, screen.font(), WorkbayScreen.gui("rooms.colour.label").getString(),
             wx + WIN_PAD, cursor, WIN_W - WIN_PAD * 2, Draw.TEXT_DIM);
@@ -387,8 +495,14 @@ class RoomsPage extends WorkbayPage {
         // Label on the left of the line, search field on the right of it: one line for "what this
         // is" and "how to find one in it", which is the shape every long list in the genre uses.
         int searchX = wx + WIN_W - WIN_PAD - SEARCH_W;
+        int labelW = searchX - wx - WIN_PAD - 4;
         Draw.text(g, screen.font(), WorkbayScreen.gui("rooms.biome.label").getString(),
-            wx + WIN_PAD, cursor + 2, searchX - wx - WIN_PAD - 4, Draw.TEXT_DIM);
+            wx + WIN_PAD, cursor + 2, labelW, Draw.TEXT_DIM);
+        // The one place that says what a biome does to a room. It used to be on every row of the
+        // list; it belongs on the word the list is under, once. A no-op click, so the label also
+        // stops the scrim behind it from closing the window on a miss.
+        screen.hit(wx + WIN_PAD, cursor, labelW, SEARCH_H, () -> { },
+            WorkbayScreen.gui("rooms.biome.label"), WorkbayScreen.gui("rooms.biome.tip"));
         String query = screen.openFilter(searchX + 4, cursor + 2, SEARCH_W - 8, SEARCH_H - 2);
         Draw.slot(g, searchX, cursor, SEARCH_W, SEARCH_H);
         // The field is a real widget drawn by the screen, so the only thing needed here is a hit
@@ -432,25 +546,144 @@ class RoomsPage extends WorkbayPage {
             Draw.text(g, screen.font(), biomeName(id).getString(), bx + 5, by + 3, rowW - 10,
                 chosen ? Draw.TEXT : Draw.TEXT_DIM);
             long index = room.index();
-            // The name, not the id. Every other row on this page is titled by what it is called;
-            // this one alone said "minecraft:taiga" in bold over a list that had just drawn the
-            // word Taiga, which is the mod showing a player its own plumbing.
+            // No tooltip. The row is the name, so one over it repeats the word underneath it, and
+            // scanning a list of forty means forty of them opening and closing under the cursor.
+            // What the choice *means* is said once, on the label above the list, where it belongs.
             screen.hit(bx, by, rowW, BIOME_H,
-                () -> screen.sendText(WorkbayAction.SET_ROOM_BIOME, index, id),
-                biomeName(id), WorkbayScreen.gui("rooms.biome.tip"));
+                () -> screen.sendText(WorkbayAction.SET_ROOM_BIOME, index, id));
         }
         if (bar) {
-            // Six wide and drawn as two flat fills. At four, with a bevel on the knob, the whole
-            // bar was three pixels of edge and one of knob -- a sliver that read as a rendering
-            // seam down the side of the list rather than as something you could drag.
-            int trackX = wx + WIN_PAD + listW - 1 - SCROLLBAR_W;
-            int trackH = listH - 2;
-            g.fill(trackX, cursor + 1, trackX + SCROLLBAR_W, cursor + 1 + trackH, Draw.TUBE);
-            int knobH = Math.max(8, trackH * BIOME_ROWS / matches.size());
-            int knobY = cursor + 1
-                + (trackH - knobH) * scroll / Math.max(1, matches.size() - BIOME_ROWS);
-            g.fill(trackX + 1, knobY, trackX + SCROLLBAR_W - 1, knobY + knobH, Draw.EDGE_LIGHT);
+            scrollbar(g, wx + WIN_PAD + listW - 1 - SCROLLBAR_W, cursor + 1, listH - 2,
+                matches.size(), BIOME_ROWS);
         }
+    }
+
+    /**
+     * The one scrollbar this page has, wherever it is drawn. Six wide and two flat fills: at four,
+     * with a bevel on the knob, the whole bar was three pixels of edge and one of knob -- a sliver
+     * that read as a rendering seam down the side of the list rather than as something to drag.
+     *
+     * <p>Writing the track into the page's own fields is what makes it draggable at all; see
+     * {@link #mousePressed}.
+     */
+    private void scrollbar(GuiGraphics g, int trackX, int trackY, int trackH, int total, int shown) {
+        barX = trackX;
+        barY = trackY;
+        barH = trackH;
+        barTotal = total;
+        barRows = shown;
+        g.fill(barX, barY, barX + SCROLLBAR_W, barY + barH, Draw.TUBE);
+        int knobH = knobHeight();
+        int knobY = barY + (barH - knobH) * scroll / Math.max(1, total - shown);
+        g.fill(barX + 1, knobY, barX + SCROLLBAR_W - 1, knobY + knobH,
+            barAt >= 0 ? Draw.SELECT : Draw.EDGE_LIGHT);
+    }
+
+    /**
+     * Who may be in this room, and at what level. SPEC.md 8.
+     *
+     * <p><b>Per room, from that room's own window</b>, which is the whole shape of the rule: an
+     * invitation is to a room and never to the dimension, so there is deliberately no network-wide
+     * guest list anywhere in this mod for somebody to add a name to by mistake.
+     */
+    private void guests(GuiGraphics g, int mouseX, int mouseY, WorkbaySnapshot.Room room,
+        int wx, int top, int space) {
+        int cursor = top;
+        int plusX = wx + WIN_W - WIN_PAD - 14;
+        int fieldX = plusX - 2 - SEARCH_W;
+        int labelW = fieldX - wx - WIN_PAD - 4;
+        Draw.text(g, screen.font(), WorkbayScreen.gui("rooms.guests.label").getString(),
+            wx + WIN_PAD, cursor + 2, labelW, Draw.TEXT_DIM);
+        screen.hit(wx + WIN_PAD, cursor, labelW, SEARCH_H, () -> { },
+            WorkbayScreen.gui("rooms.guests.label"), WorkbayScreen.gui("rooms.guests.tip"));
+
+        // The same field the biome list uses, because a page owns one and a window shows one thing
+        // at a time. What it means changes with the tab; what it is does not.
+        String typed = screen.openFilter(fieldX + 4, cursor + 2, SEARCH_W - 8, SEARCH_H - 2);
+        Draw.slot(g, fieldX, cursor, SEARCH_W, SEARCH_H);
+        screen.hit(fieldX, cursor, SEARCH_W, SEARCH_H, screen::focusFilter);
+        if (typed.isEmpty()) {
+            Draw.text(g, screen.font(), WorkbayScreen.gui("rooms.guests.name").getString(),
+                fieldX + 4, cursor + 2, SEARCH_W - 8, Draw.TEXT_FAINT);
+        }
+        boolean canInvite = !typed.isBlank();
+        boolean plusHover = canInvite && screen.hovered(plusX, cursor - 1, 14, 14, mouseX, mouseY);
+        Draw.button(g, plusX, cursor - 1, 14, 14, plusHover, false, canInvite);
+        WBIcons.draw(g, WBIcons.PLUS, plusX + 1, cursor, canInvite ? Draw.TEXT : Draw.TEXT_FAINT);
+        int index = room.index();
+        screen.hit(plusX, cursor - 1, 14, 14, () -> {
+            if (canInvite) {
+                screen.sendText(WorkbayAction.INVITE_ROOM_GUEST, index, typed.strip());
+                screen.clearFilter();
+            }
+        }, WorkbayScreen.gui("rooms.guests.invite"), WorkbayScreen.gui("rooms.guests.invite.tip"));
+        cursor += SEARCH_H + 2;
+
+        int listW = WIN_W - WIN_PAD * 2;
+        int listH = Math.max(BIOME_H + 2, space - (cursor - top));
+        Draw.well(g, wx + WIN_PAD, cursor, listW, listH);
+        java.util.List<com.neryos.workbay.world.RoomRecord.Guest> list = room.guests();
+        boolean bar = list.size() > GUEST_ROWS;
+        int rowW = listW - 2 - (bar ? SCROLLBAR_W + 1 : 0);
+        scroll = Math.clamp(scroll, 0, Math.max(0, list.size() - GUEST_ROWS));
+        if (list.isEmpty()) {
+            Draw.text(g, screen.font(), WorkbayScreen.gui("rooms.guests.none").getString(),
+                wx + WIN_PAD + 5, cursor + 5, listW - 10, Draw.TEXT_FAINT);
+        }
+        for (int row = 0; row < GUEST_ROWS && scroll + row < list.size(); row++) {
+            int at = scroll + row;
+            com.neryos.workbay.world.RoomRecord.Guest guest = list.get(at);
+            int gx = wx + WIN_PAD + 1;
+            int gy = cursor + 1 + row * BIOME_H;
+            Draw.well(g, gx, gy, rowW, BIOME_H);
+            boolean builds = guest.level() == com.neryos.workbay.world.RoomGuest.BUILD;
+            Draw.text(g, screen.font(), guest.name(), gx + 4, gy + 3, rowW - 32, Draw.TEXT);
+            long packed = index | ((long) at << 16);
+            // The lock, not a new icon. "May not change anything" is exactly what a closed padlock
+            // says everywhere else in this screen, and the two levels are the two states it has.
+            int levelX = gx + rowW - 26;
+            boolean levelHover = screen.hovered(levelX, gy + 1, 11, 11, mouseX, mouseY);
+            Draw.button(g, levelX, gy + 1, 11, 11, levelHover, builds);
+            WBIcons.draw(g, builds ? WBIcons.UNLOCK : WBIcons.LOCK, levelX, gy,
+                builds ? Draw.GREEN : Draw.TEXT_DIM);
+            screen.hit(levelX, gy + 1, 11, 11,
+                () -> screen.send(WorkbayAction.CYCLE_ROOM_GUEST, packed),
+                WorkbayScreen.gui(builds ? "rooms.guest.build" : "rooms.guest.look"),
+                WorkbayScreen.gui(builds ? "rooms.guest.build.tip" : "rooms.guest.look.tip"));
+
+            int dropX = gx + rowW - 13;
+            boolean dropHover = screen.hovered(dropX, gy + 1, 11, 11, mouseX, mouseY);
+            Draw.button(g, dropX, gy + 1, 11, 11, dropHover, false);
+            WBIcons.draw(g, WBIcons.CROSS, dropX, gy, Draw.TEXT_DIM);
+            screen.hit(dropX, gy + 1, 11, 11,
+                () -> screen.send(WorkbayAction.REMOVE_ROOM_GUEST, packed),
+                WorkbayScreen.gui("rooms.guests.remove", guest.name()),
+                WorkbayScreen.gui("rooms.guests.remove.tip"));
+        }
+        if (bar) {
+            scrollbar(g, wx + WIN_PAD + listW - 1 - SCROLLBAR_W, cursor + 1, listH - 2,
+                list.size(), GUEST_ROWS);
+        }
+    }
+
+    /** One of the window's two tabs. Pressing the one you are on does nothing; it is not a toggle. */
+    private void windowTab(GuiGraphics g, int mouseX, int mouseY, int px, int py, String[] icon,
+        Tab target, String key) {
+        boolean here = tab == target;
+        boolean hover = screen.hovered(px, py, 14, 14, mouseX, mouseY);
+        Draw.button(g, px, py, 14, 14, hover, here);
+        WBIcons.draw(g, icon, px + 1, py + 1, here ? Draw.TEXT : Draw.TEXT_DIM);
+        screen.hit(px, py, 14, 14, () -> {
+            if (!here) {
+                tab = target;
+                scroll = 0;
+                lastQuery = "";
+                barAt = -1;
+                // The field means a different thing on each tab, so what was typed for one must
+                // not be sitting in it as the other's first move.
+                screen.clearFilter();
+            }
+        }, WorkbayScreen.gui("rooms.tab." + key), WorkbayScreen.gui("rooms.tab." + key + ".tip"));
     }
 
     /**

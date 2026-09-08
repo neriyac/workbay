@@ -226,6 +226,12 @@ public class WorkbayMenu extends AbstractContainerMenu {
                 text.orElse(""));
             case SET_ROOM_COLOUR -> setRoomColour(serverPlayer, record, (int) (arg & 0xFFFF),
                 (int) (arg >> 16));
+            case INVITE_ROOM_GUEST -> inviteGuest(serverPlayer, record, (int) arg,
+                text.orElse("").strip());
+            case CYCLE_ROOM_GUEST -> editGuest(serverPlayer, record, (int) (arg & 0xFFFF),
+                (int) (arg >> 16), true);
+            case REMOVE_ROOM_GUEST -> editGuest(serverPlayer, record, (int) (arg & 0xFFFF),
+                (int) (arg >> 16), false);
             case ENTER_BAY -> {
                 // The screen where the player stands first, and the trip only if that cannot
                 // happen: a host with the mixins off (SPEC.md §0), a client with them off (arg),
@@ -624,6 +630,80 @@ public class WorkbayMenu extends AbstractContainerMenu {
     }
 
     /**
+     * Invites a player into one room, by the name they are known by.
+     *
+     * <p><b>Only the owner may.</b> Same guard as the Anchor and the colour, and for a stronger
+     * reason: this one hands somebody else the key. An invitation starts at
+     * {@link com.neryos.workbay.world.RoomGuest#LOOK} because the safe end of a two-level ring is
+     * the one an accidental click lands on.
+     *
+     * <p>The name is resolved against the players who are online and then against the profile
+     * cache, which is what a whitelist command does. Somebody this server has never seen cannot be
+     * invited, and the refusal says so rather than adding a guest with an id made up on the spot.
+     */
+    private void inviteGuest(ServerPlayer serverPlayer, WorkbayRecord record, int index,
+        String name) {
+        if (!record.owner().equals(serverPlayer.getUUID())) {
+            serverPlayer.displayClientMessage(com.neryos.workbay.WorkbayLang.message("locked"), true);
+            return;
+        }
+        if (name.isEmpty()) {
+            return;
+        }
+        com.neryos.workbay.world.RoomRegistry registry =
+            com.neryos.workbay.world.RoomRegistry.get(serverPlayer.server);
+        List<com.neryos.workbay.world.RoomRecord> rooms = registry.roomsOf(record);
+        if (index < 0 || index >= rooms.size()) {
+            return;
+        }
+        ServerPlayer online = serverPlayer.server.getPlayerList().getPlayerByName(name);
+        java.util.Optional<com.mojang.authlib.GameProfile> profile = online != null
+            ? java.util.Optional.of(online.getGameProfile())
+            : serverPlayer.server.getProfileCache() == null
+                ? java.util.Optional.empty()
+                : serverPlayer.server.getProfileCache().get(name);
+        if (profile.isEmpty()) {
+            serverPlayer.displayClientMessage(
+                com.neryos.workbay.WorkbayLang.message("guest_unknown", name), true);
+            return;
+        }
+        if (profile.get().getId().equals(record.owner())) {
+            serverPlayer.displayClientMessage(
+                com.neryos.workbay.WorkbayLang.message("guest_is_owner"), true);
+            return;
+        }
+        registry.putRoom(rooms.get(index).withGuest(profile.get().getId(), profile.get().getName(),
+            com.neryos.workbay.world.RoomGuest.LOOK));
+    }
+
+    /**
+     * Steps a guest's level, or takes the invitation away. One method for both because the two
+     * differ by one line and share the whole of the lookup -- which room, which guest, and whether
+     * the person clicking owns it.
+     */
+    private void editGuest(ServerPlayer serverPlayer, WorkbayRecord record, int index,
+        int guest, boolean step) {
+        if (!record.owner().equals(serverPlayer.getUUID())) {
+            serverPlayer.displayClientMessage(com.neryos.workbay.WorkbayLang.message("locked"), true);
+            return;
+        }
+        com.neryos.workbay.world.RoomRegistry registry =
+            com.neryos.workbay.world.RoomRegistry.get(serverPlayer.server);
+        List<com.neryos.workbay.world.RoomRecord> rooms = registry.roomsOf(record);
+        if (index < 0 || index >= rooms.size()) {
+            return;
+        }
+        com.neryos.workbay.world.RoomRecord room = rooms.get(index);
+        if (guest < 0 || guest >= room.guests().size()) {
+            return;
+        }
+        com.neryos.workbay.world.RoomRecord.Guest who = room.guests().get(guest);
+        registry.putRoom(step
+            ? room.withGuest(who.id(), who.name(), who.level().step())
+            : room.withoutGuest(who.id()));
+    }
+
+    /**
      * Steps one room's biome and writes it over the room's chunks. Only a built room has chunks to
      * write, which is also why the button is only drawn on one — an unopened room has no record to
      * remember the choice on (SPEC.md §8 spends the region on first entry).
@@ -782,7 +862,8 @@ public class WorkbayMenu extends AbstractContainerMenu {
                 backfill.add(link.withTargetBlock(block));
             }
             links.add(new WorkbaySnapshot.Link(link, workbay.busStatus(link.id()), block,
-                link.internal() ? Optional.of(currentTargetBay(record, link)) : Optional.empty()));
+                link.internal() ? Optional.of(currentTargetBay(record, link)) : Optional.empty(),
+                roomOf(player, record, link)));
         }
         // After the loop, not inside it: addBus rewrites the record's list, and one write per link
         // that has something to learn is still nothing next to a write per poll.
@@ -816,7 +897,8 @@ public class WorkbayMenu extends AbstractContainerMenu {
                 room != null && room.built(),
                 room != null && room.anchored(),
                 room == null ? "" : room.effectiveBiome().location().toString(),
-                room == null ? com.neryos.workbay.content.room.RoomColour.DEFAULT : room.colour()));
+                room == null ? com.neryos.workbay.content.room.RoomColour.DEFAULT : room.colour(),
+                room == null ? List.of() : room.guests()));
         }
         return out;
     }
@@ -895,6 +977,32 @@ public class WorkbayMenu extends AbstractContainerMenu {
         }
         return Optional.ofNullable(
             BuiltInRegistries.BLOCK.getKey(level.getBlockState(link.target().pos()).getBlock()));
+    }
+
+    /**
+     * Which of this network's rooms a link's Connector stands in, by name.
+     *
+     * <p>Only this network's own rooms are consulted, and only the {@link com.neryos.workbay.bus.BusConfig#connector()}
+     * end: a Connector is paired to exactly one Workbay and one bay, so a link into a room can only
+     * ever be a link into a room of the network that owns it. Nothing here can name somebody
+     * else's room, which is what makes this safe to send to a client.
+     */
+    private static Optional<Integer> roomOf(ServerPlayer player, WorkbayRecord record,
+        BusConfig link) {
+        if (record.rooms().isEmpty()
+            || !link.connector().dimension().equals(WorkbayDimensions.BACKSHOP)) {
+            return Optional.empty();
+        }
+        java.util.List<com.neryos.workbay.world.RoomRecord> rooms =
+            RoomRegistry.get(player.server).roomsOf(record);
+        for (int index = 0; index < rooms.size(); index++) {
+            com.neryos.workbay.world.RoomRecord room = rooms.get(index);
+            if (room.built() && com.neryos.workbay.world.RoomGeometry.inside(
+                link.connector().pos(), room.region(), room.builtTier())) {
+                return Optional.of(index);
+            }
+        }
+        return Optional.empty();
     }
 
     /**

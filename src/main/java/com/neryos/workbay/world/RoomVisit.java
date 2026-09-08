@@ -65,6 +65,43 @@ public final class RoomVisit {
             : java.util.Optional.empty();
     }
 
+    // ------------------------------------------------------------- permission
+
+    /**
+     * Who may be in a room. SPEC.md 8.
+     *
+     * <p><b>The owner, and whoever the owner invited to that room.</b> Nothing else, including an
+     * operator: an op who wants in can invite themselves from the screen, and a silent exception
+     * here would be a rule that is true until it is not.
+     *
+     * <p>An orphaned room -- one no Workbay record lists any more -- has no owner and therefore
+     * admits nobody, which is the right answer: there is no screen anywhere that could invite you
+     * to it.
+     */
+    public static boolean mayEnter(RoomRegistry registry, UUID player, RoomRecord room) {
+        return registry.ownerOf(room).map(owner -> owner.equals(player)).orElse(false)
+            || room.guestLevel(player).isPresent();
+    }
+
+    /** May change what is in here: the owner, or a guest invited at {@link RoomGuest#BUILD}. */
+    public static boolean mayBuild(RoomRegistry registry, UUID player, RoomRecord room) {
+        return registry.ownerOf(room).map(owner -> owner.equals(player)).orElse(false)
+            || room.guestLevel(player).filter(level -> level == RoomGuest.BUILD).isPresent();
+    }
+
+    /** True when this player may still be standing where they are. Used on login and every tick. */
+    public static boolean mayStay(ServerPlayer player) {
+        if (!isInside(player)) {
+            return false;
+        }
+        RoomRegistry registry = RoomRegistry.get(player.server);
+        RoomRecord room = registry
+            .room(player.getData(WBAttachments.ROOM_RETURN.get()).room()).orElse(null);
+        return room != null
+            && RoomGeometry.inside(player.blockPosition(), room.region(), room.builtTier())
+            && mayEnter(registry, player.getUUID(), room);
+    }
+
     /**
      * Sends a player into one of their network's rooms, building or growing it first.
      *
@@ -79,6 +116,14 @@ public final class RoomVisit {
         RoomRegistry registry = RoomRegistry.get(player.server);
         RoomRecord room = roomSlot(registry, record, index);
         if (room == null) {
+            return false;
+        }
+        // A Workbay is a block anybody may right-click, and until this line ENTER_ROOM was the one
+        // action on the screen with no owner check on it at all -- not even the lock. Standing at
+        // somebody's Workbay was standing in every room they own.
+        if (!mayEnter(registry, player.getUUID(), room)) {
+            player.displayClientMessage(
+                com.neryos.workbay.WorkbayLang.message("room_not_yours"), true);
             return false;
         }
         // Every entry re-checks the size, because a Frame installed while nobody was in here has
@@ -167,9 +212,66 @@ public final class RoomVisit {
         if (backshop == null || room == null) {
             return;
         }
+        // Removed from the room while they were offline: they must not wake up in it. Checked
+        // before the shell is repaired, because repairing a room for somebody who is about to be
+        // put out of it is work done for nobody.
+        if (!mayEnter(registry, player.getUUID(), room)) {
+            leave(player);
+            return;
+        }
         RoomRecord fixed = RoomBuilder.ensure(backshop, room, room.builtTier());
         if (fixed != room) {
             registry.putRoom(fixed);
+        }
+    }
+
+    // ----------------------------------------------------------- block guards
+
+    /**
+     * What a {@link RoomGuest#LOOK} guest may not do: break a block, place one, or right-click one.
+     *
+     * <p>The third is on the list on purpose. Opening a chest does not change a block and does
+     * change what is in it, which is the whole of what a room in a chain holds -- a level that let
+     * a guest empty every barrel in the room would be "look only" in name.
+     *
+     * <p>Scoped to a room's own interior. Everything else in the Backshop is void with a bedrock
+     * floor that {@link BayVisit} already refuses to let anybody stand on.
+     */
+    private static boolean refused(net.minecraft.world.entity.Entity who,
+        net.minecraft.core.BlockPos where) {
+        if (!(who instanceof ServerPlayer player)
+            || !player.level().dimension().equals(WorkbayDimensions.BACKSHOP)) {
+            return false;
+        }
+        RoomRegistry registry = RoomRegistry.get(player.server);
+        RoomRecord room = registry.roomAt(where).orElse(null);
+        if (room == null || mayBuild(registry, player.getUUID(), room)) {
+            return false;
+        }
+        player.displayClientMessage(com.neryos.workbay.WorkbayLang.message("room_look_only"), true);
+        return true;
+    }
+
+    @SubscribeEvent
+    public static void onBreak(net.neoforged.neoforge.event.level.BlockEvent.BreakEvent event) {
+        if (refused(event.getPlayer(), event.getPos())) {
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onPlace(
+        net.neoforged.neoforge.event.level.BlockEvent.EntityPlaceEvent event) {
+        if (refused(event.getEntity(), event.getPos())) {
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onRightClick(
+        net.neoforged.neoforge.event.entity.player.PlayerInteractEvent.RightClickBlock event) {
+        if (refused(event.getEntity(), event.getPos())) {
+            event.setCanceled(true);
         }
     }
 
@@ -191,9 +293,11 @@ public final class RoomVisit {
             player.removeData(WBAttachments.ROOM_RETURN.get());
             return;
         }
-        RoomRecord room = RoomRegistry.get(player.server)
-            .room(player.getData(WBAttachments.ROOM_RETURN.get()).room()).orElse(null);
-        if (room == null || !RoomGeometry.inside(player.blockPosition(), room.region(), room.builtTier())) {
+        // Inside the bounds of the room they were sent to, and still allowed in it. Regions are
+        // 512 blocks apart, which is nothing to somebody who has just launched himself upward with
+        // an item from another mod -- and being un-invited while standing in a room has to take
+        // effect where the player is, not the next time they ask to come in.
+        if (!mayStay(player)) {
             leave(player);
         }
     }
