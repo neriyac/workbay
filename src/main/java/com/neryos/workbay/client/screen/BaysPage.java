@@ -229,11 +229,11 @@ class BaysPage extends WorkbayPage {
         String problemText = WorkbayScreen.gui(problems == 0 ? "count.problems.none"
             : problems == 1 ? "count.problems.one" : "count.problems", problems).getString();
         boolean problemHover = problems > 0
-            && screen.hovered(cursor, y(29), font.width(problemText) + 2, 12, mouseX, mouseY);
+            && screen.hovered(cursor, y(29), Draw.width(font, problemText) + 2, 12, mouseX, mouseY);
         text(g, problemText, cursor, y(31), limit - cursor,
             problems == 0 ? Draw.TEXT_FAINT : problemHover ? Draw.TEXT : Draw.RED);
         if (problems > 0) {
-            screen.hit(cursor, y(29), font.width(problemText) + 2, 12, () -> {
+            screen.hit(cursor, y(29), Draw.width(font, problemText) + 2, 12, () -> {
                 filter = Filter.PROBLEMS;
                 adding = false;
                 scroll = 0;
@@ -427,7 +427,7 @@ class BaysPage extends WorkbayPage {
             // pixels under a Mekanism cube's "0 / 1600.0k" - invisible while an empty bar was black
             // inside, and plain the moment the empty part got its tint.
             String power = Draw.compact(bay.energy()) + " / " + Draw.compact(bay.energyCapacity());
-            int barW = Math.max(20, FACES_X - 4 - font.width(power) - 6 - 98);
+            int barW = Math.max(20, FACES_X - 4 - Draw.width(font, power) - 6 - 98);
             Draw.bar(g, x(98), y(68), barW, 9, bay.energy(), bay.energyCapacity(), Draw.ENERGY);
             textRight(g, power, x(FACES_X - 4), y(69), room - barW - 6, Draw.TEXT_DIM);
             screen.hit(x(98), y(68), barW, 9, () -> { },
@@ -445,7 +445,7 @@ class BaysPage extends WorkbayPage {
         // through the status text. The long form is the button's tooltip title.
         String mode = bay.redstone() == com.neryos.workbay.world.RedstoneMode.ALWAYS ? ""
             : WorkbayScreen.gui("redstone.short." + bay.redstone().getSerializedName()).getString();
-        int modeRoom = mode.isEmpty() ? 0 : Math.min(font.width(mode), room / 2);
+        int modeRoom = mode.isEmpty() ? 0 : Math.min(Draw.width(font, mode), room / 2);
         if (!mode.isEmpty()) {
             textRight(g, mode, x(FACES_X - 4), y(82), modeRoom, Draw.TEXT_DIM);
         }
@@ -535,7 +535,7 @@ class BaysPage extends WorkbayPage {
                 com.neryos.workbay.content.assay.AssayBlock.itemsPerLevy());
         text(g, state, x(50), y(136), LEVY_W, earning ? Draw.TEXT_DIM : Draw.TEXT_FAINT);
 
-        int w = Math.min(LEVY_W, Math.max(font.width(value), font.width(state.getString()))) + 4;
+        int w = Math.min(LEVY_W, Math.max(Draw.width(font, value), Draw.width(font, state.getString()))) + 4;
         screen.hit(x(48), y(122), w, 26, () -> { },
             WorkbayScreen.gui("levy.name", snap.levy()),
             WorkbayScreen.gui(earning ? "levy.tip" : assay ? "levy.dial_off.tip" : "levy.no_assay.tip"));
@@ -801,7 +801,7 @@ class BaysPage extends WorkbayPage {
             : WorkbayScreen.gui("skim.no_assay.short").getString();
         text(g, rate, x(LIST_X + 120), y(linksY + 5), SKIM_W,
             skimming(snap) ? Draw.AMBER : Draw.TEXT_FAINT);
-        screen.hit(x(LIST_X + 118), y(linksY + 2), Math.min(SKIM_W, font.width(rate)) + 4, 14, () -> { },
+        screen.hit(x(LIST_X + 118), y(linksY + 2), Math.min(SKIM_W, Draw.width(font, rate)) + 4, 14, () -> { },
             assay || snap.skimRate() == 0
                 ? WorkbayScreen.gui("skim.name", snap.skimRate())
                 : WorkbayScreen.gui("skim.no_assay"),
@@ -945,7 +945,7 @@ class BaysPage extends WorkbayPage {
         boolean taxed = skimming(snapshot()) && config.resource() == BusConfig.Resource.ITEM;
         String cut = taxed
             ? WorkbayScreen.gui("skim.row", snapshot().skimRate()).getString() : "";
-        int cutW = taxed ? Math.min(font.width(cut), 22) : 0;
+        int cutW = taxed ? Math.min(Draw.width(font, cut), 22) : 0;
         if (taxed) {
             textRight(g, cut, px + 138, py + 5, cutW, Draw.AMBER);
             screen.hit(px + 138 - cutW, py + 3, cutW, 12, () -> { },

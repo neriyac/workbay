@@ -66,6 +66,80 @@ public final class Draw {
     public static final int ENERGY = 0xFF3BFB98;
     public static final int SELECT = 0xFF5AA9E6;
 
+
+    // -------------------------------------------------------------- shapes
+
+    /**
+     * <b>The rounded, shaded panel this mod is not made of, drawn without a library.</b>
+     *
+     * <p>Everything below exists to answer one question honestly: what can be drawn from
+     * {@code GuiGraphics#fill} alone, given that every shape on these screens already comes through
+     * this file. The answer is more than it looks - a filled rectangle can be one pixel tall, so a
+     * gradient is a loop over rows, and a corner is that loop with an inset. Anti-aliasing is the
+     * fractional part of the inset, drawn as one dimmer pixel at each end of the row.
+     *
+     * <p>The cost is not the code. It is that this is a second visual language living beside the
+     * game's, and every vanilla widget the screen still borrows - the EditBox, the tooltip frame,
+     * the item sprite - stays square-cornered and flat beside it.
+     */
+    public static void round(GuiGraphics g, int x, int y, int w, int h, int r, int top, int bottom) {
+        round(g, x, y, w, h, r, r, top, bottom);
+    }
+
+    /** The same, with the top and bottom corners rounded by different amounts. */
+    public static void round(GuiGraphics g, int x, int y, int w, int h, int topR, int bottomR,
+        int top, int bottom) {
+        for (int row = 0; row < h; row++) {
+            int colour = mix(top, bottom, h <= 1 ? 0 : (float) row / (h - 1));
+            double inset = 0;
+            int r = row < topR ? topR : bottomR;
+            int from = row < topR ? topR - row : row >= h - bottomR ? bottomR - (h - 1 - row) : 0;
+            if (from > 0) {
+                double dy = from - 0.5;
+                inset = r - Math.sqrt(Math.max(0, (double) r * r - dy * dy));
+            }
+            int whole = (int) inset;
+            float fringe = (float) (inset - whole);
+            g.fill(x + whole, y + row, x + w - whole, y + row + 1, colour);
+            if (fringe > 0) {
+                int soft = alpha(colour, 1 - fringe);
+                g.fill(x + whole - 1, y + row, x + whole, y + row + 1, soft);
+                g.fill(x + w - whole, y + row, x + w - whole + 1, y + row + 1, soft);
+            }
+        }
+    }
+
+    /** One flat colour in a rounded box. */
+    public static void round(GuiGraphics g, int x, int y, int w, int h, int r, int colour) {
+        round(g, x, y, w, h, r, colour, colour);
+    }
+
+    /**
+     * The soft edge around a rounded shape: three rings, each dimmer and one pixel further out.
+     * A drop shadow is what stops a rounded panel reading as a hole cut in the world behind it.
+     */
+    public static void shadow(GuiGraphics g, int x, int y, int w, int h, int r) {
+        for (int ring = 3; ring >= 1; ring--) {
+            round(g, x - ring, y - ring + 1, w + ring * 2, h + ring * 2, r + ring, 0x22000000);
+        }
+    }
+
+    /** Linear blend of two ARGB colours, channel by channel. */
+    public static int mix(int from, int to, float t) {
+        int out = 0;
+        for (int shift = 0; shift < 32; shift += 8) {
+            int a = from >>> shift & 0xFF;
+            int b = to >>> shift & 0xFF;
+            out |= (int) (a + (b - a) * t) << shift;
+        }
+        return out;
+    }
+
+    /** The same colour with its alpha scaled. */
+    public static int alpha(int argb, float scale) {
+        return (argb & 0x00FFFFFF) | ((int) ((argb >>> 24) * Math.clamp(scale, 0F, 1F)) << 24);
+    }
+
     /**
      * The one helper SPEC.md §7 asks for. Raised puts the light edge top-left, sunken flips it;
      * that single difference is what separates a button from a slot at a glance.
@@ -84,16 +158,54 @@ public final class Draw {
         g.fill(x + w - 1, y, x + w, y + h, bottomRight);
     }
 
-    /** A raised panel: mid fill, light top-left edge, dark bottom-right. */
+    /** How round. One number, so nothing on the screen is rounder than anything else. */
+    private static final int RADIUS = 6;
+
+    public static final int PANEL_TOP = 0xFF32363E;
+    public static final int PANEL_BOTTOM = 0xFF22252B;
+
+    /** The window: a drop shadow, a vertical gradient in a rounded box, and a hairline rim. */
     public static void panel(GuiGraphics g, int x, int y, int w, int h) {
-        g.fill(x, y, x + w, y + h, PANEL);
-        bevel(g, x, y, w, h, true);
+        shadow(g, x, y, w, h, RADIUS);
+        round(g, x, y, w, h, RADIUS, PANEL_TOP, PANEL_BOTTOM);
+        rim(g, x, y, w, h, RADIUS, 0x30FFFFFF, 0x50000000);
     }
 
-    /** A sunken well: the opposite bevel, for anything content sits inside. */
+
+    /**
+     * The chrome band across the top of a page: rounded where the window is, square where the
+     * content begins. It moved here from the page the moment the window grew corners - a square
+     * strip drawn a pixel inside a rounded panel pokes out of it at all four of them.
+     */
+    public static void band(GuiGraphics g, int x, int y, int w, int h) {
+        round(g, x, y, w, h, RADIUS - 1, 0, 0xFF2B3038, 0xFF232730);
+        g.fill(x, y + h - 1, x + w, y + h, 0x50000000);
+    }
+
+    /** A sunken well: darker, rounded, with the rim inverted so it reads as a recess. */
     public static void well(GuiGraphics g, int x, int y, int w, int h) {
-        g.fill(x, y, x + w, y + h, WELL);
-        bevel(g, x, y, w, h, false);
+        round(g, x, y, w, h, 3, mix(WELL, 0xFF000000, 0.15F), WELL);
+        rim(g, x, y, w, h, 3, 0x30000000, 0x18FFFFFF);
+    }
+
+    /**
+     * A one-pixel rim on a rounded box: lit along the top, shaded along the bottom. Drawn as the
+     * ends of the same rows the fill uses rather than as four lines, because a rounded shape has
+     * no corners for four lines to meet in.
+     */
+    private static void rim(GuiGraphics g, int x, int y, int w, int h, int r, int top, int bottom) {
+        for (int row = 0; row < h; row++) {
+            int from = row < r ? r - row : row >= h - r ? r - (h - 1 - row) : 0;
+            double inset = from > 0
+                ? r - Math.sqrt(Math.max(0, (double) r * r - (from - 0.5) * (from - 0.5))) : 0;
+            int whole = (int) inset;
+            int colour = mix(top, bottom, h <= 1 ? 0 : (float) row / (h - 1));
+            g.fill(x + whole, y + row, x + whole + 1, y + row + 1, colour);
+            g.fill(x + w - whole - 1, y + row, x + w - whole, y + row + 1, colour);
+            if (row == 0 || row == h - 1) {
+                g.fill(x + whole, y + row, x + w - whole, y + row + 1, colour);
+            }
+        }
     }
 
     /**
@@ -101,10 +213,9 @@ public final class Draw {
      * treatment of every inventory cell, and the reason an empty one still reads as a slot.
      */
     public static void slot(GuiGraphics g, int x, int y, int w, int h) {
-        g.fill(x, y, x + w, y + h, SLOT);
-        bevel(g, x, y, w, h, false);
-        g.fill(x + 1, y + 1, x + w - 1, y + 2, 0x33000000);
-        g.fill(x + 1, y + 1, x + 2, y + h - 1, 0x33000000);
+        int r = Math.min(3, Math.min(w, h) / 4);
+        round(g, x, y, w, h, r, mix(SLOT, 0xFF000000, 0.25F), SLOT);
+        rim(g, x, y, w, h, r, 0x40000000, 0x1AFFFFFF);
     }
 
     /**
@@ -125,13 +236,19 @@ public final class Draw {
      */
     public static void button(GuiGraphics g, int x, int y, int w, int h, boolean hovered,
         boolean active, boolean enabled) {
+        int r = Math.min(4, Math.min(w, h) / 4);
         if (!enabled) {
-            g.fill(x, y, x + w, y + h, 0xFF24272C);
-            bevel(g, x, y, w, h, false, 0xFF34383F, EDGE_DARK);
+            round(g, x, y, w, h, r, 0xFF2A2D33, 0xFF23262B);
+            rim(g, x, y, w, h, r, 0x18FFFFFF, 0x30000000);
             return;
         }
-        g.fill(x, y, x + w, y + h, active ? EDGE_LIGHT : hovered ? PANEL_LIGHT : PANEL);
-        bevel(g, x, y, w, h, true, hovered ? SELECT : EDGE_LIGHT, EDGE_DARK);
+        // Hover is a fade, not a swap. Keyed on where the button is, which is the only identity a
+        // control drawn from coordinates has.
+        float lit = approach("btn:" + x + "," + y, hovered ? 1F : 0F, 16.0F);
+        int top = active ? 0xFF5C87B8 : mix(0xFF3B4048, 0xFF4E5560, lit);
+        int bottom = active ? 0xFF3F5F84 : mix(0xFF2B2E35, 0xFF383C44, lit);
+        round(g, x, y, w, h, r, top, bottom);
+        rim(g, x, y, w, h, r, mix(0x40FFFFFF, alpha(SELECT, 0.9F), lit), 0x50000000);
     }
 
     /**
@@ -147,34 +264,23 @@ public final class Draw {
      * that is nearly empty is distinguishable from one that is empty.
      */
     public static void bar(GuiGraphics g, int x, int y, int w, int h, int value, int max, int argb) {
-        slot(g, x, y, w, h);
-        // The empty channel is the gauge's dark tube with a *breath* of the bar's colour over it,
-        // not a fifth of it. At a fifth, ninety-six pixels of empty channel is a solid green block
-        // sitting above the words "0 / 100.0k FE" and reads as a full battery -- which is exactly
-        // how the upgrades page photographed. The graduations below are what keep an empty tube
-        // reading as a container, which is the job the tint was doing badly.
-        g.fill(x + 1, y + 1, x + w - 1, y + h - 1, TUBE);
-        g.fill(x + 1, y + 1, x + w - 1, y + h - 1, (argb & 0x00FFFFFF) | 0x18000000);
-        // Quarter marks, and the vertical twin's reason for them: an empty channel tinted with the
-        // bar's own colour is the same hue as a full one, and at forty pixels the two told apart
-        // only by brightness. A bar with a scale on it is a scale whatever is in it -- the header's
-        // power bar read as *full* beside the words "0 / 100.0k" until this went in.
+        int r = Math.min(4, h / 2);
+        round(g, x, y, w, h, r, mix(TUBE, 0xFF000000, 0.4F), TUBE);
+        rim(g, x, y, w, h, r, 0x40000000, 0x14FFFFFF);
         for (int mark = 1; mark < 4; mark++) {
             int mx = x + 1 + (w - 2) * mark / 4;
-            g.fill(mx, y + 1, mx + 1, y + h - 1, GRADUATION);
+            g.fill(mx, y + 2, mx + 1, y + h - 2, GRADUATION);
         }
         if (max <= 0 || value <= 0) {
             return;
         }
-        // Animated, not jumped: an energy bar that snaps between two readings every twenty ticks
-        // reads as a rendering fault, and a bar that slides reads as a level. Keyed on where it is
-        // drawn, which is the only identity a bar has here.
         int target = (int) ((long) (w - 2) * Math.min(value, max) / max);
-        int filled = Math.max(1, Math.round(approach("bar:" + x + "," + y, target, 9.0F)));
-        g.fill(x + 1, y + 1, x + 1 + filled, y + h - 1, argb);
-        // The line down the leading edge, exactly what gauge() puts along its surface: two pixels
-        // of content read as a level rather than as an edge of the tube.
-        g.fill(x + filled, y + 1, x + 1 + filled, y + h - 1, SURFACE);
+        int filled = Math.max(2, Math.round(approach("bar:" + x + "," + y, target, 9.0F)));
+        // A gradient down the fill and a lit line along the top of it: the two things that make a
+        // flat colour read as something with a volume rather than as a coloured rectangle.
+        round(g, x + 1, y + 1, filled, h - 2, Math.max(1, r - 1),
+            mix(argb, 0xFFFFFFFF, 0.35F), mix(argb, 0xFF000000, 0.25F));
+        g.fill(x + 1 + filled - 1, y + 1, x + 1 + filled, y + h - 1, alpha(0xFFFFFFFF, 0.75F));
     }
 
     /**
@@ -417,7 +523,7 @@ public final class Draw {
     /** Right-aligned: the box ends at {@code rightX}, and a cut string still starts inside it. */
     public static boolean textRight(GuiGraphics g, Font font, String s, int rightX, int py,
         int room, int colour) {
-        return draw(g, font, s, rightX - room, rightX - Math.min(room, font.width(s)), py, room,
+        return draw(g, font, s, rightX - room, rightX - Math.min(room, width(font, s)), py, room,
             colour);
     }
 
@@ -425,7 +531,7 @@ public final class Draw {
     public static boolean textCentre(GuiGraphics g, Font font, String s, int centreX, int py,
         int room, int colour) {
         return draw(g, font, s, centreX - room / 2,
-            centreX - Math.min(room, font.width(s)) / 2, py, room, colour);
+            centreX - Math.min(room, width(font, s)) / 2, py, room, colour);
     }
 
     /**
@@ -437,12 +543,55 @@ public final class Draw {
      */
     private static boolean draw(GuiGraphics g, Font font, String s, int boxX, int textX, int py,
         int room, int colour) {
-        boolean fits = font.width(s) <= room;
-        g.drawString(font, fits ? s
-            : font.plainSubstrByWidth(s, Math.max(0, room - font.width(ELLIPSIS))) + ELLIPSIS,
+        boolean fits = width(font, s) <= room;
+        g.drawString(font, styled(fits ? s : cut(font, s, room)).getVisualOrderText(),
             textX, py, colour, false);
         box(g, boxX, py, room, font.lineHeight, fits);
         return fits;
+    }
+
+    /**
+     * <b>This mod's own typeface, and the whole of what it took to get one.</b>
+     *
+     * <p>Minecraft has shipped a TrueType glyph provider since 1.13: a font is a resource like any
+     * other, {@code assets/workbay/font/ui.json} names a {@code .ttf} and an oversample, and the
+     * game bakes antialiased glyphs from it at load. Nothing is patched and no library is needed.
+     * A string is drawn in it by carrying the font on its {@code Style}, which is why this had to
+     * be here and nowhere else - every string in the mod already comes through this method, so the
+     * whole screen changed face for the price of one wrapper.
+     *
+     * <p>What it does <em>not</em> buy: vanilla's own widgets. The rename box, the search box and
+     * every tooltip frame the game draws for us are still in the bitmap font, so a screen that
+     * switches typeface switches only the half of itself this file draws.
+     */
+    public static final net.minecraft.resources.ResourceLocation UI_FONT =
+        net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("workbay", "ui");
+
+    private static Component styled(String s) {
+        return Component.literal(s).withStyle(style -> style.withFont(UI_FONT));
+    }
+
+    /**
+     * How wide a string is <em>in the font it will be drawn in</em>. Public because the pages do
+     * their own packing off it, and a layout measured in one font and drawn in another is a layout
+     * that is wrong everywhere at once.
+     */
+    public static int width(Font font, String s) {
+        return font.width(styled(s));
+    }
+
+    /**
+     * The longest head of a string that fits, plus the ellipsis. Vanilla's
+     * {@code plainSubstrByWidth} measures in the default font and would cut in the wrong place, so
+     * the cut is walked instead - once, on a string that did not fit, which is rare and short.
+     */
+    private static String cut(Font font, String s, int room) {
+        int fit = Math.max(0, room - width(font, ELLIPSIS));
+        int end = s.length();
+        while (end > 0 && width(font, s.substring(0, end)) > fit) {
+            end--;
+        }
+        return s.substring(0, end) + ELLIPSIS;
     }
 
     /**
@@ -452,7 +601,8 @@ public final class Draw {
      */
     public static void wrapped(GuiGraphics g, Font font, Component text, int px, int py, int room,
         int colour) {
-        List<net.minecraft.util.FormattedCharSequence> lines = font.split(text, room);
+        List<net.minecraft.util.FormattedCharSequence> lines =
+            font.split(text.copy().withStyle(style -> style.withFont(UI_FONT)), room);
         for (int i = 0; i < lines.size(); i++) {
             g.drawString(font, lines.get(i), px, py + i * 10, colour, false);
             box(g, px, py + i * 10, room, font.lineHeight, true);
@@ -477,7 +627,8 @@ public final class Draw {
             Component line = i == 0
                 ? lines.get(0).copy().withStyle(style -> style.withBold(true))
                 : lines.get(i);
-            wrapped.addAll(font.split(line, TOOLTIP_WIDTH));
+            wrapped.addAll(font.split(line.copy().withStyle(style -> style.withFont(UI_FONT)),
+                TOOLTIP_WIDTH));
         }
         return wrapped;
     }

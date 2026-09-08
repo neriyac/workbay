@@ -225,7 +225,7 @@ class UpgradesPage extends WorkbayPage {
         // rolls 25% straight back to nothing is a dial that switches somebody's income off by
         // accident. Right-aligned off the panel's own edge rather than a hardcoded x.
         String rate = WorkbayScreen.gui("skim", snap.skimRate()).getString();
-        int w = font.width(rate) + 10;
+        int w = Draw.width(font, rate) + 10;
         int px = x(WIDTH - 12 - w);
         int py = y(HEIGHT - 23);
         boolean on = snap.skimRate() > 0;

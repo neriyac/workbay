@@ -75,9 +75,7 @@ abstract class WorkbayPage {
         // and a dark one under the band: the title, the counters and the four tabs were sitting on
         // the same flat grey as the working area, so a screen that has a chrome row and a content
         // area looked like one undivided rectangle with words at different sizes in it.
-        g.fill(x(1), y(1), x(width() - 1), y(HEADER_H), 0xFF24272C);
-        g.fill(x(1), y(1), x(width() - 1), y(2), 0x14FFFFFF);
-        g.fill(x(1), y(HEADER_H), x(width() - 1), y(HEADER_H + 1), Draw.EDGE_DARK);
+        Draw.band(g, x(1), y(1), width() - 2, HEADER_H);
         g.pose().pushPose();
         g.pose().translate(x(8), y(6), 0);
         g.pose().scale(1.6F, 1.6F, 1.0F);
