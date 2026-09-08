@@ -112,8 +112,7 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("title"), "Workbay");
         add(WorkbayLang.guiKey("unbuilt"), "Not built yet.");
         add(WorkbayLang.guiKey("power"), "%s / %s FE");
-        add(WorkbayLang.guiKey("power.tip"), "Energy stored in the Workbay itself. Hosted machines "
-            + "keep their own.");
+        add(WorkbayLang.guiKey("power.tip"), "Energy stored in the Workbay itself. Hosted machines keep their own.");
         add(WorkbayLang.guiKey("power.machine.tip"), "Energy stored in this machine.");
         add(WorkbayLang.guiKey("power.none"), "No power");
 
@@ -143,18 +142,12 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("button.eject"), "Eject");
         add(WorkbayLang.guiKey("button.eject.tip"), "Take this machine out of its bay, with "
             + "everything inside it.");
-        add(WorkbayLang.guiKey("links.target.tip"), "The block this link is pointed at. Shown as "
-            + "the block itself because a row of names all read alike at a glance and a chest "
-            + "does not.");
-        add(WorkbayLang.guiKey("links.rename.tip"), "Right-click to name this link. A name of "
-            + "your own is what the flow map draws instead of the target's coordinates. Return "
-            + "commits it, Escape leaves it alone, and an empty name goes back to the derived one.");
+        add(WorkbayLang.guiKey("links.target.tip"), "What this link is pointed at.");
+        add(WorkbayLang.guiKey("links.rename.tip"), "Right-click to name this link. Empty goes back to the derived name.");
         add(WorkbayLang.guiKey("button.rename"), "Rename");
-        add(WorkbayLang.guiKey("button.rename.tip"), "Give this bay a name of your own. Return "
-            + "commits it, Escape leaves it alone, and an empty name goes back to the machine's.");
+        add(WorkbayLang.guiKey("button.rename.tip"), "Name this bay. Return commits, Escape cancels, empty goes back to the machine's.");
         add(WorkbayLang.guiKey("redstone.always"), "Redstone: always");
-        add(WorkbayLang.guiKey("redstone.always.tip"), "This bay's links run whatever the redstone "
-            + "at the Workbay is doing. Click to change; right-click steps back.");
+        add(WorkbayLang.guiKey("redstone.always.tip"), "These links run whatever the redstone is doing. Right-click steps back.");
         add(WorkbayLang.guiKey("redstone.with_signal"), "Redstone: with a signal");
         add(WorkbayLang.guiKey("redstone.with_signal.tip"), "This bay's links run only while the "
             + "Workbay has a redstone signal.");
@@ -162,22 +155,18 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("redstone.without_signal.tip"), "This bay's links run only while the "
             + "Workbay has no redstone signal.");
         add(WorkbayLang.guiKey("redstone.pulse"), "Redstone: pulse");
-        add(WorkbayLang.guiKey("redstone.pulse.tip"), "One operation each time the signal turns on, "
-            + "so a clock moves exactly one load per tick of the clock.");
+        add(WorkbayLang.guiKey("redstone.pulse.tip"), "One operation each time the signal turns on.");
         // The forms that share a 130-pixel line with the bay's status.
         add(WorkbayLang.guiKey("redstone.short.always"), "");
         add(WorkbayLang.guiKey("redstone.short.with_signal"), "with signal");
         add(WorkbayLang.guiKey("redstone.short.without_signal"), "no signal");
         add(WorkbayLang.guiKey("redstone.short.pulse"), "pulse");
         add(WorkbayLang.guiKey("status.held_by_redstone"), "Held");
-        add(WorkbayLang.guiKey("status.held_by_redstone.tip"), "Waiting on this bay's redstone "
-            + "mode. Nothing is wrong; this is what you asked it to do.");
+        add(WorkbayLang.guiKey("status.held_by_redstone.tip"), "Waiting on this bay's redstone mode. Nothing is wrong.");
         add(WorkbayLang.guiKey("button.copy"), "Copy this bay");
-        add(WorkbayLang.guiKey("button.copy.tip"), "Copies this bay's face settings, so the next "
-            + "seven do not have to be set by hand.");
+        add(WorkbayLang.guiKey("button.copy.tip"), "Copies this bay's face settings.");
         add(WorkbayLang.guiKey("button.paste"), "Paste onto this bay");
-        add(WorkbayLang.guiKey("button.paste.tip"), "Replaces this bay's face settings with the "
-            + "ones you copied.");
+        add(WorkbayLang.guiKey("button.paste.tip"), "Replaces this bay's face settings with the copied ones.");
         add(WorkbayLang.guiKey("button.paste.empty"), "Copy a bay first.");
 
         add(WorkbayLang.guiKey("bay.n"), "Bay %s");
@@ -200,9 +189,7 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("faces.item"), "Item faces");
         add(WorkbayLang.guiKey("faces.fluid"), "Fluid faces");
         add(WorkbayLang.guiKey("faces.energy"), "Energy faces");
-        add(WorkbayLang.guiKey("faces.tip"), "The cube shows one resource type at a time, so a face "
-            + "can take items in and send energy out. Click a face to cycle it in, out, off; "
-            + "right-click steps back.");
+        add(WorkbayLang.guiKey("faces.tip"), "Click a face to cycle it in, out, off. Right-click steps back.");
         add(WorkbayLang.guiKey("faces.face"), "Face: %s");
         add(WorkbayLang.guiKey("faces.role.none"), "Unset. With no face set, links use whichever "
             + "face answers.");
@@ -214,11 +201,9 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("links.none"), "No links yet. Pair a Connector and place it on "
             + "something.");
         add(WorkbayLang.guiKey("links.pair"), "Pair a Connector");
-        add(WorkbayLang.guiKey("links.pair.tip"), "Pairs the Connector in your hand to this Workbay "
-            + "and the selected bay. Place it on the block you want linked.");
+        add(WorkbayLang.guiKey("links.pair.tip"), "Pairs the held Connector to this bay. Place it on the block you want linked.");
         add(WorkbayLang.guiKey("links.internal"), "Link a bay");
-        add(WorkbayLang.guiKey("links.internal.tip"), "Adds a link from the selected bay straight "
-            + "to another one, with no Connector and nothing to place in the world.");
+        add(WorkbayLang.guiKey("links.internal.tip"), "A link straight to another bay, with no Connector to place.");
         add(WorkbayLang.guiKey("links.internal.retarget"), "Change which bay");
         add(WorkbayLang.guiKey("links.internal.retarget.tip"), "Click to point this link at the "
             + "next bay instead. Right-click steps back.");
@@ -241,21 +226,18 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("links.adding"), "TO BAY %s");
         add(WorkbayLang.guiKey("links.add"), "Add a link");
         add(WorkbayLang.guiKey("links.add.close"), "Back to this bay's links");
-        add(WorkbayLang.guiKey("links.add.tip"), "Lists everything this bay could be attached "
-            + "to: a Connector another bay is holding, or another bay directly.");
+        add(WorkbayLang.guiKey("links.add.tip"), "Everything this bay could be attached to: a loose Connector, or another bay.");
         add(WorkbayLang.guiKey("links.add.none.links"), "No links on other bays. Pair a Connector "
             + "and place it on something.");
         add(WorkbayLang.guiKey("links.add.none.bays"), "No other bays. Rack a second one first.");
         add(WorkbayLang.guiKey("links.add.tab.connectors"), "Links other bays hold");
         add(WorkbayLang.guiKey("links.add.tab.bays"), "Bays in this Workbay");
-        add(WorkbayLang.guiKey("links.add.tab.tip"), "Connectors already standing in the world, or "
-            + "the bays in this rack, which need no Connector at all.");
+        add(WorkbayLang.guiKey("links.add.tab.tip"), "Connectors standing in the world, or the bays in this rack.");
         add(WorkbayLang.guiKey("links.add.apply"), "Attach %s ticked");
         add(WorkbayLang.guiKey("links.add.apply.tip"), "Attaches everything ticked on both tabs in "
             + "one go, then closes the picker.");
         add(WorkbayLang.guiKey("links.add.link"), "%s, held by bay %s");
-        add(WorkbayLang.guiKey("links.add.link.tip"), "Hands this link to bay %s. The Connector "
-            + "stays where it is; only which bay it feeds changes.");
+        add(WorkbayLang.guiKey("links.add.link.tip"), "Hands this link to bay %s. The Connector stays where it is.");
         add(WorkbayLang.guiKey("links.add.bay"), "Bay %s");
         add(WorkbayLang.guiKey("links.add.bay.tip"), "Makes a link straight to that bay. No "
             + "Connector, no block in the world.");
@@ -267,10 +249,8 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("links.face.south"), "South face");
         add(WorkbayLang.guiKey("links.face.west"), "West face");
         add(WorkbayLang.guiKey("links.face.east"), "East face");
-        add(WorkbayLang.guiKey("links.face.tip"), "Which side of the target block this link "
-            + "reaches into. Machines that keep their input and output in separate slots expose "
-            + "them on separate faces, so pin one. Any face uses whichever answers first. "
-            + "Right-click steps back.");
+        add(WorkbayLang.guiKey("links.face.tip"), "Which side of the target to reach into. Pin one when in and out are on "
+            + "different faces; right-click steps back.");
         add(WorkbayLang.guiKey("links.mode.insert"), "Sends into the target");
         add(WorkbayLang.guiKey("links.mode.extract"), "Pulls out of the target");
         add(WorkbayLang.guiKey("links.mode.tip"), "Click to turn this link around.");
@@ -278,48 +258,40 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("links.remove.tip"), "The Connector stays where it is. Right-click it "
             + "to link it again.");
         add(WorkbayLang.guiKey("links.enable"), "Off");
-        add(WorkbayLang.guiKey("links.enable.tip"), "A new link starts off, so nothing moves until "
-            + "you have looked at the row. Click to turn it on.");
+        add(WorkbayLang.guiKey("links.enable.tip"), "A new link starts off. Click to turn it on.");
         add(WorkbayLang.guiKey("links.disable"), "On");
         add(WorkbayLang.guiKey("links.disable.tip"), "Click to stop this link without deleting it.");
         add(WorkbayLang.guiKey("links.problems"), "%s needing attention");
-        add(WorkbayLang.guiKey("links.problems.tip"), "Click to list only the links that are in "
-            + "trouble. Each one is marked with a red bar and says what is wrong with it.");
+        add(WorkbayLang.guiKey("links.problems.tip"), "Show only the links in trouble.");
         add(WorkbayLang.guiKey("links.bay"), "Bay %s");
-        add(WorkbayLang.guiKey("links.bay.tip"), "The bay this link moves to and from. Every link "
-            + "belongs to exactly one.");
+        add(WorkbayLang.guiKey("links.bay.tip"), "Which bay this link belongs to.");
         // The filter. SPEC.md §5: it matches on what a thing is and nothing else, so every string
         // here names an item or a fluid and none of them mentions a mode, a tag or a count.
         add(WorkbayLang.guiKey("filter.none"), "No filter");
         add(WorkbayLang.guiKey("filter.some.allow"), "Whitelist, %s listed");
         add(WorkbayLang.guiKey("filter.some.deny"), "Blacklist, %s listed");
-        add(WorkbayLang.guiKey("filter.tip"), "Click to choose what this link may carry. With "
-            + "nothing listed it carries everything.");
+        add(WorkbayLang.guiKey("filter.tip"), "What this link may carry. Empty carries everything.");
         add(WorkbayLang.guiKey("filter.energy"), "Energy has nothing to filter");
-        add(WorkbayLang.guiKey("filter.energy.tip"), "A filter names an item or a fluid. Energy is "
-            + "a number, so there is nothing here to name.");
+        add(WorkbayLang.guiKey("filter.energy.tip"), "Energy is a number, so there is nothing here to name.");
         // "Whitelist" and "Blacklist", not "Only these" and "All but these". The genre settled
         // this vocabulary years ago -- XNet, EnderIO and LaserIO all use it -- and a player who
         // already knows the words does not have to read a button to find out it is the same idea
         // under a nicer name. The sentence explaining which is which lives in the tooltip.
         add(WorkbayLang.guiKey("filter.allow"), "Whitelist");
         add(WorkbayLang.guiKey("filter.deny"), "Blacklist");
-        add(WorkbayLang.guiKey("filter.mode.tip"), "Whitelist carries only what is listed. "
-            + "Blacklist carries everything except it. Click to swap.");
+        add(WorkbayLang.guiKey("filter.mode.tip"), "Whitelist carries only what is listed; blacklist carries the rest.");
         add(WorkbayLang.guiKey("filter.slot"), "Empty");
         add(WorkbayLang.guiKey("filter.slot.tip.item"), "Click to drop what you are carrying here. "
             + "With empty hands it lists what you are holding, and a recipe-list drag works too.");
         add(WorkbayLang.guiKey("filter.slot.tip.fluid"), "Click to drop what you are carrying here. "
             + "A bucket or tank lists the fluid inside it; a recipe-list drag works too.");
-        add(WorkbayLang.guiKey("filter.entry.tip"), "Click to lift this off the list. "
-            + "Right-click to take it off without picking it up.");
+        add(WorkbayLang.guiKey("filter.entry.tip"), "Click to lift it off. Right-click to drop it.");
         add(WorkbayLang.guiKey("filter.carrying"), "Click a slot to list it, anywhere else to drop it.");
         add(WorkbayLang.guiKey("filter.listed.allow"), "Only what is listed goes through.");
         add(WorkbayLang.guiKey("filter.listed.deny"), "Everything except what is listed goes through.");
         add(WorkbayLang.guiKey("filter.empty"), "Nothing listed. This link carries everything.");
         add(WorkbayLang.guiKey("filter.close"), "Back to the links");
-        add(WorkbayLang.guiKey("filter.close.tip"), "The filter is saved as you change it. There "
-            + "is nothing to confirm.");
+        add(WorkbayLang.guiKey("filter.close.tip"), "Saved as you change it.");
         add(WorkbayLang.guiKey("links.unknown"), "not loaded");
         // What a link into a room is called, on the LINKS row and on the flow map's node. The
         // block first, because the room is the thing that repeats down a chain and the block is
@@ -338,6 +310,7 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("status.short.target_no_port"), "No port");
         add(WorkbayLang.guiKey("status.short.machine_no_port"), "No machine");
         add(WorkbayLang.guiKey("status.short.machine_no_face"), "No face");
+        add(WorkbayLang.guiKey("status.short.needs_resonator"), "Off-world");
         add(WorkbayLang.guiKey("status.running"), "Running");
         add(WorkbayLang.guiKey("status.running.tip"), "This link moved something on its last turn.");
         add(WorkbayLang.guiKey("status.idle"), "Idle");
@@ -346,26 +319,22 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("status.disabled"), "Disabled");
         add(WorkbayLang.guiKey("status.disabled.tip"), "Turned off in this link's settings.");
         add(WorkbayLang.guiKey("status.connector_gone"), "Connector gone");
-        add(WorkbayLang.guiKey("status.connector_gone.tip"), "The Connector this link hangs off has "
-            + "been broken. The row clears itself shortly.");
+        add(WorkbayLang.guiKey("status.connector_gone.tip"), "Its Connector was broken. The row clears itself shortly.");
         add(WorkbayLang.guiKey("status.target_missing"), "Target missing");
-        add(WorkbayLang.guiKey("status.target_missing.tip"), "The dimension this link points into is "
-            + "gone. Nothing will move until it comes back.");
+        add(WorkbayLang.guiKey("status.target_missing.tip"), "The dimension this link points into is gone.");
         add(WorkbayLang.guiKey("status.target_not_loaded"), "Chunk not loaded");
-        add(WorkbayLang.guiKey("status.target_not_loaded.tip"), "The target's chunk is unloaded. The "
-            + "link resumes on its own when somebody goes back.");
+        add(WorkbayLang.guiKey("status.target_not_loaded.tip"), "The target's chunk is unloaded. It resumes on its own.");
         add(WorkbayLang.guiKey("status.target_no_port"), "No port");
         add(WorkbayLang.guiKey("status.target_no_port.tip"), "The target is there but has nothing "
             + "this link can connect to on any face.");
         add(WorkbayLang.guiKey("status.machine_no_port"), "Machine unreachable");
-        add(WorkbayLang.guiKey("status.machine_no_port.tip"), "The hosted machine answers on none "
-            + "of the faces this link may use. Many machines open a face only once you set it to "
-            + "input or output in their own side configuration - enter the bay and check. Run "
-            + "/workbay ports while looking at one to see exactly which faces answer.");
+        add(WorkbayLang.guiKey("status.machine_no_port.tip"), "The machine answers on none of the faces this link may use. "
+            + "Most open a face only once you set it in their own side config.");
         add(WorkbayLang.guiKey("status.machine_no_face"), "No face for this");
-        add(WorkbayLang.guiKey("status.machine_no_face.tip"), "This bay has faces set, but none "
-            + "marked for this link's direction. Mark one in on the cube for a link that pulls, "
-            + "or out for one that sends. Setting every face back to unset uses whichever answers.");
+        add(WorkbayLang.guiKey("status.needs_resonator"), "Needs a Resonator");
+        add(WorkbayLang.guiKey("status.needs_resonator.tip"), "This link crosses into another dimension. Install a Resonator to let it.");
+        add(WorkbayLang.guiKey("status.machine_no_face.tip"), "This bay has faces set, but none for this link's direction. "
+            + "Mark one in to pull, out to send.");
 
         add(WorkbayLang.guiKey("flow.empty"), "No machines racked yet.");
         add(WorkbayLang.guiKey("flow.unknown"), "not loaded");
@@ -388,8 +357,7 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("upgrades.rate"), "Up to %s FE/t");
         add(WorkbayLang.guiKey("upgrades.deployed"), "Workbays placed: %s / %s");
         add(WorkbayLang.guiKey("upgrades.deployed.short"), "Placed: %s / %s");
-        add(WorkbayLang.guiKey("upgrades.deployed.tip"), "How many Workbay blocks of this network "
-            + "stand in the world. Every one of them opens onto the same bays, links and upgrades.");
+        add(WorkbayLang.guiKey("upgrades.deployed.tip"), "How many Workbay blocks of this network stand in the world.");
         add(WorkbayLang.guiKey("upgrades.deployed.full"), "This network is at its limit. Placing "
             + "another Workbay is refused and the item stays in your hand — break this one "
             + "first, or raise maxDeployedWorkbaysPerNetwork in the server config.");
@@ -418,8 +386,7 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("upgrade.anchor.desc"), "While empty");
 
         add(WorkbayLang.guiKey("button.rooms"), "Rooms");
-        add(WorkbayLang.guiKey("button.rooms.tip"), "Somewhere to build, out the back. A room only "
-            + "runs while somebody is standing in it, unless you anchor it.");
+        add(WorkbayLang.guiKey("button.rooms.tip"), "Somewhere to build, out the back.");
         add(WorkbayLang.guiKey("rooms.none"), "Install a Room Frame above for your first room.");
         add(WorkbayLang.guiKey("rooms.name"), "Room %s");
 
@@ -430,13 +397,11 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("rooms.tab.guests"), "Guests");
         add(WorkbayLang.guiKey("rooms.tab.guests.tip"), "Who else may be in this room.");
         add(WorkbayLang.guiKey("rooms.guests.label"), "Guests");
-        add(WorkbayLang.guiKey("rooms.guests.tip"), "An invitation is to this room only \u2014 "
-            + "never to your other rooms, and never to the dimension.");
+        add(WorkbayLang.guiKey("rooms.guests.tip"), "To this room only \u2014 never to your others, and never to the dimension.");
         add(WorkbayLang.guiKey("rooms.guests.name"), "player name");
         add(WorkbayLang.guiKey("rooms.guests.none"), "Nobody but you.");
         add(WorkbayLang.guiKey("rooms.guests.invite"), "Invite");
-        add(WorkbayLang.guiKey("rooms.guests.invite.tip"), "Invites them to look at this room. "
-            + "Raise them to Build afterwards if they are here to work.");
+        add(WorkbayLang.guiKey("rooms.guests.invite.tip"), "Invites them to look. Raise to Build if they are here to work.");
         add(WorkbayLang.guiKey("rooms.guests.remove"), "Remove %s");
         add(WorkbayLang.guiKey("rooms.guests.remove.tip"), "They are put out of the room at once, "
             + "even if they are standing in it.");
@@ -454,11 +419,9 @@ public class WBLanguageProvider extends LanguageProvider {
         // The Exit block is gone; the way out is the door in the middle of each of the four walls.
         // This string still said to find an Exit block, which a player would have hunted a
         // 46-block room for.
-        add(WorkbayLang.guiKey("rooms.enter.tip"), "Go and stand in it. There is a door in the "
-            + "middle of each wall; right-click one to come back to exactly where you are now.");
+        add(WorkbayLang.guiKey("rooms.enter.tip"), "Go and stand in it. A door in the middle of each wall brings you back.");
         add(WorkbayLang.guiKey("rooms.anchored"), "Anchored");
-        add(WorkbayLang.guiKey("rooms.anchored.tip"), "This room keeps running while you are away, "
-            + "and holds %s chunks loaded to do it. Click to switch it off.");
+        add(WorkbayLang.guiKey("rooms.anchored.tip"), "Runs while you are away, holding %s chunks loaded. Click to switch off.");
         add(WorkbayLang.guiKey("rooms.unanchored"), "Not anchored");
         add(WorkbayLang.guiKey("door.title"), "Way out");
         add(WorkbayLang.guiKey("door.elsewhere"), "Or go straight to");
@@ -494,17 +457,15 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("colour.sage"), "Sage");
         add(WorkbayLang.guiKey("colour.overworld"), "Overworld");
         add(WorkbayLang.guiKey("rooms.biome"), "Biome: %s");
-        add(WorkbayLang.guiKey("rooms.biome.tip"), "What a machine in this room reads for "
-            + "temperature and rainfall. Nothing falls from the sky in a room, because there is no "
-            + "sky: a cold room is cold, it does not snow.");
-        add(WorkbayLang.guiKey("rooms.unanchored.tip"), "This room only runs while somebody is "
-            + "inside it, and costs nothing while it is empty. Anchoring it holds %s chunks loaded.");
+        add(WorkbayLang.guiKey("rooms.biome.tip"), "What a machine in here reads for temperature and rainfall. Nothing falls "
+            + "from the sky: a cold room is cold, it does not snow.");
+        add(WorkbayLang.guiKey("rooms.unanchored.tip"), "Runs only while somebody is inside. Anchoring holds %s chunks loaded.");
         add(WorkbayLang.messageKey("anchor_capped"), "This network may anchor %s room(s) at a time. "
             + "Switch another one off first.");
         add(WorkbayLang.guiKey("upgrade.resonator"), "Resonator");
         add(WorkbayLang.guiKey("upgrade.resonator.desc"), "Any dimension");
         add(WorkbayLang.guiKey("upgrade.multichannel"), "Multichannel");
-        add(WorkbayLang.guiKey("upgrade.multichannel.desc"), "All 3 in one");
+        add(WorkbayLang.guiKey("upgrade.multichannel.desc"), "One per type");
         // The Impeller shipped with no name at all: its row on the upgrades screen drew
         // "gui.workbay.upgr..." and "gui.workbay.u...", in red boxes, because the screen builds
         // this key from the enum and nobody added the row when the enum grew. Found by opening
@@ -525,16 +486,14 @@ public class WBLanguageProvider extends LanguageProvider {
         // the tooltip is where "mB" and "FE" are actually said.
         add(WorkbayLang.guiKey("bayview.tank"), "%s / %s mB");
         add(WorkbayLang.guiKey("bayview.tank.empty"), "Empty tank");
-        add(WorkbayLang.guiKey("bayview.tank.tip"), "Fill it from a container in the slot below, "
-            + "or put an empty container there to draw from it.");
+        add(WorkbayLang.guiKey("bayview.tank.tip"), "Fill it from a container below, or put an empty one there to draw.");
         // The fluid slots. The resting line is the label - two unnamed slots are a guess - and the
         // three others are the refusals. Only mixing names anything: whether a tank is full or
         // empty is already drawn, in a gauge, directly above them.
         add(WorkbayLang.guiKey("bayview.limits.short"), "Settings stay on the machine.");
         add(WorkbayLang.guiKey("bayview.chemical"), "%s / %s mB");
         add(WorkbayLang.guiKey("bayview.chemical.empty"), "Empty chemical tank");
-        add(WorkbayLang.guiKey("bayview.chemical.tip"), "A Mekanism chemical. It has no bucket, so "
-            + "this screen shows it and a link carries it; there is nothing to click here.");
+        add(WorkbayLang.guiKey("bayview.chemical.tip"), "A Mekanism chemical. It has no bucket, so there is nothing to click.");
         add(WorkbayLang.guiKey("bayview.slot.in"), "Input slot");
         add(WorkbayLang.guiKey("bayview.slot.fuel"), "Fuel slot");
         add(WorkbayLang.guiKey("bayview.slot.out"), "Output slot");
@@ -550,27 +509,19 @@ public class WBLanguageProvider extends LanguageProvider {
             + "other way.");
         add(WorkbayLang.guiKey("bayview.exchange.into"), "Filling the machine");
         add(WorkbayLang.guiKey("bayview.exchange.outof"), "Emptying the machine");
-        add(WorkbayLang.guiKey("bayview.exchange.direction.tip"), "Which way the container in the "
-            + "top slot carries fluid. Click to swap. The result always comes out of the bottom "
-            + "slot.");
+        add(WorkbayLang.guiKey("bayview.exchange.direction.tip"), "Which way the top container carries. The result comes out below.");
         add(WorkbayLang.guiKey("bayview.energy"), "Stored energy");
-        add(WorkbayLang.guiKey("bayview.energy.tip"), "The machine's own buffer. The Workbay shares "
-            + "power to it automatically - there is nothing to click here.");
+        add(WorkbayLang.guiKey("bayview.energy.tip"), "The machine's own buffer. The Workbay shares power to it.");
         add(WorkbayLang.guiKey("button.bayview"), "Bay View");
-        add(WorkbayLang.guiKey("button.bayview.tip"), "Opens this machine's item slots, tanks and "
-            + "power so you can top it up by hand, without a link.");
+        add(WorkbayLang.guiKey("button.bayview.tip"), "This machine's slots, tanks and power, to top up by hand.");
         add(WorkbayLang.messageKey("bayview_unreachable"), "Nothing in this bay answers by hand. "
             + "A machine with no slots, tanks or power is reached by a link or not at all.");
         // Entering the bay. SPEC.md §5: the machine's own screen is reachable only by standing in
         // front of it, so this is the one control that answers "how do I upgrade the thing".
         add(WorkbayLang.guiKey("button.open"), "Open its screen");
-        add(WorkbayLang.guiKey("button.open.tip"), "Opens the machine's own screen - recipe modes, "
-            + "side configuration and upgrade slots, drawn by the mod that made it - without "
-            + "leaving where you stand.");
+        add(WorkbayLang.guiKey("button.open.tip"), "Opens the machine's own screen without leaving where you stand.");
         add(WorkbayLang.guiKey("button.enter"), "Enter bay");
-        add(WorkbayLang.guiKey("button.enter.tip"), "Takes you into the bay, next to the machine, "
-            + "and opens its own screen - recipe modes, side configuration and upgrade slots, "
-            + "drawn by the mod that made it. Close it and you are back here.");
+        add(WorkbayLang.guiKey("button.enter.tip"), "Puts you next to it and opens its own screen. Close that to come back.");
         add(WorkbayLang.messageKey("bay_enter_failed"), "That bay cannot be entered.");
         add(WorkbayLang.messageKey("bay_no_screen"), "%s has no screen of its own.");
         add(WorkbayLang.messageKey("bay_load_timeout"),
@@ -578,27 +529,20 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("levy"), "Levy %s");
         add(WorkbayLang.guiKey("levy.name"), "Levy banked: %s");
         add(WorkbayLang.guiKey("levy.batch"), "%s / %s to the next");
-        add(WorkbayLang.guiKey("levy.tip"), "The Assay is converting. Every batch of skimmed goods "
-            + "becomes one Levy, and Levy is what installs upgrades.");
+        add(WorkbayLang.guiKey("levy.tip"), "Every batch of skimmed goods becomes one Levy, and Levy installs upgrades.");
         add(WorkbayLang.guiKey("levy.no_assay"), "No Assay racked");
-        add(WorkbayLang.guiKey("levy.no_assay.tip"), "Nothing is being earned. Rack an Assay in a "
-            + "bay, then turn the skim dial up on the upgrades screen.");
+        add(WorkbayLang.guiKey("levy.no_assay.tip"), "Rack an Assay in a bay, then turn the skim dial up.");
         add(WorkbayLang.guiKey("levy.dial_off"), "Skim at 0%");
-        add(WorkbayLang.guiKey("levy.dial_off.tip"), "Nothing is being earned. The Assay is racked "
-            + "but the skim dial is at zero, so your links are keeping everything they carry.");
+        add(WorkbayLang.guiKey("levy.dial_off.tip"), "The Assay is racked but the skim dial is at zero.");
         add(WorkbayLang.guiKey("skim"), "Skim %s%%");
         add(WorkbayLang.guiKey("skim.name"), "Skim: %s%% of the goods your links carry");
-        add(WorkbayLang.guiKey("skim.tip"), "Items your links move that count as refined goods are "
-            + "taken at this rate and turned into Levy by the Assay. Click to raise it by five, "
-            + "right-click to lower it. At zero the Workbay takes nothing.");
+        add(WorkbayLang.guiKey("skim.tip"), "The share of refined goods your links hand the Assay. Click +5, right-click -5.");
         // The number alone. The row has about thirty pixels for this and the sentence is sixty.
         add(WorkbayLang.guiKey("skim.row"), "%s%%");
-        add(WorkbayLang.guiKey("skim.row.tip"), "This link hands the Assay that share of the "
-            + "refined goods it carries, so less arrives at the far end than leaves.");
+        add(WorkbayLang.guiKey("skim.row.tip"), "This link hands the Assay its share, so less arrives than left.");
         add(WorkbayLang.guiKey("skim.no_assay"), "No Assay racked");
         add(WorkbayLang.guiKey("skim.no_assay.short"), "No Assay");
-        add(WorkbayLang.guiKey("skim.no_assay.tip"), "Nothing is being skimmed: the rate only "
-            + "applies while an Assay is racked in one of this Workbay's bays.");
+        add(WorkbayLang.guiKey("skim.no_assay.tip"), "Nothing is skimmed until an Assay is racked in a bay.");
 
         add(WorkbayLang.messageKey("pair_needs_connector"), "Hold a Connector to pair one.");
         add(WorkbayLang.messageKey("upgrade_maxed"), "This Workbay already has as many of those as "

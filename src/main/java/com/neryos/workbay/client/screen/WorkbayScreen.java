@@ -478,39 +478,72 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
             graphics.pose().popPose();
             return;
         }
-        // Reverse order, exactly as the click does, and for the same reason: a control drawn on
-        // top of another must also *answer* on top of it. Forward order meant the flow map's
-        // canvas -- one region covering the whole graph, registered before the boxes on it -- won
-        // every hover, so every box on the map showed the canvas's own tooltip and none of them
-        // could say what it was.
+        tooltips(graphics, mouseX, mouseY);
+    }
+
+    private List<net.minecraft.util.FormattedCharSequence> wrapTooltip(List<Component> lines) {
+        return Draw.tooltip(font, lines);
+    }
+
+    // ---------------------------------------------------------------- dwell
+
+    /** Which region the cursor is resting on, as a cheap hash of its corner, or -1. */
+    private int hoverOn = -1;
+
+    private long hoverSince;
+
+    /**
+     * How long the cursor has to rest on a control before it explains itself.
+     *
+     * <p><b>The single biggest thing wrong with this screen was that it never stopped talking.</b>
+     * Forty regions on a page and a tooltip on nearly every one, drawn the instant the cursor
+     * crossed it, so moving from one side of the screen to the other strobed six panels of prose
+     * at the player. Nothing was deleted to fix that: a tooltip is an answer to a question, and
+     * resting on a control is how the player asks it.
+     *
+     * <p>Four hundred milliseconds. Long enough that crossing a row of eight buttons says nothing,
+     * short enough that stopping on one is not a wait.
+     */
+    private static final long DWELL_MS = 400;
+
+    /**
+     * Every tooltip on the screen, in one place, in the order the click resolves: a region drawn
+     * on top answers on top, and <b>the first region that covers the pixel owns it</b> whether or
+     * not it has anything to say. Only when none does are the cut strings consulted.
+     */
+    private void tooltips(GuiGraphics graphics, int mouseX, int mouseY) {
         for (int i = hits.size() - 1; i >= 0; i--) {
             Hit hit = hits.get(i);
             if (!hit.contains(mouseX, mouseY)) {
                 continue;
             }
-            // The first region that covers the pixel <b>owns</b> it, tooltip or not. Skipping the
-            // ones with nothing to say let whatever was underneath answer instead -- and the
-            // biggest region in the mod with nothing to say is the room window's scrim, so the
-            // page behind an open window was explaining its own buttons through it.
-            if (hit.tooltip() != null) {
+            if (dwelt(hit.x() * 31 + hit.y()) && hit.tooltip() != null) {
                 Draw.tooltip(graphics, font, wrapTooltip(hit.tooltip()), mouseX, mouseY,
                     width, height);
             }
             return;
         }
-        // Only when nothing else claimed the pixel. Most cut strings sit inside a row whose own
-        // tooltip already names them in full; this is for the ones that do not.
         for (Overflow cut : overflows) {
-            if (cut.contains(mouseX, mouseY)) {
+            if (!cut.contains(mouseX, mouseY)) {
+                continue;
+            }
+            // Offset so a cut string and a control sharing a corner are two different rests.
+            if (dwelt(cut.x() * 31 + cut.y() + 7)) {
                 Draw.tooltip(graphics, font, wrapTooltip(List.of(cut.full())), mouseX, mouseY,
                     width, height);
-                return;
             }
+            return;
         }
+        hoverOn = -1;
     }
 
-    private List<net.minecraft.util.FormattedCharSequence> wrapTooltip(List<Component> lines) {
-        return Draw.tooltip(font, lines);
+    /** True once the cursor has been on this region long enough to have meant it. */
+    private boolean dwelt(int where) {
+        if (where != hoverOn) {
+            hoverOn = where;
+            hoverSince = net.minecraft.Util.getMillis();
+        }
+        return net.minecraft.Util.getMillis() - hoverSince >= DWELL_MS;
     }
 
     @Override

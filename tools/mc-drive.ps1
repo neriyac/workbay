@@ -244,11 +244,31 @@ function SneakClick([int]$gx, [int]$gy) {
 }
 
 # The window size drifts across focus cycles, and GUI coordinates depend on it. Pin it.
-function Size-MC([int]$w = 1600, [int]$h = 900) {
+#
+# x and y are desktop coordinates, and they matter: Neriya's primary display is a 32" OLED and
+# leaving a static game window on it for hours is how a panel gets burned. `Screen-24` finds the
+# 24" IPS beside it -- by physical size off WmiMonitorBasicDisplayParams, not by index, because a
+# display's index moves when either one is replugged.
+function Size-MC([int]$w = 1600, [int]$h = 900, [int]$x = 40, [int]$y = 40) {
   $handle = Assert-MC
-  [W]::MoveWindow($handle, 40, 40, $w, $h, $true) | Out-Null
+  [W]::MoveWindow($handle, $x, $y, $w, $h, $true) | Out-Null
   Start-Sleep -Milliseconds 800
   FB
+}
+
+# The top-left of the largest display that is NOT the biggest one, which on this desk is the 24".
+# Returns a hashtable with X, Y, W and H.
+function Screen-24 {
+  Add-Type -AssemblyName System.Windows.Forms
+  $sizes = @{}
+  Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorBasicDisplayParams |
+    ForEach-Object { $sizes[$_.InstanceName] = [math]::Sqrt([math]::Pow($_.MaxHorizontalImageSize,2) + [math]::Pow($_.MaxVerticalImageSize,2)) / 2.54 }
+  $small = ($sizes.Values | Sort-Object)[0]
+  # The small panel is the 24"; match it back to a Screen by resolution rather than by name,
+  # which Windows does not expose on Screen at all.
+  $screens = [System.Windows.Forms.Screen]::AllScreens | Sort-Object { $_.Bounds.Width * $_.Bounds.Height }
+  $s = $screens[0]
+  return @{ X = $s.Bounds.X; Y = $s.Bounds.Y; W = $s.Bounds.Width; H = $s.Bounds.Height; Diag = $small }
 }
 
 # Text into a focused EditBox (not chat, which Say is for): clipboard, same reason as Say.

@@ -554,6 +554,65 @@ public class BusTests {
     }
 
     /**
+     * <b>The Resonator, which for the whole project bought nothing.</b> SPEC.md §1 sells it as
+     * "links may target other dimensions" and it was priced, crafted, installed, saved, drawn on
+     * the upgrades page — and read by no code anywhere, so a player spent an ender eye and 24 Levy
+     * on a capability they already had. Found by reading the ladder for what each rung is worth.
+     *
+     * <p>Both halves, because a gate that refuses everything is not a gate. The same link is
+     * asked twice with nothing changed but the upgrade counter, so the counter is the only thing
+     * the answer can have come from. The Backshop is exempt by §1 — a bay-to-bay link and a
+     * Connector inside your own room are inside the machine, not a reach across the world — which
+     * is what {@code aBayToBayLinkMovesItemsWithNoConnector} keeps honest next door.
+     */
+    @GameTest
+    @TestHolder(description = "A link into another dimension reports Needs a Resonator until one is installed.")
+    public static void aCrossDimensionLinkWaitsForAResonator(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.CHEST));
+            RoomRegistry registry = RoomRegistry.get(level.getServer());
+            WorkbayRecord record = workbay.record().orElseThrow();
+            helper.assertValueEqual(record.upgrades().resonators(), 0,
+                "resonators on a fresh network");
+
+            // A Connector that claims to be standing in the nether. The block need not be there:
+            // the gate runs before anything is resolved, which is the point of it -- a link that
+            // cannot legally reach says so instead of quietly reporting the target unloaded.
+            BusConfig link = BusConfig.create(java.util.UUID.randomUUID(), 0,
+                BusConfig.Resource.ITEM, BusConfig.Mode.INSERT,
+                GlobalPos.of(net.minecraft.world.level.Level.NETHER, new BlockPos(0, 64, 0)),
+                GlobalPos.of(net.minecraft.world.level.Level.NETHER, new BlockPos(0, 64, 1)))
+                .withEnabled(true).withSpeed(10);
+            workbay.addBus(link);
+
+            helper.startSequence()
+                .thenIdle(12)
+                .thenExecute(() -> helper.assertValueEqual(workbay.busStatus(link.id()),
+                    BusRunner.BusStatus.NEEDS_RESONATOR,
+                    "the status of an off-world link with no Resonator"))
+                .thenExecute(() -> {
+                    WorkbayRecord now = workbay.record().orElseThrow();
+                    WorkbayRecord.Upgrades up = now.upgrades();
+                    registry.put(now.withUpgrades(new WorkbayRecord.Upgrades(up.expansionPlates(),
+                        1, up.anchors(), up.annexPlates(), up.roomTier(), up.multichannel(),
+                        up.impellers())));
+                })
+                .thenIdle(12)
+                .thenExecute(() -> helper.assertFalse(
+                    workbay.busStatus(link.id()) == BusRunner.BusStatus.NEEDS_RESONATOR,
+                    "the link still wants a Resonator with one installed, so the upgrade buys "
+                        + "nothing after all"))
+                .thenExecute(() -> tearDown(helper, workbayPos))
+                .thenSucceed();
+        });
+    }
+
+    /**
      * The whole thing in one test. A chest in a bay in the Backshop, a chest on the floor in the
      * overworld, and a bus that moves iron from one to the other across a dimension boundary with
      * nothing physical connecting them.

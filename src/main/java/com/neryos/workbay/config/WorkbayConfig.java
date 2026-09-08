@@ -224,14 +224,26 @@ public class WorkbayConfig {
                     "costs the same the tenth time as the first.")
                 .push("upgradeCosts");
 
+            // The whole ladder, in the order a player can first afford a rung:
+            //   2 -> 40 -> 60 -> 80 -> 100 -> 150 -> 200 -> 200 -> 400 -> 900
+            // The first Expansion Plate stays at 2 on purpose and is the one cheap thing in the
+            // mod: SPEC.md 1 says the base Workbay's two bays are a near-deadlock, because the
+            // Assay occupies one and exposes no faces, so bay three is what makes the loop run at
+            // all. Everything above it is a decision, and the step is what makes the seventh bay
+            // one -- 2, 12, 22, 32, 42, 52, 62, which is 224 for the full rack.
             expansionPlateCost = builder.defineInRange("expansionPlateCost", 2, 0, 100_000);
-            expansionPlateCostStep = builder.defineInRange("expansionPlateCostStep", 6, 0, 100_000);
-            resonatorCost = builder.defineInRange("resonatorCost", 24, 0, 100_000);
+            expansionPlateCostStep = builder.defineInRange("expansionPlateCostStep", 10, 0, 100_000);
+            // Cross-dimension reach. Priced above Multichannel because it is the bigger capability
+            // and, until this session, the only one that did nothing at all when installed.
+            resonatorCost = builder.defineInRange("resonatorCost", 80, 0, 100_000);
             resonatorCostStep = builder.defineInRange("resonatorCostStep", 0, 0, 100_000);
-            multichannelCost = builder.defineInRange("multichannelCost", 24, 0, 100_000);
+            multichannelCost = builder.defineInRange("multichannelCost", 60, 0, 100_000);
             multichannelCostStep = builder.defineInRange("multichannelCostStep", 0, 0, 100_000);
-            impellerCost = builder.defineInRange("impellerCost", 12, 0, 100_000);
-            impellerCostStep = builder.defineInRange("impellerCostStep", 12, 0, 100_000);
+            // Throughput is the strongest thing on the ladder -- two of them is sixteen times what
+            // a link is born with -- and at 12 and 24 it was also the cheapest after a bay. 40 and
+            // 100 puts the second one level with a room.
+            impellerCost = builder.defineInRange("impellerCost", 40, 0, 100_000);
+            impellerCostStep = builder.defineInRange("impellerCostStep", 60, 0, 100_000);
             // No step on the Frames: only one is ever installed, the highest wins, and a step on a
             // one-off is a knob that can never be read. The steepness is in the gap between them.
             // A room is a private dimension, and it is priced like one. At 40 the first Frame was
@@ -242,11 +254,12 @@ public class WorkbayConfig {
             roomFrameCost = builder.defineInRange("roomFrameCost", 150, 0, 100_000);
             wideRoomFrameCost = builder.defineInRange("wideRoomFrameCost", 400, 0, 100_000);
             vastRoomFrameCost = builder.defineInRange("vastRoomFrameCost", 900, 0, 100_000);
-            // And a second room is not a discount on the first. 120, 240, 360 for rooms two to
-            // four, so the fourth costs more than the first did and the ceiling of four is a price
-            // long before it is a cap.
-            annexPlateCost = builder.defineInRange("annexPlateCost", 120, 0, 100_000);
-            annexPlateCostStep = builder.defineInRange("annexPlateCostStep", 120, 0, 100_000);
+            // And a second room is not a discount on the first: 200, 350, 500, every one of them
+            // dearer than the Frame that granted the first. The Annex is the rung whose gate is
+            // the Levy and not the material -- its core stays a copper ingot precisely because it
+            // is craftable again and again, and what makes the fourth room hard is the price.
+            annexPlateCost = builder.defineInRange("annexPlateCost", 200, 0, 100_000);
+            annexPlateCostStep = builder.defineInRange("annexPlateCostStep", 150, 0, 100_000);
             anchorCost = builder.defineInRange("anchorCost", 200, 0, 100_000);
 
             builder.pop();

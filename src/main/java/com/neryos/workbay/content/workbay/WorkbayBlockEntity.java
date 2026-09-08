@@ -380,8 +380,8 @@ public class WorkbayBlockEntity extends BlockEntity {
             case CONNECTOR_GONE, TARGET_MISSING -> Pip.BROKEN;
             // Listed rather than defaulted, so a new BusStatus is a compile error here as well as
             // in the two screens. A default would have quietly called it ATTENTION.
-            case TARGET_NOT_LOADED, TARGET_NO_PORT, MACHINE_NO_PORT, MACHINE_NO_FACE
-                -> Pip.ATTENTION;
+            case TARGET_NOT_LOADED, TARGET_NO_PORT, MACHINE_NO_PORT, MACHINE_NO_FACE,
+                NEEDS_RESONATOR -> Pip.ATTENTION;
         };
     }
 

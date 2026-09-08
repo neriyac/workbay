@@ -158,12 +158,36 @@ public class BusRunner {
                 continue;
             }
             spentPulse |= gate == RedstoneMode.PULSE;
+            if (needsResonator(level, record, bus)) {
+                statuses.put(bus.id(), BusStatus.NEEDS_RESONATOR);
+                continue;
+            }
             statuses.put(bus.id(), run(level, backshop, record, bus));
         }
         // One operation per rising edge, spent only once something on PULSE actually got its turn.
         if (spentPulse) {
             pulseArmed = false;
         }
+    }
+
+    /**
+     * SPEC.md §1's Resonator, enforced. <b>It was priced, drawn, saved and read by nothing</b> —
+     * a player spent an ender eye and 24 Levy on "Links may target other dimensions" for a
+     * capability they already had, which is the worst kind of rung on a ladder.
+     *
+     * <p>The comparison is the Connector's dimension against the <b>Workbay's own</b>, because
+     * that is what "another dimension" means to the player standing at the block. §1 exempts the
+     * Backshop outright — a bay-to-bay link and a Connector inside one of your own rooms are
+     * <em>inside</em> the machine, not a reach across the world — and an internal link has no
+     * Connector at all.
+     */
+    private static boolean needsResonator(ServerLevel level, WorkbayRecord record, BusConfig bus) {
+        if (bus.internal() || record.upgrades().resonators() > 0) {
+            return false;
+        }
+        net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> where =
+            bus.connector().dimension();
+        return !where.equals(level.dimension()) && !where.equals(WorkbayDimensions.BACKSHOP);
     }
 
     /**
@@ -531,7 +555,13 @@ public class BusRunner {
         /** The hosted machine answers on none of the faces this link may use. */
         MACHINE_NO_PORT,
         /** The bay's cube has faces set, but none for this link's direction of travel. */
-        MACHINE_NO_FACE;
+        MACHINE_NO_FACE,
+        /**
+         * The link crosses a dimension boundary and this network has no Resonator. SPEC.md §1.
+         *
+         * <p>Appended at the end because a status travels on the snapshot as its ordinal.
+         */
+        NEEDS_RESONATOR;
 
         /** True for a status the player has to do something about. Drives the problem count. */
         public boolean isProblem() {
