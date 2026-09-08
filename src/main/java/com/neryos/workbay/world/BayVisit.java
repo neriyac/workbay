@@ -113,8 +113,21 @@ public final class BayVisit {
      */
     public static final int GRACE = 2;
 
-    /** True only while {@link #enter} is moving a player, which is the one admissible route in. */
+    /** True only while this mod is moving a player in, which is the one admissible route. */
     private static boolean admitting;
+
+    /**
+     * The Backshop's only door. Rooms come through it too rather than opening a second one, so
+     * {@link #onTravel} stays the single place that decides who may cross.
+     */
+    static void admit(Runnable move) {
+        admitting = true;
+        try {
+            move.run();
+        } finally {
+            admitting = false;
+        }
+    }
 
     /**
      * The one interior cell a player fits in: a corner column, two blocks of air, diagonally
@@ -153,12 +166,7 @@ public final class BayVisit {
         OPENING.put(player.getUUID(), 0);
         SENT.remove(player.getUUID());
         CLOSED.remove(player.getUUID());
-        admitting = true;
-        try {
-            player.teleportTo(backshop, spot.x, spot.y, spot.z, Set.of(), -90.0F, 7.0F);
-        } finally {
-            admitting = false;
-        }
+        admit(() -> player.teleportTo(backshop, spot.x, spot.y, spot.z, Set.of(), -90.0F, 7.0F));
         if (!player.level().dimension().equals(WorkbayDimensions.BACKSHOP)) {
             forget(player);
             return false;
@@ -267,7 +275,12 @@ public final class BayVisit {
             return;
         }
         if (!isVisiting(player)) {
-            toSpawn(player);
+            // A room's occupant is exactly the case this rule is not about: they are meant to
+            // stand there with nothing open. SPEC.md §8 scopes the rule to bays for this reason,
+            // and RoomVisit keeps them honest about staying inside their own room.
+            if (!RoomVisit.isInside(player)) {
+                toSpawn(player);
+            }
             return;
         }
         Return home = player.getData(WBAttachments.BAY_RETURN.get());
@@ -372,6 +385,11 @@ public final class BayVisit {
     public static void onLogin(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer player
             && player.level().dimension().equals(WorkbayDimensions.BACKSHOP)) {
+            // Somebody who logged out in a room comes back standing in it: a room is a place, and
+            // logging out in one is not an interrupted visit. SPEC.md §14.
+            if (RoomVisit.isInside(player)) {
+                return;
+            }
             if (!leave(player)) {
                 toSpawn(player);
             }

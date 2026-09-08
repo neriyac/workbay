@@ -137,9 +137,28 @@ public class RoomRegistryTests {
                     GlobalPos.of(WorkbayDimensions.BACKSHOP, new BlockPos(1, 2, 3)),
                     GlobalPos.of(WorkbayDimensions.BACKSHOP, new BlockPos(4, 5, 6)))))
                 .withDeployedCount(1);
+
+            // A room is a place somebody built in, so it has to come back byte for byte: its
+            // region (where their chests are), the tier standing in the world, the biome and the
+            // anchor toggle that decides whether it costs the server anything.
+            com.neryos.workbay.world.RoomRecord room = before.createRoom()
+                .withBuiltTier(2)
+                .withName(Optional.of("Greenhouse"))
+                .withAnchored(true)
+                .withBiome(net.minecraft.world.level.biome.Biomes.SNOWY_PLAINS);
+            before.putRoom(room);
+            alice = alice.withRooms(List.of(room.id()));
             before.put(alice);
 
             RoomRegistry after = RoomRegistry.roundTrip(before, registries);
+
+            helper.assertValueEqual(after.room(room.id()).orElse(null), room, "the room after reload");
+            helper.assertValueEqual(after.roomsOf(after.byId(alice.id()).orElseThrow()).size(), 1,
+                "rooms listed on Alice's Workbay after reload");
+            // The region allocator is monotonic and never reused, so a fresh room after a reload
+            // must not be handed the region somebody is already standing in.
+            helper.assertFalse(after.createRoom().region() == room.region(),
+                "the room region allocator restarted from zero after a reload");
 
             helper.assertValueEqual(after.size(), 2, "records after reload");
             WorkbayRecord reloaded = after.byId(alice.id()).orElse(null);

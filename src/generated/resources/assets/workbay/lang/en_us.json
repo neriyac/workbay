@@ -1,6 +1,7 @@
 {
   "block.workbay.assay": "Assay",
   "block.workbay.connector": "Connector",
+  "block.workbay.exit": "Exit",
   "block.workbay.port": "Port",
   "block.workbay.workbay": "Workbay",
   "gui.workbay.bay.empty": "Empty bay",

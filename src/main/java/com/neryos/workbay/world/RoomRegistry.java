@@ -53,11 +53,18 @@ public class RoomRegistry extends SavedData {
     private final Map<UUID, WorkbayRecord> byId = new HashMap<>();
     private final Map<String, UUID> byCode = new HashMap<>();
 
+    /**
+     * Every room in the world, by its own UUID. Kept here and not on the Workbay record because a
+     * room outlives the block that made it: SPEC.md §14 orphans a room and never deletes it, and
+     * {@code /workbay recover} has to find one with nothing standing in the world.
+     */
+    private final Map<UUID, RoomRecord> rooms = new HashMap<>();
+
     private int nextBayColumn = 0;
 
     /**
-     * v1 never allocates a room region, but the counter is persisted from the first save so that v2
-     * starts from a number no v1 world has already used. SPEC.md §16 forbids simplifying this away.
+     * Monotonic and never reused, so no two rooms can ever be handed the same 512-block region —
+     * including after one is orphaned, which is why it is a counter and not a free list.
      */
     private int nextRoomRegion = 0;
 
@@ -106,6 +113,22 @@ public class RoomRegistry extends SavedData {
         return nextRoomRegion;
     }
 
+    public Optional<RoomRecord> room(UUID id) {
+        return Optional.ofNullable(rooms.get(id));
+    }
+
+    /** The rooms of one Workbay, in the order its record lists them. Skips any that went missing. */
+    public List<RoomRecord> roomsOf(WorkbayRecord record) {
+        return record.rooms().stream().map(rooms::get).filter(java.util.Objects::nonNull).toList();
+    }
+
+    /** Which room a Backshop position falls inside, or empty. How the Exit block finds its room. */
+    public Optional<RoomRecord> roomAt(net.minecraft.core.BlockPos pos) {
+        return rooms.values().stream()
+            .filter(r -> r.built() && RoomGeometry.inside(pos, r.region(), r.builtTier()))
+            .findFirst();
+    }
+
     // ---------------------------------------------------------------- writing
 
     /** Mints a Workbay: a fresh id, a code nobody else has, and a bay column nobody else uses. */
@@ -125,6 +148,24 @@ public class RoomRegistry extends SavedData {
     public void put(WorkbayRecord record) {
         byId.put(record.id(), record);
         byCode.put(normalise(record.code()), record.id());
+        setDirty();
+    }
+
+    /**
+     * Mints a room and hands it a region nobody else has. The shell is <b>not</b> built here:
+     * SPEC.md §8 spends that on first entry, so a Room Frame installed and never used costs
+     * nothing but a counter.
+     */
+    public RoomRecord createRoom() {
+        RoomRecord room = RoomRecord.fresh(UUID.randomUUID(), nextRoomRegion++);
+        rooms.put(room.id(), room);
+        setDirty();
+        return room;
+    }
+
+    /** Replaces a room in place. Every room mutation goes through here so setDirty is never missed. */
+    public void putRoom(RoomRecord room) {
+        rooms.put(room.id(), room);
         setDirty();
     }
 
@@ -161,6 +202,9 @@ public class RoomRegistry extends SavedData {
         tag.putInt(VERSION_KEY, DATA_VERSION);
         tag.putInt("NextBayColumn", nextBayColumn);
         tag.putInt("NextRoomRegion", nextRoomRegion);
+        tag.put("Rooms", RoomRecord.CODEC.listOf()
+            .encodeStart(NbtOps.INSTANCE, List.copyOf(rooms.values()))
+            .getOrThrow(e -> new IllegalStateException("could not write the room registry: " + e)));
         tag.put("Workbays", WorkbayRecord.CODEC.listOf()
             .encodeStart(NbtOps.INSTANCE, List.copyOf(byId.values()))
             .getOrThrow(e -> new IllegalStateException("could not write the Workbay registry: " + e)));
@@ -178,6 +222,15 @@ public class RoomRegistry extends SavedData {
         }
         registry.nextBayColumn = tag.getInt("NextBayColumn");
         registry.nextRoomRegion = tag.getInt("NextRoomRegion");
+
+        Tag roomList = tag.get("Rooms");
+        if (roomList != null) {
+            RoomRecord.CODEC.listOf()
+                .parse(NbtOps.INSTANCE, roomList)
+                .resultOrPartial(e -> LOG.error("dropped a malformed room record: {}", e))
+                .orElse(List.of())
+                .forEach(room -> registry.rooms.put(room.id(), room));
+        }
 
         Tag list = tag.get("Workbays");
         if (list != null) {

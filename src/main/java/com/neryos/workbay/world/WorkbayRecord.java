@@ -85,6 +85,11 @@ public record WorkbayRecord(
             lastKnownPos, List.copyOf(newBays), rooms, buses, deployedCount, assay);
     }
 
+    public WorkbayRecord withRooms(List<UUID> newRooms) {
+        return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
+            lastKnownPos, bays, List.copyOf(newRooms), buses, deployedCount, assay);
+    }
+
     public WorkbayRecord withBuses(List<com.neryos.workbay.bus.BusConfig> newBuses) {
         return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
             lastKnownPos, bays, rooms, List.copyOf(newBuses), deployedCount, assay);
@@ -154,6 +159,18 @@ public record WorkbayRecord(
      * by the server's {@code maxBaysPerWorkbay}. The cap is applied here rather than at install time
      * so lowering it never destroys an Expansion Plate somebody already paid Levy for.
      */
+    /**
+     * Rooms this network is entitled to: the Room Frame grants the first, each Annex Plate one
+     * more. Zero without a Frame, so the ROOMS page is not there to be found before it means
+     * anything. SPEC.md §1.
+     */
+    public int roomCapacity() {
+        if (upgrades.roomTier() <= 0) {
+            return 0;
+        }
+        return Math.min(1 + upgrades.annexPlates(), RoomGeometry.MAX_ROOMS);
+    }
+
     public int bayCapacity() {
         return Math.min(BASE_BAYS + upgrades.expansionPlates(),
             com.neryos.workbay.config.WorkbayConfig.SERVER.maxBaysPerWorkbay.get());

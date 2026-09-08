@@ -43,6 +43,15 @@ public class WorkbayCommands {
                 .executes(context -> ports(context.getSource())))
             .then(Commands.literal("charge")
                 .executes(context -> charge(context.getSource())))
+            .then(Commands.literal("room")
+                .then(Commands.argument("room", com.mojang.brigadier.arguments.IntegerArgumentType.integer(0))
+                    .executes(context -> room(context.getSource(),
+                        com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(context, "room")))))
+            .then(Commands.literal("frame")
+                .then(Commands.argument("tier", com.mojang.brigadier.arguments.IntegerArgumentType
+                        .integer(0, com.neryos.workbay.world.RoomGeometry.MAX_TIER))
+                    .executes(context -> frame(context.getSource(),
+                        com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(context, "tier")))))
             .then(Commands.literal("remote")
                 .then(Commands.argument("bay", com.mojang.brigadier.arguments.IntegerArgumentType.integer(0))
                     .executes(context -> remote(context.getSource(),
@@ -121,6 +130,72 @@ public class WorkbayCommands {
         if (!com.neryos.workbay.remote.RemoteScreens.open(player, backshop, machine)) {
             source.sendFailure(Component.literal(
                 "Bay " + bay + " has nothing with a screen in it."));
+            return 0;
+        }
+        return 1;
+    }
+
+    /**
+     * Sets the looked-at Workbay's Room Frame tier. A test fixture, not a feature, in the same
+     * sense as {@code charge}: the Frame items are step 4 of SPEC.md §16's v2 order and rooms are
+     * step 3, so without this there is no way to open one by hand until the items exist.
+     */
+    private static int frame(CommandSourceStack source, int tier) {
+        if (!(source.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) {
+            source.sendFailure(Component.literal("Run this as a player, looking at a Workbay."));
+            return 0;
+        }
+        net.minecraft.world.phys.HitResult hit = player.pick(8.0, 0.0F, false);
+        if (!(hit instanceof net.minecraft.world.phys.BlockHitResult block)
+            || !(player.serverLevel().getBlockEntity(block.getBlockPos())
+                instanceof com.neryos.workbay.content.workbay.WorkbayBlockEntity workbay)
+            || workbay.record().isEmpty()) {
+            source.sendFailure(Component.literal("Look at a bound Workbay first."));
+            return 0;
+        }
+        var record = workbay.record().get();
+        var up = record.upgrades();
+        var registry = com.neryos.workbay.world.RoomRegistry.get(player.server);
+        registry.put(record.withUpgrades(new com.neryos.workbay.world.WorkbayRecord.Upgrades(
+            up.expansionPlates(), up.resonators(), up.anchors(), up.annexPlates(), tier,
+            up.multichannel(), up.impellers())));
+        source.sendSuccess(() -> Component.literal("Room Frame tier " + tier + ": interior "
+            + com.neryos.workbay.world.RoomGeometry.interior(tier) + ", "
+            + com.neryos.workbay.world.RoomGeometry.chunkCost(tier) + " chunk(s)."), false);
+        return 1;
+    }
+
+    /**
+     * Puts you in one of the looked-at Workbay's rooms, building it if this is its first visit.
+     *
+     * <p>Step 3 of SPEC.md §16's v2 order: a player can stand in a room before there is a Room
+     * Frame to craft or a ROOMS page to click, which is what "put something standable earliest"
+     * means. It goes when the page lands, and until then it is the only way in.
+     */
+    private static int room(CommandSourceStack source, int index) {
+        if (!(source.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) {
+            source.sendFailure(Component.literal("Run this as a player, looking at a Workbay."));
+            return 0;
+        }
+        net.minecraft.world.phys.HitResult hit = player.pick(8.0, 0.0F, false);
+        if (!(hit instanceof net.minecraft.world.phys.BlockHitResult block)
+            || !(player.serverLevel().getBlockEntity(block.getBlockPos())
+                instanceof com.neryos.workbay.content.workbay.WorkbayBlockEntity workbay)) {
+            source.sendFailure(Component.literal("Look at a Workbay first."));
+            return 0;
+        }
+        var record = workbay.record();
+        if (record.isEmpty()) {
+            source.sendFailure(Component.literal("That Workbay is not bound to a network."));
+            return 0;
+        }
+        if (record.get().roomCapacity() == 0) {
+            source.sendFailure(Component.literal(
+                "This network has no rooms. /workbay frame 1 grants one."));
+            return 0;
+        }
+        if (!com.neryos.workbay.world.RoomVisit.enter(player, record.get(), index)) {
+            source.sendFailure(Component.literal("No room " + index + " on this network."));
             return 0;
         }
         return 1;

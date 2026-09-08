@@ -91,6 +91,10 @@ public class WBBlockStateProvider extends BlockStateProvider {
         // A Port is only ever seen by a player standing in a room, which cannot happen in v1 — but
         // six of them seal one hosted machine, so the face has to read as a door from the inside.
         simpleBlock(WBBlocks.PORT.get(), models().cubeAll("port", blockTexture("port")));
+
+        // The way out of a room, and the only lit thing in an unlit dimension. The doorway is on
+        // every face on purpose: a player halfway up a 32-block room looks down and sees it.
+        simpleBlock(WBBlocks.EXIT.get(), models().cubeAll("exit", blockTexture("exit")));
     }
 
     private static ResourceLocation mcBlock(String path) {

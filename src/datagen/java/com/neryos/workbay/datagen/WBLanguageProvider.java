@@ -23,6 +23,7 @@ public class WBLanguageProvider extends LanguageProvider {
 
         addBlock(WBBlocks.WORKBAY, "Workbay");
         addBlock(WBBlocks.PORT, "Port");
+        addBlock(WBBlocks.EXIT, "Exit");
         addItem(WBItems.SHOPSTEEL, "Shopsteel");
         addItem(WBItems.HOUSING, "Housing");
         addBlock(WBBlocks.CONNECTOR, "Connector");

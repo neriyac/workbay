@@ -5,6 +5,7 @@ import com.neryos.workbay.content.assay.AssayBlock;
 import com.neryos.workbay.content.connector.ConnectorBlock;
 import com.neryos.workbay.content.connector.ConnectorItem;
 import com.neryos.workbay.content.port.PortBlock;
+import com.neryos.workbay.content.room.ExitBlock;
 import com.neryos.workbay.content.workbay.WorkbayBlock;
 import com.neryos.workbay.content.workbay.WorkbayItem;
 import net.minecraft.world.level.block.Block;
@@ -52,6 +53,23 @@ public class WBBlocks {
             .mapColor(MapColor.COLOR_BLACK)
             .sound(SoundType.METAL)
             .strength(-1.0F, 3600000.0F)
+            .noLootTable()
+            .pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK)
+            .isValidSpawn((state, level, pos, type) -> false)));
+
+    /**
+     * The way out of a room, generated onto its entry pad. No BlockItem, so it cannot be crafted,
+     * picked or given, and -1 hardness so it cannot be broken: SPEC.md §2 makes it a block and
+     * never an item precisely because the known failure it answers is losing the item.
+     */
+    public static final DeferredBlock<ExitBlock> EXIT = BLOCKS.register("exit", () ->
+        new ExitBlock(BlockBehaviour.Properties.of()
+            .mapColor(MapColor.COLOR_GREEN)
+            .sound(SoundType.METAL)
+            .strength(-1.0F, 3600000.0F)
+            // The one lit thing in an unlit dimension: a room is dark until the player lights it,
+            // and the way out must be findable in the dark from anywhere in a 46-block room.
+            .lightLevel(state -> 12)
             .noLootTable()
             .pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK)
             .isValidSpawn((state, level, pos, type) -> false)));
