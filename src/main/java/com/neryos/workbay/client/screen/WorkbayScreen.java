@@ -207,6 +207,11 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
      * the room window's two tabs -- a biome to look for, a player to invite -- so a word typed for
      * one must not be sitting in it as the other's first move.
      */
+    /** What is in the search field right now, without moving it. Empty when there is none. */
+    public String filterText() {
+        return filter == null ? "" : filter.getValue();
+    }
+
     public void clearFilter() {
         if (filter != null) {
             filter.setValue("");
@@ -268,6 +273,11 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         // instead. {@code canConsumeInput} is the guard vanilla uses for this and it is the whole
         // fix. Found by Neriya, typing a name.
         if (filter != null && filter.isFocused()) {
+            if ((key == org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER
+                || key == org.lwjgl.glfw.GLFW.GLFW_KEY_KP_ENTER)
+                && current != null && current.entered()) {
+                return true;
+            }
             return filter.keyPressed(key, scan, modifiers) || filter.canConsumeInput();
         }
         return super.keyPressed(key, scan, modifiers);

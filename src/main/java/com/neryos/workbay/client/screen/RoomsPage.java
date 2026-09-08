@@ -101,7 +101,7 @@ class RoomsPage extends WorkbayPage {
      * so bigger is the point rather than a side effect.
      */
     private static final int SWATCH = 20;
-    private static final int SWATCH_PITCH = 30;
+    private static final int SWATCH_PITCH = 32;
     /**
      * Six, not eight. Eleven colours in rows of eight is eight and then three — a full row and a
      * stub, which reads as a grid that ran out rather than as the whole set. Six and five is two
@@ -314,7 +314,7 @@ class RoomsPage extends WorkbayPage {
             // two words, because "Enter" and "Open" are four letters apart and the thing that
             // actually differs is whether the room exists yet.
             iconButton(g, mouseX, mouseY, px + ENTER_X, py,
-                room.built() ? WBIcons.ENTER : WBIcons.PLUS, room.built(),
+                room.built() ? WBIcons.ENTER : WBIcons.PLUS, false,
                 () -> screen.send(WorkbayAction.ENTER_ROOM, room.index()),
                 WorkbayScreen.gui(room.built() ? "rooms.enter" : "rooms.open"),
                 WorkbayScreen.gui("rooms.enter.tip"));
@@ -362,6 +362,25 @@ class RoomsPage extends WorkbayPage {
             return false;
         }
         setOpen(-1);
+        return true;
+    }
+
+    /**
+     * Return in the guest field invites whoever is named in it. The + beside the box does the same
+     * thing and stays, because a gesture with no visible control is a gesture nobody finds -- but
+     * having typed a name, Return is what the hands do.
+     */
+    @Override
+    boolean entered() {
+        if (open < 0 || tab != Tab.GUESTS) {
+            return false;
+        }
+        String typed = screen.filterText().strip();
+        if (typed.isEmpty()) {
+            return false;
+        }
+        screen.sendText(WorkbayAction.INVITE_ROOM_GUEST, open, typed);
+        screen.clearFilter();
         return true;
     }
 
@@ -439,10 +458,13 @@ class RoomsPage extends WorkbayPage {
         }
         int rows = (RoomColour.values().length + SWATCHES_PER_ROW - 1) / SWATCHES_PER_ROW;
         int listH = BIOME_ROWS * BIOME_H + 2;
-        // The ROOM tab is the taller of the two, and both windows are drawn at that height: the
-        // tabs are at the top, so a window that shrank under the pointer would move the control
-        // that had just been clicked.
-        int h = WIN_PAD * 2 + 12 + 10 + rows * SWATCH_PITCH + 8 + SEARCH_H + 2 + listH;
+        // As tall as the tab showing needs, and no taller. Drawing both at the room tab's height
+        // left the guest list as a hundred and fifty pixels of empty box under one line of "Nobody
+        // but you." -- the same wasted space this page was being pulled up for everywhere else.
+        // The tabs are at the top, so the shorter window cannot move the control just clicked.
+        int h = tab == Tab.GUESTS
+            ? WIN_PAD * 2 + 16 + SEARCH_H + 2 + GUEST_ROWS * BIOME_H + 2
+            : WIN_PAD * 2 + 12 + 10 + rows * SWATCH_PITCH + 8 + SEARCH_H + 2 + listH;
         int wx = x((WIDTH - WIN_W) / 2);
         int wy = y(Math.max(2, (height() - h) / 2));
 
@@ -472,7 +494,9 @@ class RoomsPage extends WorkbayPage {
         cursor += 12;
 
         if (tab == Tab.GUESTS) {
-            guests(g, mouseX, mouseY, room, wx, cursor, h + wy - cursor - WIN_PAD);
+            // Four more pixels than the room tab takes, so the invite button does not sit flush
+            // against the close button directly above it and read as one column of two.
+            guests(g, mouseX, mouseY, room, wx, cursor + 4);
             return;
         }
 
@@ -595,7 +619,7 @@ class RoomsPage extends WorkbayPage {
      * guest list anywhere in this mod for somebody to add a name to by mistake.
      */
     private void guests(GuiGraphics g, int mouseX, int mouseY, WorkbaySnapshot.Room room,
-        int wx, int top, int space) {
+        int wx, int top) {
         int cursor = top;
         int plusX = wx + WIN_W - WIN_PAD - 14;
         int fieldX = plusX - 2 - SEARCH_W;
@@ -628,7 +652,7 @@ class RoomsPage extends WorkbayPage {
         cursor += SEARCH_H + 2;
 
         int listW = WIN_W - WIN_PAD * 2;
-        int listH = Math.max(BIOME_H + 2, space - (cursor - top));
+        int listH = GUEST_ROWS * BIOME_H + 2;
         Draw.well(g, wx + WIN_PAD, cursor, listW, listH);
         java.util.List<com.neryos.workbay.world.RoomRecord.Guest> list = room.guests();
         boolean bar = list.size() > GUEST_ROWS;

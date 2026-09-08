@@ -1057,7 +1057,8 @@ class BaysPage extends WorkbayPage {
                 screen.beginRename(renameX, py + 2, renameW, 12, config.name(),
                     typed -> screen.sendText(WorkbayAction.SET_LINK_NAME, typed, config.id()));
             }
-        }, Component.literal(label), WorkbayScreen.gui("links.rename.tip"));
+        }, link.label().<Component>map(Component::literal).orElseGet(() -> fullName(link)),
+            WorkbayScreen.gui("links.rename.tip"));
 
         // The right-hand column is the status, always, for every kind of link.
         //
@@ -1667,19 +1668,31 @@ class BaysPage extends WorkbayPage {
      * the status column calls "Gone", and printing "Air" would be a third word for it.
      */
     private String targetName(WorkbaySnapshot.Link link) {
-        Optional<String> block = link.targetBlock()
-            .filter(id -> !id.equals(ResourceLocation.withDefaultNamespace("air")))
-            .map(BaysPage::displayName).map(Component::getString);
-        // A link into a room is named by the room, because that is the only thing about it a
-        // player can act on: the Backshop position is six figures in a dimension they cannot walk
-        // to, and "Barrel" alone is the same word on every stage of the chain.
+        // A link into a room is named by the <b>room and nothing else</b>. "Barrel in Room 1" is
+        // the honest full answer and it is eighty-five pixels in a seventy-pixel column, so it
+        // arrived as "Room Wall in Roo..." on the first row it ever drew -- seen in a client. The
+        // room is the half that differs from stage to stage, the icon beside it is already saying
+        // which block, and the full form is one hover away on the row's own tooltip.
         if (link.targetRoom().isPresent()) {
-            String room = snapshot().roomLabel(link.targetRoom().get()).getString();
-            return block.map(name -> WorkbayScreen.gui("links.in_room", name, room).getString())
-                .orElse(room);
+            return snapshot().roomLabel(link.targetRoom().get()).getString();
         }
-        return block.orElseGet(() -> link.config().target().pos().getX() + " "
-            + link.config().target().pos().getZ());
+        return link.targetBlock()
+            .filter(id -> !id.equals(ResourceLocation.withDefaultNamespace("air")))
+            .map(BaysPage::displayName).map(Component::getString)
+            .orElseGet(() -> link.config().target().pos().getX() + " "
+                + link.config().target().pos().getZ());
+    }
+
+    /** The whole answer, for a tooltip: the block and the room it is standing in. */
+    private Component fullName(WorkbaySnapshot.Link link) {
+        Optional<Component> block = link.targetBlock()
+            .filter(id -> !id.equals(ResourceLocation.withDefaultNamespace("air")))
+            .map(BaysPage::displayName);
+        if (link.targetRoom().isEmpty()) {
+            return block.orElseGet(() -> Component.literal(targetName(link)));
+        }
+        Component room = snapshot().roomLabel(link.targetRoom().get());
+        return block.map(name -> WorkbayScreen.gui("links.in_room", name, room)).orElse(room);
     }
 
     private static Component displayName(ResourceLocation id) {

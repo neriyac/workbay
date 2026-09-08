@@ -556,19 +556,17 @@ class FlowPage extends WorkbayPage {
         if (link.label().isPresent()) {
             return Component.literal(link.label().get());
         }
-        java.util.Optional<Component> block = link.targetBlock()
-            .filter(id -> !id.equals(ResourceLocation.withDefaultNamespace("air")))
-            .map(FlowPage::name);
-        // A stage of a chain that happens to be inside a room is named by the room. Without it the
-        // map draws "Barrel" twice in a row and the one thing that tells the two apart -- which
-        // room each is in -- is the thing it left out.
+        // A stage of a chain that happens to be inside a room is named by the room, and by the
+        // room alone: a node box is narrower than a LINKS row, the icon on it is already saying
+        // which block, and "which room" is the half that differs from stage to stage.
         if (link.targetRoom().isPresent()) {
-            Component room = snapshot().roomLabel(link.targetRoom().get());
-            return block.map(name -> WorkbayScreen.gui("links.in_room", name, room))
-                .orElse(room);
+            return snapshot().roomLabel(link.targetRoom().get());
         }
-        return block.orElseGet(() -> Component.literal(link.config().target().pos().getX() + " "
-            + link.config().target().pos().getZ()));
+        return link.targetBlock()
+            .filter(id -> !id.equals(ResourceLocation.withDefaultNamespace("air")))
+            .map(FlowPage::name)
+            .orElseGet(() -> Component.literal(link.config().target().pos().getX() + " "
+                + link.config().target().pos().getZ()));
     }
 
     /** The name the player gave the bay, or the machine's own. */

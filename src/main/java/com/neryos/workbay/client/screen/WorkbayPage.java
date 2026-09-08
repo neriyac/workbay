@@ -36,6 +36,15 @@ abstract class WorkbayPage {
         return false;
     }
 
+    /**
+     * True when Return meant something to this page's search field. Only the guest field does:
+     * typing a name and pressing Return is the gesture everybody already has, and a text box whose
+     * only way out is a button beside it is a text box that has to be explained.
+     */
+    boolean entered() {
+        return false;
+    }
+
     /** True when this page consumed the scroll. Only the LINKS list does. */
     boolean scrolled(double mouseX, double mouseY, double delta) {
         return false;
