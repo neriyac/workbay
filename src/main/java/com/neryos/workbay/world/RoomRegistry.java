@@ -122,7 +122,7 @@ public class RoomRegistry extends SavedData {
         return record.rooms().stream().map(rooms::get).filter(java.util.Objects::nonNull).toList();
     }
 
-    /** Which room a Backshop position falls inside, or empty. How the Exit block finds its room. */
+    /** Which room a Backshop position falls inside, or empty. How a shell block finds its room. */
     public Optional<RoomRecord> roomAt(net.minecraft.core.BlockPos pos) {
         return rooms.values().stream()
             .filter(r -> r.built() && RoomGeometry.inside(pos, r.region(), r.builtTier()))

@@ -20,13 +20,14 @@ import net.minecraft.world.phys.BlockHitResult;
  * else; six faces of it around a room somebody lives in is a quarry, not a room. This says the
  * same thing, carries a colour while it says it, and is the door.
  *
- * <p><b>The whole shell is the door.</b> There was a single Exit block on the entry pad, and it was
- * wrong twice over: it could be lost, and in a 46-block room it had to be walked back to. Every
- * wall and ceiling block opens the same screen, so "how do I get out" is answered by right-clicking
- * whatever is beside you — but <b>not the floor</b>, which is where building happens. The {@code DOOR_*} parts draw a real 2×2 door
- * in the middle of each wall so that it is <em>discoverable</em> rather than merely true; it never
- * opens, has no hinge and no handle to press, because it is not a door — it is the picture of one
- * over the thing that already works everywhere.
+ * <p><b>The doors are the way out, and only the doors.</b> Three shapes were tried. A single Exit
+ * block on the entry pad was wrong twice over — it could be lost, and in a 46-block room it had to
+ * be walked back to. Then <em>every</em> block of the shell opened the screen, which fixed both and
+ * bought a new fault: a room is a place you build in, and a wall that opens a menu every time you
+ * right-click near it is a wall you cannot work against. So the {@code DOOR_*} parts, and nothing
+ * else. Four doors, one dead centre on each of the four walls, none of them more than half a room
+ * away and none of them breakable: the reason the Exit block was replaced is answered by there
+ * being four, not by there being ten thousand. Neriya's call, made standing in one.
  *
  * <p><b>It refuses to be destroyed.</b> -1 hardness stops a pick and not a creative click, and a
  * hole in a room's shell is a hole into the void with a player beside it.
@@ -57,11 +58,10 @@ public class RoomWallBlock extends Block {
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
         Player player, BlockHitResult hit) {
-        // The floor is the one piece that does not open it. Everything a player builds sits on the
-        // floor, so a right-click there is far more often "place this" than "let me out", and a way
-        // out that fires while you are laying a machine down is worse than one you have to look up
-        // for. Walls and ceiling still do, which is where a person looks for a door anyway.
-        if (state.getValue(PART).isFloor()) {
+        // A door opens the way out; wall, skirting, ceiling and floor are ordinary blocks that do
+        // nothing. PASS, not CONSUME, so the click carries on to whatever the player was holding --
+        // building against the shell has to work exactly as building against stone does.
+        if (!state.getValue(PART).isDoor()) {
             return InteractionResult.PASS;
         }
         if (level.isClientSide) {

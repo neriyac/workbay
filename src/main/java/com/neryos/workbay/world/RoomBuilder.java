@@ -57,7 +57,8 @@ public final class RoomBuilder {
      * record that says so.
      *
      * <p>Called on every entry, so it is deliberately cheap in the common case: a room already the
-     * right size and the right colour is <b>two block reads</b> — one corner of the shell and one
+     * right size and the right colour is <b>three block reads</b> — one corner of the shell, the
+     * course above it and one
      * of its doorways.
      */
     public static RoomRecord ensure(ServerLevel backshop, RoomRecord room, int tier) {
@@ -91,11 +92,15 @@ public final class RoomBuilder {
         if (!room.built()) {
             return room;
         }
-        // One corner and one door panel are enough: every path that writes a shell writes all of
-        // it, so the shell is never half one colour and never half doorless.
+        // One corner, the course above it and one door panel are enough: every path that writes a
+        // shell writes all of it, so the shell is never half one colour and never half doorless.
+        // The course above the corner is what catches a room built before the shell grew a
+        // skirting and a ceiling -- its floor corner is already right, so probing only that would
+        // leave every existing room a one-value box for ever.
         var doors = RoomGeometry.doors(room.region(), room.builtTier()).entrySet().iterator().next();
-        if (!backshop.getBlockState(RoomGeometry.origin(room.region()))
-                .equals(shellState(room, RoomPart.FLOOR))
+        BlockPos corner = RoomGeometry.origin(room.region());
+        if (!backshop.getBlockState(corner).equals(shellState(room, RoomPart.FLOOR))
+            || !backshop.getBlockState(corner.above()).equals(shellState(room, RoomPart.SKIRTING))
             || !backshop.getBlockState(doors.getKey()).equals(shellState(room, doors.getValue()))) {
             paint(backshop, room);
         }
@@ -138,6 +143,8 @@ public final class RoomBuilder {
         int top = RoomGeometry.height(tier) + 1;
         BlockState wall = shellState(room, RoomPart.WALL);
         BlockState floor = shellState(room, RoomPart.FLOOR);
+        BlockState skirting = shellState(room, RoomPart.SKIRTING);
+        BlockState ceiling = shellState(room, RoomPart.CEILING);
         BlockPos origin = RoomGeometry.origin(room.region());
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
         for (int x = 0; x < side; x++) {
@@ -148,9 +155,14 @@ public final class RoomBuilder {
                         continue;
                     }
                     pos.set(origin.getX() + x, origin.getY() + y, origin.getZ() + z);
-                    // The floor is the one face a player stands on, and the one the OVERWORLD
-                    // colour paints differently from the walls around it.
-                    BlockState piece = y == 0 ? floor : wall;
+                    // Four surfaces, not one. The floor is the face a player stands on and the one
+                    // the OVERWORLD colour paints differently; the bottom course of the walls is a
+                    // skirting, so the room has a line where the two meet; the ceiling is its own
+                    // thing so looking up is not looking sideways.
+                    BlockState piece = y == 0 ? floor
+                        : y == top ? ceiling
+                        : y == 1 ? skirting
+                        : wall;
                     // UPDATE_CLIENTS, not UPDATE_ALL: nothing observes the Backshop and neighbour
                     // updates across ten thousand blocks are pure cost.
                     if (!backshop.getBlockState(pos).equals(piece)) {

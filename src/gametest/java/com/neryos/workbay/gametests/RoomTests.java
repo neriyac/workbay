@@ -126,18 +126,22 @@ public class RoomTests {
     }
 
     /**
-     * <b>Any wall is the way out, and the floor is not.</b> There was one Exit block on the entry
-     * pad and it was wrong twice: it could be broken, and in a 46-block room it had to be walked
-     * back to. So the click under test is on a plain wall well away from the drawn door -- the
-     * piece of the room least likely to be special.
+     * <b>The door is the way out, and nothing else in the shell is.</b>
      *
-     * <p>The floor is excluded deliberately and is asserted here, because everything a player
-     * builds sits on it: a right-click there is far more often "place this" than "let me out", and
-     * a way out that fires while you are laying a machine down is worse than one you look up for.
+     * <p>Three shapes were tried and this test has asserted two of them, so the assertion is
+     * written both ways round on purpose. A single Exit block could be lost and had to be walked
+     * back to across a 46-block room. Every block of the shell opening the screen fixed that and
+     * broke something else: a room is a place you build in, and a wall that opens a menu whenever
+     * you right-click near it is a wall you cannot work against. Four doors, one dead centre on
+     * each wall, unbreakable — near enough to reach and quiet everywhere else.
+     *
+     * <p>The plain wall is clicked <em>first</em>, so a pass on the door cannot be "the menu was
+     * already open", and the wall's part is asserted before it is clicked, so the negative half
+     * cannot go vacuous by aiming at a door by accident.
      */
     @GameTest
-    @TestHolder(description = "Right-clicking any wall opens the way out and returns the player where they left; the floor does not.")
-    public static void anyWallIsTheWayOut(final DynamicTest test) {
+    @TestHolder(description = "A door opens the way out and returns the player where they left; a plain wall does nothing.")
+    public static void onlyADoorIsTheWayOut(final DynamicTest test) {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
 
         test.onGameTest(ExtendedGameTestHelper.class, helper -> {
@@ -148,21 +152,29 @@ public class RoomTests {
             // High on the west wall: shell, and nowhere near the door drawn at y 1-2 mid-wall.
             BlockPos plain = origin.offset(0, 6, 3);
             BlockPos floor = origin.offset(4, 0, 4);
+            BlockPos door = RoomGeometry.doors(room.region(), room.builtTier())
+                .keySet().iterator().next();
             helper.assertTrue(site.backshop().getBlockState(plain)
                     .getValue(com.neryos.workbay.content.room.RoomWallBlock.PART)
                     == com.neryos.workbay.content.room.RoomPart.WALL,
                 "the block under test is not a plain wall, so this test proves nothing");
 
-            // The floor first, so a pass here cannot be "the menu was already open".
+            // Both of the pieces that must stay quiet first, so a pass on the door cannot be
+            // "the menu was already open".
             click(site, floor);
             helper.assertFalse(site.player().containerMenu
                     instanceof com.neryos.workbay.menu.RoomDoorMenu,
                 "the floor opened the way out; building on it would fight the door");
-
             click(site, plain);
+            helper.assertFalse(site.player().containerMenu
+                    instanceof com.neryos.workbay.menu.RoomDoorMenu,
+                "a plain wall opened the way out; a room is a place you build in, and a wall that "
+                    + "opens a menu is a wall you cannot work against");
+
+            click(site, door);
             helper.assertTrue(site.player().containerMenu
                     instanceof com.neryos.workbay.menu.RoomDoorMenu,
-                "clicking a wall opened " + site.player().containerMenu.getClass().getSimpleName()
+                "clicking a door opened " + site.player().containerMenu.getClass().getSimpleName()
                     + " instead of the way out");
 
             ((com.neryos.workbay.menu.RoomDoorMenu) site.player().containerMenu)
@@ -400,6 +412,75 @@ public class RoomTests {
                     helper.assertTrue(at.getY() == 1 || at.getY() == 2,
                         "a door block at " + at + " is not on the floor");
                 }
+            }
+            helper.succeed();
+        });
+    }
+
+    /**
+     * A door's two leaves meet in the middle, on every wall.
+     *
+     * <p>They did not. The parts were laid out "looking into the room", which is the one side of a
+     * wall nobody is ever on — a player stands inside and looks <em>out</em> — so all four doors
+     * came out mirrored: both handles against the outer edges, a hinge stile down the centre of
+     * each leaf. It survived a build, a datagen run and a hundred gametests, and cost one glance at
+     * the first screenshot of a room.
+     *
+     * <p>The assertion is geometric rather than a table of coordinates: the viewer inside faces
+     * along the wall's outward normal, so their left is {@code up × outward}, and the LEFT leaf
+     * must sit further that way than the RIGHT one. That holds whatever the footprints become.
+     */
+    @GameTest
+    @TestHolder(description = "A door's left leaf is on the left of somebody standing inside.")
+    public static void aDoorsLeavesMeetInTheMiddle(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            for (int tier = 1; tier <= RoomGeometry.MAX_TIER; tier++) {
+                int side = RoomGeometry.footprint(tier);
+                BlockPos origin = RoomGeometry.origin(0);
+                var doors = RoomGeometry.doors(0, tier);
+                int walls = 0;
+                for (Direction outward : Direction.Plane.HORIZONTAL) {
+                    // The wall this direction faces out of, and the axis that runs along it.
+                    Direction left = outward.getCounterClockWise();
+                    BlockPos leftLeaf = null;
+                    BlockPos rightLeaf = null;
+                    for (var door : doors.entrySet()) {
+                        BlockPos at = door.getKey();
+                        int dx = at.getX() - origin.getX();
+                        int dz = at.getZ() - origin.getZ();
+                        boolean onThisWall = switch (outward) {
+                            case NORTH -> dz == 0;
+                            case SOUTH -> dz == side - 1;
+                            case WEST -> dx == 0;
+                            default -> dx == side - 1;
+                        };
+                        if (!onThisWall || at.getY() != 1) {
+                            continue;
+                        }
+                        if (door.getValue() == com.neryos.workbay.content.room.RoomPart
+                                .DOOR_BOTTOM_LEFT) {
+                            leftLeaf = at;
+                        } else if (door.getValue() == com.neryos.workbay.content.room.RoomPart
+                                .DOOR_BOTTOM_RIGHT) {
+                            rightLeaf = at;
+                        }
+                    }
+                    helper.assertTrue(leftLeaf != null && rightLeaf != null,
+                        "the " + outward + " wall of a tier " + tier
+                            + " room has no bottom pair of door leaves");
+                    // Further along the viewer's left is a bigger dot product with that vector.
+                    int leftness = (leftLeaf.getX() - rightLeaf.getX()) * left.getStepX()
+                        + (leftLeaf.getZ() - rightLeaf.getZ()) * left.getStepZ();
+                    helper.assertTrue(leftness > 0,
+                        "on the " + outward + " wall the left leaf at " + leftLeaf
+                            + " is not to the left of the right leaf at " + rightLeaf
+                            + " for somebody standing inside; the door reads as two single doors"
+                            + " hung backwards");
+                    walls++;
+                }
+                helper.assertTrue(walls == 4, "a room has " + walls + " walls with doors, not 4");
             }
             helper.succeed();
         });

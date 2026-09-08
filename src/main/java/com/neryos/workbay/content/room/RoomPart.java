@@ -17,6 +17,24 @@ import net.minecraft.util.StringRepresentable;
 public enum RoomPart implements StringRepresentable {
     WALL("wall"),
     FLOOR("floor"),
+    /**
+     * The bottom course of every wall: a plinth with a chamfered top.
+     *
+     * <p>It exists because the first room anybody looked at was one grey value on all six faces,
+     * and the thing that fixes that is not a better wall texture — it is a <b>line where the floor
+     * meets the wall</b>. Every real room has one and no box does.
+     */
+    SKIRTING("skirting"),
+    /**
+     * The ceiling, and deliberately <em>darker</em> than the wall under it.
+     *
+     * <p>The first attempt made it a bright luminous panel, to explain where a sealed room's light
+     * comes from. That cannot work: Minecraft shades a bottom face to half, so 250 under the
+     * ceiling renders darker than 200 on a wall and no texture value can beat it. What a ceiling
+     * can be is unmistakably not the wall — coffered, so the room has a top rather than a fourth
+     * copy of its sides.
+     */
+    CEILING("ceiling"),
     DOOR_BOTTOM_LEFT("door_bl"),
     DOOR_BOTTOM_RIGHT("door_br"),
     DOOR_TOP_LEFT("door_tl"),
@@ -31,6 +49,12 @@ public enum RoomPart implements StringRepresentable {
     /** True for the one face a player stands on, which is the only part with its own tint. */
     public boolean isFloor() {
         return this == FLOOR;
+    }
+
+    /** True for the four quarters of a drawn door, which are the only blocks that open one. */
+    public boolean isDoor() {
+        return this == DOOR_BOTTOM_LEFT || this == DOOR_BOTTOM_RIGHT
+            || this == DOOR_TOP_LEFT || this == DOOR_TOP_RIGHT;
     }
 
     /** The texture this part draws, under {@code textures/block/}. */

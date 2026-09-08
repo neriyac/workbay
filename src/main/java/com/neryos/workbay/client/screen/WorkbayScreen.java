@@ -52,6 +52,18 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
     private java.util.function.Consumer<String> onRenamed;
 
     /**
+     * A page's own search field, for as long as it draws one. The room picker's biome search is
+     * the only one.
+     *
+     * <p>Separate from {@link #renaming} because the two answer opposite questions: a rename is a
+     * value being <em>committed</em>, so it ends on Return and on a click elsewhere, and a filter
+     * is only ever <em>read</em> — ending it on the click that picks a row would swallow that
+     * click and unfilter the list underneath it in the same frame.
+     */
+    @Nullable
+    private net.minecraft.client.gui.components.EditBox filter;
+
+    /**
      * True while a right-click is being dispatched, so every cycling control steps <b>backwards</b>.
      *
      * <p>A field read during dispatch rather than a second Runnable on every {@code hit}: forty-odd
@@ -99,6 +111,7 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         // init() clears every widget, so a field left over from before a resize would be a ghost.
         renaming = null;
         onRenamed = null;
+        filter = null;
         super.init();
     }
 
@@ -159,6 +172,44 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         return renaming != null;
     }
 
+    /**
+     * The search field, opened where the page says and moved there on every frame after — a page
+     * redraws at a new position when the window it belongs to does. Returns what is in it.
+     */
+    public String openFilter(int x, int y, int w, int h) {
+        if (filter == null) {
+            filter = new net.minecraft.client.gui.components.EditBox(font, x, y, w, h,
+                Component.empty());
+            filter.setMaxLength(32);
+            // No frame of its own: the page draws a well behind it, so the box is the text and the
+            // caret and nothing else. Vanilla's own border would be a second edge inside ours.
+            filter.setBordered(false);
+            filter.setTextColor(Draw.TEXT);
+            addRenderableWidget(filter);
+            setFocused(filter);
+            filter.setFocused(true);
+        } else {
+            filter.setPosition(x, y);
+        }
+        return filter.getValue();
+    }
+
+    /** Puts the caret back in the search box after a click the hit list took first. */
+    public void focusFilter() {
+        if (filter != null) {
+            setFocused(filter);
+            filter.setFocused(true);
+        }
+    }
+
+    public void closeFilter() {
+        if (filter != null) {
+            removeWidget(filter);
+            filter = null;
+            setFocused(null);
+        }
+    }
+
     private void endRename(boolean commit) {
         if (renaming == null) {
             return;
@@ -192,6 +243,12 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
                 return true;
             }
             return renaming.keyPressed(key, scan, modifiers) || renaming.canConsumeInput();
+        }
+        // Escape backs out of whatever the page has open before it backs out of the screen. A
+        // player who opened the room picker to look at the colours presses the one key everybody
+        // presses to close a thing, and vanilla's answer is to throw them out of the Workbay.
+        if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE && current != null && current.escaped()) {
+            return true;
         }
         return super.keyPressed(key, scan, modifiers);
     }
@@ -493,6 +550,15 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
 
     public void sendText(WorkbayAction action, String text) {
         send(action, 0, Optional.empty(), Optional.of(text));
+    }
+
+    /**
+     * A number and a name together: which room, and which biome. The name rather than a position
+     * in a list, because the list the player clicked was filtered by a search box and the server's
+     * is not.
+     */
+    public void sendText(WorkbayAction action, long arg, String text) {
+        send(action, arg, Optional.empty(), Optional.of(text));
     }
 
     /** A name for one row rather than for the screen's own selection. */

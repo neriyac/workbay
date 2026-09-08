@@ -303,7 +303,11 @@ class BaysPage extends WorkbayPage {
                 g.renderItem(icon, px + 4, py + 4);
             }
             if (locked) {
-                g.fill(px + 1, py + 1, px + slot - 1, py + slot - 1, 0x99000000);
+                // The shared wash, not a bespoke 60% black: at 0x99 the five bays a new network
+                // has not bought yet read as five holes punched through the panel, which is what
+                // the rack looked like the first time anybody photographed it. SPEC.md §7 -- a
+                // slot is never black, and "unavailable" looks the same everywhere.
+                Draw.disabled(g, px + 1, py + 1, slot - 2, slot - 2);
             }
             // The 5x5 status pip, top-left, inside the slot.
             g.fill(px + 2, py + 2, px + 7, py + 7, pipColour(bay.state()));

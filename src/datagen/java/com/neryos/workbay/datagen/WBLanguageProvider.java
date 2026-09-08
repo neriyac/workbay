@@ -362,6 +362,7 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("flow.canvas"), "Flow map");
         add(WorkbayLang.guiKey("flow.canvas.tip"), "Every link this Workbay has, as the graph it "
             + "makes. Drag to move the view, scroll to zoom. Hover a box for what it is.");
+        add(WorkbayLang.guiKey("flow.drive"), "Drag to move · scroll to zoom");
         add(WorkbayLang.guiKey("flow.node.bay"), "Bay %s of this Workbay");
         add(WorkbayLang.guiKey("flow.node.at"), "%s %s %s");
         add(WorkbayLang.guiKey("flow.node.face"), "Face: %s");
@@ -412,8 +413,11 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("rooms.empty"), "Not opened yet");
         add(WorkbayLang.guiKey("rooms.enter"), "Enter");
         add(WorkbayLang.guiKey("rooms.open"), "Open");
-        add(WorkbayLang.guiKey("rooms.enter.tip"), "Go and stand in it. Click the Exit block by the "
-            + "door to come back to exactly where you are now.");
+        // The Exit block is gone; the way out is the door in the middle of each of the four walls.
+        // This string still said to find an Exit block, which a player would have hunted a
+        // 46-block room for.
+        add(WorkbayLang.guiKey("rooms.enter.tip"), "Go and stand in it. There is a door in the "
+            + "middle of each wall; right-click one to come back to exactly where you are now.");
         add(WorkbayLang.guiKey("rooms.anchored"), "Anchored");
         add(WorkbayLang.guiKey("rooms.anchored.tip"), "This room keeps running while you are away, "
             + "and holds %s chunks loaded to do it. Click to switch it off.");
@@ -429,8 +433,13 @@ public class WBLanguageProvider extends LanguageProvider {
             + "you first came in.");
         add(WorkbayLang.guiKey("door.open"), "Open");
         add(WorkbayLang.guiKey("rooms.settings"), "Room settings");
+        add(WorkbayLang.guiKey("rooms.settings.close"), "Done");
         add(WorkbayLang.guiKey("rooms.colour.label"), "Walls");
         add(WorkbayLang.guiKey("rooms.biome.label"), "Behaves like");
+        // A tag a pack may fill with hundreds, so the list is searched rather than scrolled past.
+        add(WorkbayLang.guiKey("rooms.biome.search"), "Search");
+        add(WorkbayLang.guiKey("rooms.biome.nomatch"), "Nothing by that name");
+        add(WorkbayLang.guiKey("rooms.biome.none"), "This pack lists no room biomes");
         add(WorkbayLang.guiKey("rooms.colour"), "Walls: %s");
         add(WorkbayLang.guiKey("rooms.colour.tip"), "What this room's shell is painted.");
         // The palette lives in RoomColour and these are its names. Ten strings rather than ten

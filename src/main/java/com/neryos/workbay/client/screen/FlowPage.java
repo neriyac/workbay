@@ -48,7 +48,7 @@ class FlowPage extends WorkbayPage {
     private static final int GAP = 22;
     private static final int NODE_H = FlowLayout.NODE_H;
     private static final int PITCH = 22;
-    private static final int TOP_Y = 46;
+    private static final int TOP_Y = 26;
     private static final int NODE_W = 100;
 
     /**
@@ -228,6 +228,12 @@ class FlowPage extends WorkbayPage {
         // Registered with no tooltip: it exists to swallow clicks on the empty canvas, not to say
         // anything. Empty space answers nothing.
         screen.hit(viewLeft(), viewTop(), viewW(), canvasH, () -> { });
+        // The gesture, written on the thing it drives, faint, in the corner. It was only in the
+        // title's tooltip, which is a place nobody hovers: the map is the one page in the mod you
+        // cannot use without knowing something that nothing on it said. Create writes "Scroll to
+        // Modify" on every control it applies to for exactly this reason.
+        text(g, WorkbayScreen.gui("flow.drive"), viewLeft() + 5,
+            viewTop() + canvasH - 11, viewW() - 10, Draw.TEXT_FAINT);
         if (nodes.isEmpty()) {
             text(g, WorkbayScreen.gui("flow.empty"), viewLeft() + 6, viewTop() + 8, viewW() - 12,
                 Draw.TEXT_FAINT);

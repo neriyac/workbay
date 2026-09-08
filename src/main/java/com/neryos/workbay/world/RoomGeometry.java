@@ -63,9 +63,8 @@ public final class RoomGeometry {
      * in it at <b>every</b> tier.
      *
      * <p>Corner-anchored on purpose: a larger Room Frame only ever moves the far walls outward, so
-     * the entry pad, the Exit block and every coordinate the player built at stay where they were.
-     * Centring the room would preserve blocks too, and would move the one landmark a lost player is
-     * told to walk to.
+     * the entry pad and every coordinate the player built at stay where they were. Centring the
+     * room would preserve blocks too, and would move the pad a lost player is told to walk to.
      */
     public static BlockPos origin(int region) {
         return new BlockPos(REGION_ORIGIN_X + (region % REGIONS_PER_ROW) * REGION_SPACING, FLOOR_Y,
@@ -100,8 +99,14 @@ public final class RoomGeometry {
      *
      * <p>Two wide because a wall is a whole number of chunks across and sixteen has no middle
      * block: a one-block doorway is off-centre by half a block, which is exactly what it looks
-     * like. Two straddles the seam and is dead centre. Left and right are named looking
-     * <em>into</em> the room, which is the only side anybody ever sees.
+     * like. Two straddles the seam and is dead centre.
+     *
+     * <p><b>Left and right are the viewer's, and the viewer is inside.</b> The first draft named
+     * them looking <em>into</em> the room, which is the one side nobody is ever on — a player
+     * stands in the room and looks <em>out</em> at the wall. Every wall came out mirrored: both
+     * handles on the outer edges, a hinge stile down the middle of each leaf, two single doors hung
+     * backwards rather than one double door. Found by Neriya on the first screenshot of a room.
+     * {@code aDoorsLeavesMeetInTheMiddle} is the guard.
      */
     public static java.util.Map<BlockPos, RoomPart> doors(int region, int tier) {
         int side = footprint(tier);
@@ -116,18 +121,18 @@ public final class RoomGeometry {
             int y = 1 + i;
             RoomPart left = i == 0 ? RoomPart.DOOR_BOTTOM_LEFT : RoomPart.DOOR_TOP_LEFT;
             RoomPart right = i == 0 ? RoomPart.DOOR_BOTTOM_RIGHT : RoomPart.DOOR_TOP_RIGHT;
-            // West wall (x = 0), seen looking east: -z is on the viewer's left.
-            out.put(o.offset(0, y, a), left);
-            out.put(o.offset(0, y, b), right);
-            // East wall, seen looking west: the order flips.
-            out.put(o.offset(side - 1, y, b), left);
-            out.put(o.offset(side - 1, y, a), right);
-            // North wall (z = 0), seen looking south.
-            out.put(o.offset(b, y, 0), left);
-            out.put(o.offset(a, y, 0), right);
+            // West wall (x = 0), seen from inside looking west: +z is on the viewer's left.
+            out.put(o.offset(0, y, b), left);
+            out.put(o.offset(0, y, a), right);
+            // East wall, seen looking east: the order flips.
+            out.put(o.offset(side - 1, y, a), left);
+            out.put(o.offset(side - 1, y, b), right);
+            // North wall (z = 0), seen looking north: -x is on the viewer's left.
+            out.put(o.offset(a, y, 0), left);
+            out.put(o.offset(b, y, 0), right);
             // South wall.
-            out.put(o.offset(a, y, side - 1), left);
-            out.put(o.offset(b, y, side - 1), right);
+            out.put(o.offset(b, y, side - 1), left);
+            out.put(o.offset(a, y, side - 1), right);
         }
         return out;
     }

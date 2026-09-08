@@ -1,5 +1,8 @@
 {
   "variants": {
+    "colour=bone,part=ceiling": {
+      "model": "workbay:block/room_ceiling"
+    },
     "colour=bone,part=door_bl": {
       "model": "workbay:block/room_door_bl"
     },
@@ -15,8 +18,14 @@
     "colour=bone,part=floor": {
       "model": "workbay:block/room_floor"
     },
+    "colour=bone,part=skirting": {
+      "model": "workbay:block/room_skirting"
+    },
     "colour=bone,part=wall": {
       "model": "workbay:block/room_wall"
+    },
+    "colour=charcoal,part=ceiling": {
+      "model": "workbay:block/room_ceiling"
     },
     "colour=charcoal,part=door_bl": {
       "model": "workbay:block/room_door_bl"
@@ -33,8 +42,14 @@
     "colour=charcoal,part=floor": {
       "model": "workbay:block/room_floor"
     },
+    "colour=charcoal,part=skirting": {
+      "model": "workbay:block/room_skirting"
+    },
     "colour=charcoal,part=wall": {
       "model": "workbay:block/room_wall"
+    },
+    "colour=clay,part=ceiling": {
+      "model": "workbay:block/room_ceiling"
     },
     "colour=clay,part=door_bl": {
       "model": "workbay:block/room_door_bl"
@@ -51,8 +66,14 @@
     "colour=clay,part=floor": {
       "model": "workbay:block/room_floor"
     },
+    "colour=clay,part=skirting": {
+      "model": "workbay:block/room_skirting"
+    },
     "colour=clay,part=wall": {
       "model": "workbay:block/room_wall"
+    },
+    "colour=overworld,part=ceiling": {
+      "model": "workbay:block/room_ceiling"
     },
     "colour=overworld,part=door_bl": {
       "model": "workbay:block/room_door_bl"
@@ -69,8 +90,14 @@
     "colour=overworld,part=floor": {
       "model": "workbay:block/room_floor"
     },
+    "colour=overworld,part=skirting": {
+      "model": "workbay:block/room_skirting"
+    },
     "colour=overworld,part=wall": {
       "model": "workbay:block/room_wall"
+    },
+    "colour=plum,part=ceiling": {
+      "model": "workbay:block/room_ceiling"
     },
     "colour=plum,part=door_bl": {
       "model": "workbay:block/room_door_bl"
@@ -87,8 +114,14 @@
     "colour=plum,part=floor": {
       "model": "workbay:block/room_floor"
     },
+    "colour=plum,part=skirting": {
+      "model": "workbay:block/room_skirting"
+    },
     "colour=plum,part=wall": {
       "model": "workbay:block/room_wall"
+    },
+    "colour=rose,part=ceiling": {
+      "model": "workbay:block/room_ceiling"
     },
     "colour=rose,part=door_bl": {
       "model": "workbay:block/room_door_bl"
@@ -105,8 +138,14 @@
     "colour=rose,part=floor": {
       "model": "workbay:block/room_floor"
     },
+    "colour=rose,part=skirting": {
+      "model": "workbay:block/room_skirting"
+    },
     "colour=rose,part=wall": {
       "model": "workbay:block/room_wall"
+    },
+    "colour=sage,part=ceiling": {
+      "model": "workbay:block/room_ceiling"
     },
     "colour=sage,part=door_bl": {
       "model": "workbay:block/room_door_bl"
@@ -123,8 +162,14 @@
     "colour=sage,part=floor": {
       "model": "workbay:block/room_floor"
     },
+    "colour=sage,part=skirting": {
+      "model": "workbay:block/room_skirting"
+    },
     "colour=sage,part=wall": {
       "model": "workbay:block/room_wall"
+    },
+    "colour=sand,part=ceiling": {
+      "model": "workbay:block/room_ceiling"
     },
     "colour=sand,part=door_bl": {
       "model": "workbay:block/room_door_bl"
@@ -141,8 +186,14 @@
     "colour=sand,part=floor": {
       "model": "workbay:block/room_floor"
     },
+    "colour=sand,part=skirting": {
+      "model": "workbay:block/room_skirting"
+    },
     "colour=sand,part=wall": {
       "model": "workbay:block/room_wall"
+    },
+    "colour=sky,part=ceiling": {
+      "model": "workbay:block/room_ceiling"
     },
     "colour=sky,part=door_bl": {
       "model": "workbay:block/room_door_bl"
@@ -159,8 +210,14 @@
     "colour=sky,part=floor": {
       "model": "workbay:block/room_floor"
     },
+    "colour=sky,part=skirting": {
+      "model": "workbay:block/room_skirting"
+    },
     "colour=sky,part=wall": {
       "model": "workbay:block/room_wall"
+    },
+    "colour=slate,part=ceiling": {
+      "model": "workbay:block/room_ceiling"
     },
     "colour=slate,part=door_bl": {
       "model": "workbay:block/room_door_bl"
@@ -177,8 +234,14 @@
     "colour=slate,part=floor": {
       "model": "workbay:block/room_floor"
     },
+    "colour=slate,part=skirting": {
+      "model": "workbay:block/room_skirting"
+    },
     "colour=slate,part=wall": {
       "model": "workbay:block/room_wall"
+    },
+    "colour=teal,part=ceiling": {
+      "model": "workbay:block/room_ceiling"
     },
     "colour=teal,part=door_bl": {
       "model": "workbay:block/room_door_bl"
@@ -194,6 +257,9 @@
     },
     "colour=teal,part=floor": {
       "model": "workbay:block/room_floor"
+    },
+    "colour=teal,part=skirting": {
+      "model": "workbay:block/room_skirting"
     },
     "colour=teal,part=wall": {
       "model": "workbay:block/room_wall"

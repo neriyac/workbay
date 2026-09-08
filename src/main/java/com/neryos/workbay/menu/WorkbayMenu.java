@@ -218,10 +218,12 @@ public class WorkbayMenu extends AbstractContainerMenu {
             case TOGGLE_ROOM_ANCHOR -> toggleRoomAnchor(serverPlayer, record, (int) arg);
             case CYCLE_ROOM_BIOME -> cycleRoomBiome(serverPlayer, record, (int) arg);
             case CYCLE_ROOM_COLOUR -> cycleRoomColour(serverPlayer, record, (int) arg, back);
-            // arg packs the room in the low 16 bits and the choice in the next: one action, one
-            // guard, and no second packet for "which room" versus "which value".
+            // The biome travels as its own id, never as a position in the list: the picker is
+            // searchable, so the row a player clicked is a position in a *filtered* list and the
+            // two ends would disagree the moment anybody typed. The colour below still packs an
+            // ordinal, because eleven colours are ours and cannot be filtered or added to.
             case SET_ROOM_BIOME -> setRoomBiome(serverPlayer, record, (int) (arg & 0xFFFF),
-                (int) (arg >> 16));
+                text.orElse(""));
             case SET_ROOM_COLOUR -> setRoomColour(serverPlayer, record, (int) (arg & 0xFFFF),
                 (int) (arg >> 16));
             case ENTER_BAY -> {
@@ -673,16 +675,26 @@ public class WorkbayMenu extends AbstractContainerMenu {
         }
     }
 
-    /** One room's biome, by index into the tag. Out-of-range indices are dropped, not clamped. */
+    /**
+     * One room's biome, named by its own id.
+     *
+     * <p><b>Checked against the tag on this side, always.</b> The id arrives from a client, and
+     * {@code #workbay:room_biomes} is the whole of what a pack said a room may be — a client that
+     * asks for {@code the_end} gets nothing, not a private End.
+     */
     private void setRoomBiome(ServerPlayer serverPlayer, WorkbayRecord record, int index,
-        int choice) {
+        String id) {
         com.neryos.workbay.world.RoomRecord room = editableRoom(serverPlayer, record, index);
+        net.minecraft.resources.ResourceLocation where =
+            net.minecraft.resources.ResourceLocation.tryParse(id);
         List<net.minecraft.resources.ResourceKey<net.minecraft.world.level.biome.Biome>> all =
             com.neryos.workbay.world.RoomBiomes.choices(serverPlayer.server.registryAccess());
-        if (room == null || choice < 0 || choice >= all.size()) {
+        var chosen = where == null ? null
+            : all.stream().filter(key -> key.location().equals(where)).findFirst().orElse(null);
+        if (room == null || chosen == null) {
             return;
         }
-        com.neryos.workbay.world.RoomRecord updated = room.withBiome(all.get(choice));
+        com.neryos.workbay.world.RoomRecord updated = room.withBiome(chosen);
         com.neryos.workbay.world.RoomRegistry.get(serverPlayer.server).putRoom(updated);
         ServerLevel backshop = serverPlayer.server.getLevel(WorkbayDimensions.BACKSHOP);
         if (backshop != null) {

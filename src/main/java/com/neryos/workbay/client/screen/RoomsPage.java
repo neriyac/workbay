@@ -35,8 +35,13 @@ class RoomsPage extends WorkbayPage {
     /** One line of text, centred in an 18px row. */
     private static final int TEXT_Y = 5;
 
-    /** Clear of the header band: the title sits at y 6 and the back button at y 24. */
-    private static final int LADDER_Y = 46;
+    /**
+     * Clear of the header band, which is now the title and the tab row and nothing else: the
+     * back arrow that used to sit on its own line at y 24 is gone, and the twenty pixels it
+     * cost are the reason four rooms plus five rungs fit inside 240 with room to spare rather
+     * than with one pixel.
+     */
+    private static final int LADDER_Y = 26;
 
     /**
      * Everything that costs chunks, in the order the player climbs it. The Anchor is here rather
@@ -71,16 +76,33 @@ class RoomsPage extends WorkbayPage {
     private static final int ENTER_W = 58;
 
     // The settings window.
-    private static final int WIN_W = 176;
+    private static final int WIN_W = 200;
     private static final int WIN_PAD = 8;
     private static final int SWATCH = 16;
     private static final int SWATCH_PITCH = 18;
     private static final int SWATCHES_PER_ROW = 8;
-    private static final int BIOME_H = 14;
-    private static final int BIOME_PITCH = 15;
+    private static final int BIOME_H = 13;
+    /**
+     * How many biomes the list shows at once. <b>The window's height does not depend on how many
+     * there are</b> — the first draft drew one row per tag entry, which is fine for the six we ship
+     * and is a three-thousand-pixel window the moment a pack adds Biomes O' Plenty or Terralith.
+     * Six rows and a scrollbar, with the search box above, is Nature Compass's answer and it is the
+     * right one: a list you can type at does not care how long it is.
+     */
+    private static final int BIOME_ROWS = 6;
+    private static final int SEARCH_W = 84;
+    private static final int SEARCH_H = 12;
+    /** The scrollbar track down the right of the list, drawn only when there is more than fits. */
+    private static final int SCROLLBAR_W = 6;
 
     /** Which room's settings window is open, or -1. Client-side and never sent anywhere. */
     private int open = -1;
+
+    /** First visible row of the biome list. Reset whenever the search narrows it. */
+    private int scroll;
+
+    /** The search text as of the last frame, so a change can reset the scroll. */
+    private String lastQuery = "";
 
     RoomsPage(WorkbayScreen screen) {
         super(screen);
@@ -134,10 +156,8 @@ class RoomsPage extends WorkbayPage {
             g.renderItem(new ItemStack(upgrade.item()), px + 2, py + 1);
 
             String key = "upgrade." + upgrade.getSerializedName();
-            // Faint means "you cannot have this", so a row you already own is not faint: the page
-            // read as five disabled things the first time it was on a screen.
-            int nameColour = maxed || affordable ? Draw.TEXT : Draw.TEXT_FAINT;
-            text(g, WorkbayScreen.gui(key), px + NAME_X, py + TEXT_Y, NAME_W, nameColour);
+            // A name is never faint -- see UpgradesPage. What you can afford is the price's job.
+            text(g, WorkbayScreen.gui(key), px + NAME_X, py + TEXT_Y, NAME_W, Draw.TEXT);
             text(g, WorkbayScreen.gui(key + ".desc"), px + DESC_X, py + TEXT_Y, DESC_W,
                 Draw.TEXT_FAINT);
             textRight(g, installed + " / " + upgrade.max(), px + COUNT_RIGHT, py + TEXT_Y, COUNT_W,
@@ -172,6 +192,10 @@ class RoomsPage extends WorkbayPage {
     private void rooms(GuiGraphics g, int mouseX, int mouseY) {
         WorkbaySnapshot snap = snapshot();
         int top = roomsTop();
+        // A rule between the two halves. The ladder and the rooms are the same eighteen-pixel row
+        // in the same well, so nine of them in a column read as one list and nothing said which
+        // were things to buy and which were things you own.
+        g.fill(x(ROW_X), y(top - 5), x(ROW_X + ROW_W), y(top - 4), Draw.EDGE_DARK);
         if (snap.rooms().isEmpty()) {
             Draw.well(g, x(ROW_X), y(top), ROW_W, ROW_H);
             text(g, WorkbayScreen.gui("rooms.none"), x(ROW_X) + 6, y(top) + TEXT_Y, ROW_W - 12,
@@ -237,11 +261,45 @@ class RoomsPage extends WorkbayPage {
         Draw.button(g, px, py, 18, 18, hover, open == room.index());
         g.fill(px + 4, py + 4, px + 14, py + 14, 0xFF000000 | room.colour().tint());
         int index = room.index();
-        screen.hit(px, py, 18, 18, () -> open = open == index ? -1 : index,
+        screen.hit(px, py, 18, 18, () -> setOpen(open == index ? -1 : index),
             WorkbayScreen.gui("rooms.settings"),
             WorkbayScreen.gui("rooms.colour",
                 WorkbayScreen.gui("colour." + room.colour().getSerializedName())),
             WorkbayScreen.gui("rooms.biome", biomeName(room.biome())));
+    }
+
+    /** Opening or closing the window, and the search field that belongs to it, in one place. */
+    private void setOpen(int index) {
+        open = index;
+        scroll = 0;
+        lastQuery = "";
+        if (index < 0) {
+            screen.closeFilter();
+        }
+    }
+
+    /**
+     * Escape closes the window rather than the screen. Without it, a player who opened the picker
+     * to look at the colours is thrown out of the Workbay entirely by the one key everybody presses
+     * to back out of a thing.
+     */
+    @Override
+    boolean escaped() {
+        if (open < 0) {
+            return false;
+        }
+        setOpen(-1);
+        return true;
+    }
+
+    /** The biome list scrolls; nothing else on this page does. */
+    @Override
+    boolean scrolled(double mouseX, double mouseY, double delta) {
+        if (open < 0) {
+            return false;
+        }
+        scroll = Math.max(0, scroll - (int) Math.signum(delta));
+        return true;
     }
 
     /**
@@ -257,12 +315,12 @@ class RoomsPage extends WorkbayPage {
         WorkbaySnapshot.Room room = snapshot().rooms().stream()
             .filter(r -> r.index() == open && r.built()).findFirst().orElse(null);
         if (room == null) {
-            open = -1;
+            setOpen(-1);
             return;
         }
-        var biomes = biomeChoices();
         int rows = (RoomColour.values().length + SWATCHES_PER_ROW - 1) / SWATCHES_PER_ROW;
-        int h = WIN_PAD * 2 + 12 + 10 + rows * SWATCH_PITCH + 8 + 10 + biomes.size() * BIOME_PITCH;
+        int listH = BIOME_ROWS * BIOME_H + 2;
+        int h = WIN_PAD * 2 + 12 + 10 + rows * SWATCH_PITCH + 8 + SEARCH_H + 2 + listH;
         int wx = x((WIDTH - WIN_W) / 2);
         int wy = y(Math.max(2, (height() - h) / 2));
 
@@ -270,13 +328,23 @@ class RoomsPage extends WorkbayPage {
         // full-page hit under the window is what closes it, and it is registered first so every
         // control of the window itself still wins -- clicks resolve in reverse order.
         g.fill(x(0), y(0), x(WIDTH), y(height()), 0xB4000000);
-        screen.hit(x(0), y(0), WIDTH, height(), () -> open = -1);
+        screen.hit(x(0), y(0), WIDTH, height(), () -> setOpen(-1));
         Draw.panel(g, wx, wy, WIN_W, h);
 
         int cursor = wy + WIN_PAD;
         String name = room.name().isEmpty()
             ? WorkbayScreen.gui("rooms.name", room.index() + 1).getString() : room.name();
-        Draw.text(g, screen.font(), name, wx + WIN_PAD, cursor, WIN_W - WIN_PAD * 2, Draw.TEXT);
+        Draw.text(g, screen.font(), name, wx + WIN_PAD, cursor, WIN_W - WIN_PAD * 2 - 20,
+            Draw.TEXT);
+        // A close button, because "click the dark part" is not a control anybody can see. Mekanism
+        // puts one on every window it opens for the same reason.
+        int closeX = wx + WIN_W - WIN_PAD - 14;
+        int closeY = cursor - 3;
+        boolean closeHover = screen.hovered(closeX, closeY, 14, 14, mouseX, mouseY);
+        Draw.button(g, closeX, closeY, 14, 14, closeHover, false);
+        WBIcons.draw(g, WBIcons.CROSS, closeX + 1, closeY + 1, Draw.TEXT_DIM);
+        screen.hit(closeX, closeY, 14, 14, () -> setOpen(-1),
+            WorkbayScreen.gui("rooms.settings.close"));
         cursor += 12;
 
         Draw.text(g, screen.font(), WorkbayScreen.gui("rooms.colour.label").getString(),
@@ -290,6 +358,12 @@ class RoomsPage extends WorkbayPage {
             boolean hover = screen.hovered(cx, cy, SWATCH, SWATCH, mouseX, mouseY);
             Draw.button(g, cx, cy, SWATCH, SWATCH, hover, chosen);
             g.fill(cx + 3, cy + 3, cx + SWATCH - 3, cy + SWATCH - 3, 0xFF000000 | colour.tint());
+            if (chosen) {
+                // A ring, not a shade. Draw.button's active fill sits *behind* a swatch that is
+                // ten solid pixels of colour, so the one the room is actually painted could not be
+                // picked out of the eleven.
+                Draw.bevel(g, cx, cy, SWATCH, SWATCH, true, Draw.SELECT, Draw.SELECT);
+            }
             long packed = room.index() | ((long) i << 16);
             screen.hit(cx, cy, SWATCH, SWATCH,
                 () -> screen.send(WorkbayAction.SET_ROOM_COLOUR, packed),
@@ -297,24 +371,92 @@ class RoomsPage extends WorkbayPage {
         }
         cursor += rows * SWATCH_PITCH + 8;
 
+        // Label on the left of the line, search field on the right of it: one line for "what this
+        // is" and "how to find one in it", which is the shape every long list in the genre uses.
+        int searchX = wx + WIN_W - WIN_PAD - SEARCH_W;
         Draw.text(g, screen.font(), WorkbayScreen.gui("rooms.biome.label").getString(),
-            wx + WIN_PAD, cursor, WIN_W - WIN_PAD * 2, Draw.TEXT_DIM);
-        cursor += 10;
-        for (int i = 0; i < biomes.size(); i++) {
-            var key = biomes.get(i);
-            int by = cursor + i * BIOME_PITCH;
-            boolean chosen = key.location().toString().equals(room.biome());
-            boolean hover = screen.hovered(wx + WIN_PAD, by, WIN_W - WIN_PAD * 2, BIOME_H,
-                mouseX, mouseY);
-            Draw.button(g, wx + WIN_PAD, by, WIN_W - WIN_PAD * 2, BIOME_H, hover, chosen);
-            Draw.text(g, screen.font(), biomeName(key.location().toString()).getString(),
-                wx + WIN_PAD + 6, by + 3, WIN_W - WIN_PAD * 2 - 12,
-                chosen ? Draw.TEXT : Draw.TEXT_DIM);
-            long packed = room.index() | ((long) i << 16);
-            screen.hit(wx + WIN_PAD, by, WIN_W - WIN_PAD * 2, BIOME_H,
-                () -> screen.send(WorkbayAction.SET_ROOM_BIOME, packed),
-                WorkbayScreen.gui("rooms.biome.tip"));
+            wx + WIN_PAD, cursor + 2, searchX - wx - WIN_PAD - 4, Draw.TEXT_DIM);
+        String query = screen.openFilter(searchX + 4, cursor + 2, SEARCH_W - 8, SEARCH_H - 2);
+        Draw.slot(g, searchX, cursor, SEARCH_W, SEARCH_H);
+        // The field is a real widget drawn by the screen, so the only thing needed here is a hit
+        // that takes the click back off the scrim and gives it to the box.
+        screen.hit(searchX, cursor, SEARCH_W, SEARCH_H, screen::focusFilter);
+        if (query.isEmpty()) {
+            Draw.text(g, screen.font(), WorkbayScreen.gui("rooms.biome.search").getString(),
+                searchX + 4, cursor + 2, SEARCH_W - 8, Draw.TEXT_FAINT);
         }
+        cursor += SEARCH_H + 2;
+
+        java.util.List<net.minecraft.resources.ResourceKey<net.minecraft.world.level.biome.Biome>>
+            matches = matching(query);
+        if (!query.equals(lastQuery)) {
+            lastQuery = query;
+            scroll = 0;
+        }
+        int listW = WIN_W - WIN_PAD * 2;
+        Draw.well(g, wx + WIN_PAD, cursor, listW, listH);
+        boolean bar = matches.size() > BIOME_ROWS;
+        int rowW = listW - 2 - (bar ? SCROLLBAR_W + 1 : 0);
+        scroll = Math.clamp(scroll, 0, Math.max(0, matches.size() - BIOME_ROWS));
+
+        if (matches.isEmpty()) {
+            // A list with nothing in it says which of the two reasons it is, because they need
+            // different things done about them: an empty tag is a pack's doing, an empty search
+            // is the player's.
+            Draw.text(g, screen.font(),
+                WorkbayScreen.gui(biomeChoices().isEmpty() ? "rooms.biome.none"
+                    : "rooms.biome.nomatch").getString(),
+                wx + WIN_PAD + 5, cursor + 5, listW - 10, Draw.TEXT_FAINT);
+        }
+        for (int row = 0; row < BIOME_ROWS && scroll + row < matches.size(); row++) {
+            var key = matches.get(scroll + row);
+            String id = key.location().toString();
+            int bx = wx + WIN_PAD + 1;
+            int by = cursor + 1 + row * BIOME_H;
+            boolean chosen = id.equals(room.biome());
+            boolean hover = screen.hovered(bx, by, rowW, BIOME_H, mouseX, mouseY);
+            Draw.button(g, bx, by, rowW, BIOME_H, hover, chosen);
+            Draw.text(g, screen.font(), biomeName(id).getString(), bx + 5, by + 3, rowW - 10,
+                chosen ? Draw.TEXT : Draw.TEXT_DIM);
+            long index = room.index();
+            screen.hit(bx, by, rowW, BIOME_H,
+                () -> screen.sendText(WorkbayAction.SET_ROOM_BIOME, index, id),
+                Component.literal(id), WorkbayScreen.gui("rooms.biome.tip"));
+        }
+        if (bar) {
+            // Six wide and drawn as two flat fills. At four, with a bevel on the knob, the whole
+            // bar was three pixels of edge and one of knob -- a sliver that read as a rendering
+            // seam down the side of the list rather than as something you could drag.
+            int trackX = wx + WIN_PAD + listW - 1 - SCROLLBAR_W;
+            int trackH = listH - 2;
+            g.fill(trackX, cursor + 1, trackX + SCROLLBAR_W, cursor + 1 + trackH, Draw.TUBE);
+            int knobH = Math.max(8, trackH * BIOME_ROWS / matches.size());
+            int knobY = cursor + 1
+                + (trackH - knobH) * scroll / Math.max(1, matches.size() - BIOME_ROWS);
+            g.fill(trackX + 1, knobY, trackX + SCROLLBAR_W - 1, knobY + knobH, Draw.EDGE_LIGHT);
+        }
+    }
+
+    /**
+     * The choices whose name or id contains the search text, in the tag's own order.
+     *
+     * <p>Matched against the <b>translated name</b> as well as the id, because a player looking for
+     * a cherry grove types "cherry", and a pack whose biome id is {@code terralith:yellowstone}
+     * still calls it Yellowstone on screen.
+     */
+    private static java.util.List<
+        net.minecraft.resources.ResourceKey<net.minecraft.world.level.biome.Biome>> matching(
+        String query) {
+        var all = biomeChoices();
+        if (query.isBlank()) {
+            return all;
+        }
+        String needle = query.toLowerCase(java.util.Locale.ROOT);
+        return all.stream().filter(key -> {
+            String id = key.location().toString();
+            return id.toLowerCase(java.util.Locale.ROOT).contains(needle)
+                || biomeName(id).getString().toLowerCase(java.util.Locale.ROOT).contains(needle);
+        }).toList();
     }
 
     /**

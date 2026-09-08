@@ -148,12 +148,29 @@ public final class Draw {
      */
     public static void bar(GuiGraphics g, int x, int y, int w, int h, int value, int max, int argb) {
         slot(g, x, y, w, h);
-        g.fill(x + 1, y + 1, x + w - 1, y + h - 1, (argb & 0x00FFFFFF) | 0x33000000);
+        // The empty channel is the gauge's dark tube with a *breath* of the bar's colour over it,
+        // not a fifth of it. At a fifth, ninety-six pixels of empty channel is a solid green block
+        // sitting above the words "0 / 100.0k FE" and reads as a full battery -- which is exactly
+        // how the upgrades page photographed. The graduations below are what keep an empty tube
+        // reading as a container, which is the job the tint was doing badly.
+        g.fill(x + 1, y + 1, x + w - 1, y + h - 1, TUBE);
+        g.fill(x + 1, y + 1, x + w - 1, y + h - 1, (argb & 0x00FFFFFF) | 0x18000000);
+        // Quarter marks, and the vertical twin's reason for them: an empty channel tinted with the
+        // bar's own colour is the same hue as a full one, and at forty pixels the two told apart
+        // only by brightness. A bar with a scale on it is a scale whatever is in it -- the header's
+        // power bar read as *full* beside the words "0 / 100.0k" until this went in.
+        for (int mark = 1; mark < 4; mark++) {
+            int mx = x + 1 + (w - 2) * mark / 4;
+            g.fill(mx, y + 1, mx + 1, y + h - 1, GRADUATION);
+        }
         if (max <= 0 || value <= 0) {
             return;
         }
         int filled = Math.max(1, (int) ((long) (w - 2) * Math.min(value, max) / max));
         g.fill(x + 1, y + 1, x + 1 + filled, y + h - 1, argb);
+        // The line down the leading edge, exactly what gauge() puts along its surface: two pixels
+        // of content read as a level rather than as an edge of the tube.
+        g.fill(x + filled, y + 1, x + 1 + filled, y + h - 1, SURFACE);
     }
 
     /**

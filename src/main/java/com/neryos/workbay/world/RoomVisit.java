@@ -127,7 +127,7 @@ public final class RoomVisit {
     /**
      * Puts an occupant back where they came from. Silent and harmless if they are not one.
      *
-     * <p>Reads the way home off the <b>player</b>, which is what lets the Exit block work with no
+     * <p>Reads the way home off the <b>player</b>, which is what lets any shell block work with no
      * Workbay standing in the world at all.
      */
     public static boolean leave(ServerPlayer player) {

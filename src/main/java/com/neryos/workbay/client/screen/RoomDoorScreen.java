@@ -97,21 +97,29 @@ public class RoomDoorScreen extends AbstractContainerScreen<RoomDoorMenu> {
             Draw.well(g, px, ry0, ROW_W, ROOM_H);
 
             // The room's own colour, which on this screen is the only thing that tells two rooms
-            // with the same name apart before you walk into one.
-            int swatchY = ry0 + (ROOM_H - SWATCH) / 2;
-            g.fill(px + SWATCH_X, swatchY, px + SWATCH_X + SWATCH, swatchY + SWATCH,
-                0xFF000000 | room.colour().tint());
+            // with the same name apart before you walk into one. Only a built room has one: four
+            // identical default swatches down the column said nothing at all, and said it about
+            // rooms that do not exist yet.
+            int textY = ry0 + (ROOM_H - font.lineHeight) / 2 + 1;
+            if (room.built()) {
+                int swatchY = ry0 + (ROOM_H - SWATCH) / 2;
+                g.fill(px + SWATCH_X, swatchY, px + SWATCH_X + SWATCH, swatchY + SWATCH,
+                    0xFF000000 | room.colour().tint());
+            }
 
             String name = room.name().isEmpty()
                 ? WorkbayLang.gui("rooms.name", room.index() + 1).getString() : room.name();
-            int textY = ry0 + (ROOM_H - font.lineHeight) / 2 + 1;
-            Draw.text(g, font, name, px + NAME_X, textY, NAME_W, here ? Draw.TEXT_DIM : Draw.TEXT);
 
             if (here) {
+                // "You are here" is 72 pixels and the button column is 46, so on this one row the
+                // name gives up what the label needs. It printed "You are he..." otherwise -- the
+                // one string on the screen whose whole job is to say where you are standing.
+                Draw.text(g, font, name, px + NAME_X, textY, NAME_W - 26, Draw.TEXT_DIM);
                 Draw.textRight(g, font, WorkbayLang.gui("door.here").getString(),
-                    px + ROW_W - 6, textY, GO_W + 20, Draw.TEXT_FAINT);
+                    px + ROW_W - 6, textY, GO_W + 26, Draw.TEXT_FAINT);
                 continue;
             }
+            Draw.text(g, font, name, px + NAME_X, textY, NAME_W, Draw.TEXT);
             boolean hover = isHovering(MARGIN + GO_X, ry, GO_W, ROOM_H - 4, mouseX, mouseY);
             Draw.button(g, px + GO_X, ry0 + 2, GO_W, ROOM_H - 4, hover, false);
             Draw.textCentre(g, font,

@@ -21,11 +21,11 @@ import net.minecraft.world.item.ItemStack;
 class UpgradesPage extends WorkbayPage {
 
     private static final int WIDTH = 320;
-    private static final int HEIGHT = 232;
+    private static final int HEIGHT = 212;
 
     private static final int ROW_X = 118;
     private static final int ROW_W = 194;
-    private static final int ROW_Y = 52;
+    private static final int ROW_Y = 32;
     private static final int ROW_H = 34;
     private static final int ROW_PITCH = 38;
 
@@ -49,7 +49,7 @@ class UpgradesPage extends WorkbayPage {
     private static final BlockPreview PREVIEW = new BlockPreview();
 
     private static final int WELL_X = 12;
-    private static final int WELL_Y = 52;
+    private static final int WELL_Y = 32;
     private static final int WELL_W = 96;
     private static final int WELL_H = 74;
 
@@ -167,10 +167,12 @@ class UpgradesPage extends WorkbayPage {
             // figures are right-aligned inside one fixed column, so neither can reach back into
             // the text.
             String count = installed + " / " + upgrade.max();
-            // Faint means "you cannot have this", so a maxed row is not faint: one you already own
-            // is the opposite of one you are refused. Same rule on ROOMS.
-            text(g, WorkbayScreen.gui(key), px + TEXT_X, py + 6, NAME_W,
-                maxed || affordable ? Draw.TEXT : Draw.TEXT_FAINT);
+            // A name is never faint. It says what the thing <em>is</em>, and that does not change
+            // with what is in the bank: on a network that cannot afford anything the whole page
+            // came out greyed, four dead rows with nothing for the eye to land on. Whether you
+            // can have it is already said twice on the row -- the price in red, and the + drawn
+            // disabled -- and neither of those is the name's job. Same rule on ROOMS.
+            text(g, WorkbayScreen.gui(key), px + TEXT_X, py + 6, NAME_W, Draw.TEXT);
             textRight(g, count, px + RIGHT_EDGE, py + 6, COUNT_W,
                 maxed ? Draw.GREEN : Draw.TEXT_DIM);
 

@@ -439,26 +439,6 @@ public static final String[] EXTRACT = {
         "............",
     };
 
-    /**
-     * Return to the page you came from. Was a left arrow, which is what {@link #ARROW_LEFT} is:
-     * two controls drawing one picture on one screen. A return arrow says <i>where</i> it goes
-     * back to, which a bare arrow does not.
-     */
-public static final String[] BACK = {
-        "............",
-        "..........##",
-        "..........##",
-        "..........##",
-        "..#.......##",
-        ".##.......##",
-        "###########.",
-        "###########.",
-        ".##.........",
-        "..#.........",
-        "............",
-        "............",
-    };
-
     /** Draws one icon with its top-left corner at (x, y), tinted {@code argb}. */
     public static void draw(GuiGraphics graphics, String[] icon, int x, int y, int argb) {
         for (int row = 0; row < icon.length; row++) {

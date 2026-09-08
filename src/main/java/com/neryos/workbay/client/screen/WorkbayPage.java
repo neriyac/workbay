@@ -25,6 +25,14 @@ abstract class WorkbayPage {
 
     abstract void render(GuiGraphics graphics, int mouseX, int mouseY);
 
+    /**
+     * True when Escape closed something this page had open, rather than the screen. Only ROOMS
+     * has one — the settings window.
+     */
+    boolean escaped() {
+        return false;
+    }
+
     /** True when this page consumed the scroll. Only the LINKS list does. */
     boolean scrolled(double mouseX, double mouseY, double delta) {
         return false;
@@ -71,32 +79,36 @@ abstract class WorkbayPage {
         WorkbaySnapshot snap = snapshot();
 
         // Four 18x18 buttons, top right. The lock is the only one that changes what it draws.
-        boolean onBays = screen.page() == WorkbayScreen.Page.BAYS;
         // ROOMS is always here, never hidden until a Frame is installed: the Frames are bought on
         // that page, so hiding it until you own one is a door locked from the inside.
-        iconButton(g, mouseX, mouseY, x(width() - 88), y(6), WBIcons.DOOR,
-            screen.page() == WorkbayScreen.Page.ROOMS,
-            () -> screen.goTo(WorkbayScreen.Page.ROOMS),
-            WorkbayScreen.gui("button.rooms"), WorkbayScreen.gui("button.rooms.tip"));
-        iconButton(g, mouseX, mouseY, x(width() - 66), y(6), WBIcons.UPGRADE,
-            screen.page() == WorkbayScreen.Page.UPGRADES,
-            () -> screen.goTo(WorkbayScreen.Page.UPGRADES),
-            WorkbayScreen.gui("button.upgrades"), WorkbayScreen.gui("button.upgrades.tip"));
-        iconButton(g, mouseX, mouseY, x(width() - 44), y(6), WBIcons.MAP,
-            screen.page() == WorkbayScreen.Page.FLOW,
-            () -> screen.goTo(WorkbayScreen.Page.FLOW),
-            WorkbayScreen.gui("button.flow"), WorkbayScreen.gui("button.flow.tip"));
+        tab(g, mouseX, mouseY, width() - 88, WBIcons.DOOR, WorkbayScreen.Page.ROOMS, "rooms");
+        tab(g, mouseX, mouseY, width() - 66, WBIcons.UPGRADE, WorkbayScreen.Page.UPGRADES,
+            "upgrades");
+        tab(g, mouseX, mouseY, width() - 44, WBIcons.MAP, WorkbayScreen.Page.FLOW, "flow");
         iconButton(g, mouseX, mouseY, x(width() - 22), y(6),
             snap.locked() ? WBIcons.LOCK : WBIcons.UNLOCK, snap.locked(),
             () -> screen.send(WorkbayAction.TOGGLE_LOCK),
             WorkbayScreen.gui(snap.locked() ? "button.unlock" : "button.lock"),
             WorkbayScreen.gui("button.lock.tip"));
+    }
 
-        if (!onBays) {
-            iconButton(g, mouseX, mouseY, x(8), y(24), WBIcons.BACK, false,
-                () -> screen.goTo(WorkbayScreen.Page.BAYS),
-                WorkbayScreen.gui("button.back"), WorkbayScreen.gui("button.back.tip"));
-        }
+    /**
+     * One of the three page buttons. <b>Pressing the page you are already on goes back to BAYS</b>,
+     * which is what the separate back arrow used to do.
+     *
+     * <p>That arrow sat alone on its own line under the title and cost three of the four pages a
+     * whole twenty-pixel row to say one word — on ROOMS, the page that has to fit five ladder rungs
+     * and four rooms inside 240. A tab bar where the lit tab drops you back is the same gesture
+     * with no row and no second control, and the tooltip says so rather than leaving it to be
+     * discovered.
+     */
+    private void tab(GuiGraphics g, int mouseX, int mouseY, int px, String[] icon,
+        WorkbayScreen.Page target, String key) {
+        boolean here = screen.page() == target;
+        iconButton(g, mouseX, mouseY, x(px), y(6), icon, here,
+            () -> screen.goTo(here ? WorkbayScreen.Page.BAYS : target),
+            WorkbayScreen.gui("button." + key),
+            WorkbayScreen.gui(here ? "button.back.tip" : "button." + key + ".tip"));
     }
 
     /**
