@@ -19,6 +19,9 @@ abstract class WorkbayPage {
         this.screen = screen;
     }
 
+    /** How deep the chrome band is. Every page's content starts under it. */
+    protected static final int HEADER_H = 27;
+
     abstract int width();
 
     abstract int height();
@@ -68,6 +71,13 @@ abstract class WorkbayPage {
      * terminal's own power bar. SPEC.md §4 puts the problem count here too, on the bays page.
      */
     protected void header(GuiGraphics g, int mouseX, int mouseY, String title) {
+        // The band. One shade under the panel, with a light line along the very top of the window
+        // and a dark one under the band: the title, the counters and the four tabs were sitting on
+        // the same flat grey as the working area, so a screen that has a chrome row and a content
+        // area looked like one undivided rectangle with words at different sizes in it.
+        g.fill(x(1), y(1), x(width() - 1), y(HEADER_H), 0xFF24272C);
+        g.fill(x(1), y(1), x(width() - 1), y(2), 0x14FFFFFF);
+        g.fill(x(1), y(HEADER_H), x(width() - 1), y(HEADER_H + 1), Draw.EDGE_DARK);
         g.pose().pushPose();
         g.pose().translate(x(8), y(6), 0);
         g.pose().scale(1.6F, 1.6F, 1.0F);

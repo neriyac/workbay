@@ -166,7 +166,11 @@ public final class Draw {
         if (max <= 0 || value <= 0) {
             return;
         }
-        int filled = Math.max(1, (int) ((long) (w - 2) * Math.min(value, max) / max));
+        // Animated, not jumped: an energy bar that snaps between two readings every twenty ticks
+        // reads as a rendering fault, and a bar that slides reads as a level. Keyed on where it is
+        // drawn, which is the only identity a bar has here.
+        int target = (int) ((long) (w - 2) * Math.min(value, max) / max);
+        int filled = Math.max(1, Math.round(approach("bar:" + x + "," + y, target, 9.0F)));
         g.fill(x + 1, y + 1, x + 1 + filled, y + h - 1, argb);
         // The line down the leading edge, exactly what gauge() puts along its surface: two pixels
         // of content read as a level rather than as an edge of the tube.
@@ -305,6 +309,79 @@ public final class Draw {
         g.fill(left, top, left + 1, bottom, 0x26FFFFFF);
         g.fill(right - 1, top, right, bottom, 0x33000000);
         g.fill(left, top, right, top + 1, 0x33000000);
+    }
+
+
+    // ------------------------------------------------------------- motion
+
+    /**
+     * <b>The only clock these screens have.</b> A GUI redraws every frame whether anything moved or
+     * not, so "animate" here means one thing: keep a number per named thing and walk it towards
+     * whatever the snapshot now says. Kept in {@code Draw} for the same reason the palette is —
+     * a second easing curve somewhere else is a second speed the screen moves at.
+     *
+     * <p>{@link #frame} is called once per render, before anything draws. Everything else reads
+     * {@link #delta}, which is capped: a frame that took two seconds (a chunk rebuild, a window
+     * drag) must not teleport every animation to its target and read as a glitch.
+     */
+    private static final java.util.Map<String, float[]> ANIMATED = new java.util.HashMap<>();
+
+    private static long lastFrameAt;
+
+    private static float delta;
+
+    public static void frame() {
+        long now = net.minecraft.Util.getMillis();
+        delta = lastFrameAt == 0 ? 0 : Math.min((now - lastFrameAt) / 1000.0F, 0.1F);
+        lastFrameAt = now;
+    }
+
+    /**
+     * A number that walks towards its target instead of jumping to it. Exponential rather than
+     * linear, so it arrives without a stop: {@code rate} is roughly how much of the remaining gap
+     * is closed per second.
+     *
+     * <p>A first sighting is not animated — it is set. Otherwise every bar on a screen counts up
+     * from zero the moment it opens, which reads as the machine filling rather than as the screen
+     * arriving.
+     */
+    public static float approach(String key, float target, float rate) {
+        float[] held = ANIMATED.get(key);
+        if (held == null) {
+            ANIMATED.put(key, new float[] { target, 0 });
+            return target;
+        }
+        held[0] += (target - held[0]) * Math.min(1.0F, rate * delta);
+        return held[0];
+    }
+
+    /** Puts an animated value back to a known start, so the next {@link #approach} walks from it. */
+    public static void reset(String key, float value) {
+        ANIMATED.put(key, new float[] { value, 0 });
+    }
+
+    /**
+     * 1 the frame a value changes, decaying to 0 over {@code seconds}. The whole of "motion on a
+     * state change": a pip that goes red is a pixel a player scanning the rack does not see move,
+     * and a pip that <em>flashes</em> once is.
+     */
+    public static float pulse(String key, int value, float seconds) {
+        float[] held = ANIMATED.get(key);
+        if (held == null) {
+            ANIMATED.put(key, new float[] { value, 0 });
+            return 0;
+        }
+        if (held[0] != value) {
+            held[0] = value;
+            held[1] = 1.0F;
+        }
+        held[1] = Math.max(0, held[1] - delta / seconds);
+        return held[1];
+    }
+
+    /** White at {@code alpha}, for a flash laid over whatever is underneath it. */
+    public static int flash(float alpha) {
+        return (int) (Math.clamp(alpha, 0, 1) * 255) << 24 | 0x00FFFFFF;
     }
 
     // ------------------------------------------------------------------ text

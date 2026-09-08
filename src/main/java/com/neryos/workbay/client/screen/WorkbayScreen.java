@@ -368,11 +368,48 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         // Cleared here, not in the page: the flow and upgrade pages have no rows to hover, and a
         // highlight left behind by the bays page would outline a block nothing on screen mentions.
         com.neryos.workbay.client.LinkHighlight.clear();
+        // One clock for the whole screen, ticked before anything reads it.
+        Draw.frame();
         Draw.panel(graphics, leftPos, topPos, imageWidth, imageHeight);
         if (current != null) {
             current.render(graphics, mouseX, mouseY);
         }
+        hoverRing(graphics, mouseX, mouseY);
         renderNotice(graphics);
+    }
+
+
+    /**
+     * The ring around whatever the cursor is on. <b>Drawn from the hit list rather than by each
+     * control</b>, which is the whole point: a page registers forty regions and about a dozen of
+     * them remembered to light up when hovered, so half this screen answered the mouse and half
+     * of it did not — and which half was a matter of who wrote the control. One loop over the
+     * regions that already exist gives every one of them the same feedback, including the readouts
+     * whose only answer is a tooltip.
+     *
+     * <p>It fades in rather than appearing, because a hard outline snapping between two adjacent
+     * rows as the cursor crosses them is the thing that reads as flicker.
+     */
+    /** Which region the ring is currently on, so moving to another one restarts the fade. */
+    private int ringOn = -1;
+
+    private void hoverRing(GuiGraphics g, int mouseX, int mouseY) {
+        for (int i = hits.size() - 1; i >= 0; i--) {
+            Hit hit = hits.get(i);
+            if (!hit.contains(mouseX, mouseY)) {
+                continue;
+            }
+            int where = hit.x() * 31 + hit.y();
+            if (where != ringOn) {
+                ringOn = where;
+                Draw.reset("ring", 0);
+            }
+            float lit = Draw.approach("ring", 1.0F, 16.0F);
+            Draw.bevel(g, hit.x() - 1, hit.y() - 1, hit.w() + 2, hit.h() + 2, true,
+                (Draw.SELECT & 0x00FFFFFF) | ((int) (lit * 0x80) << 24),
+                (Draw.SELECT & 0x00FFFFFF) | ((int) (lit * 0x40) << 24));
+            return;
+        }
     }
 
     /** Amber, because SPEC.md §4 makes amber "a problem" everywhere but the power bar. */

@@ -190,6 +190,7 @@ class BaysPage extends WorkbayPage {
     void render(GuiGraphics g, int mouseX, int mouseY) {
         header(g, mouseX, mouseY, "WORKBAY");
         summary(g, mouseX, mouseY);
+        columns(g);
         rack(g, mouseX, mouseY);
         machine(g, mouseX, mouseY);
         levy(g, mouseX, mouseY);
@@ -277,6 +278,33 @@ class BaysPage extends WorkbayPage {
         return px + room + 6;
     }
 
+
+    /**
+     * The three columns this screen is actually in — the rack, the bay, the faces — said out loud.
+     *
+     * <p>Nothing here is new information: the rack has always been on the left and the cube always
+     * on the right. But every one of them was drawn straight onto the same flat panel, so the eye
+     * had to infer the grouping from where things happened to land, and a screen that dense reads
+     * as one heap of controls. A hairline between them and a recess behind the rack costs three
+     * fills and is the single largest difference vanilla shapes can make here.
+     */
+    private void columns(GuiGraphics g) {
+        int topY = y(HEADER_H + 18);
+        int bottomY = y(linksY - 6);
+        rule(g, x(46), topY, bottomY);
+        rule(g, x(FACES_X - 8), topY, bottomY);
+        // The rack, in a recess of its own, so eight slots read as one thing rather than as eight.
+        Draw.well(g, x(RACK_X - 3), y(RACK_Y - 4), slot + 10, 8 * rackPitch + 6);
+        // And the line under the bay's own details, which the Levy readout sat straight on top of.
+        g.fill(x(50), y(118), x(FACES_X - 12), y(119), 0x18FFFFFF);
+    }
+
+    /** A vertical hairline: one dark pixel and one light, the same edge every panel here has. */
+    private void rule(GuiGraphics g, int px, int topY, int bottomY) {
+        g.fill(px, topY, px + 1, bottomY, Draw.EDGE_DARK);
+        g.fill(px + 1, topY, px + 2, bottomY, 0x14FFFFFF);
+    }
+
     // ------------------------------------------------------------- bay rack
 
     private void rack(GuiGraphics g, int mouseX, int mouseY) {
@@ -289,9 +317,6 @@ class BaysPage extends WorkbayPage {
             boolean selected = index == snap.selectedBay();
             boolean hover = screen.hovered(px, py, slot, slot, mouseX, mouseY);
 
-            if (selected) {
-                g.fill(x(RACK_X - 2), py, x(RACK_X + 1), py + slot, Draw.SELECT);
-            }
             Draw.slot(g, px, py, slot, slot);
             if (hover && !locked) {
                 g.fill(px + 1, py + 1, px + slot - 1, py + slot - 1, 0x33FFFFFF);
@@ -309,13 +334,28 @@ class BaysPage extends WorkbayPage {
                 // slot is never black, and "unavailable" looks the same everywhere.
                 Draw.disabled(g, px + 1, py + 1, slot - 2, slot - 2);
             }
-            // The 5x5 status pip, top-left, inside the slot.
+            // The 5x5 status pip, top-left, inside the slot. It <b>flashes once when it changes</b>:
+            // a bay going amber is five pixels changing hue on a rack of eight, which a player
+            // looking anywhere else on the screen never sees. A flash is seen out of the corner of
+            // an eye, which is the only place this pip is ever read from.
             g.fill(px + 2, py + 2, px + 7, py + 7, pipColour(bay.state()));
+            float changed = Draw.pulse("pip" + index, bay.state().ordinal(), 0.5F);
+            if (changed > 0) {
+                g.fill(px + 1, py + 1, px + 8, py + 8, Draw.flash(changed * 0.7F));
+            }
 
             int captured = index;
             screen.hit(px, py, slot, slot, () -> screen.send(WorkbayAction.SELECT_BAY, captured),
                 bayTooltip(bay));
         }
+
+        // The selection marker, drawn once and <b>slid</b> to the bay that now owns it rather than
+        // redrawn beside it. Eight identical slots in a column is exactly the arrangement where a
+        // marker that jumps leaves the player checking which one moved; one that travels is read
+        // without being looked at.
+        float at = Draw.approach("sel", snap.selectedBay(), 18.0F);
+        int marker = y(RACK_Y) + Math.round(at * rackPitch);
+        g.fill(x(RACK_X - 3), marker, x(RACK_X - 1), marker + slot, Draw.SELECT);
     }
 
     private Component[] bayTooltip(WorkbaySnapshot.Bay bay) {
@@ -793,7 +833,15 @@ class BaysPage extends WorkbayPage {
         // Empty rows are drawn as empty rows. SPEC.md §7: the alternative is growing the panel to
         // fit the list, which moves every control under the player's cursor as links are added.
         for (int emptyRow = 0; emptyRow < rows; emptyRow++) {
-            int ruleY = y(rowY + emptyRow * ROW_PITCH) + ROW_PITCH - 2;
+            int bandY = y(rowY + emptyRow * ROW_PITCH);
+            // Banded, not just ruled. Thirty rows of eight controls each is the one list on this
+            // screen where the eye loses which figure belongs to which row, and a rule between
+            // two rows is a line the eye has to follow; a band is a row it lands on.
+            if (emptyRow % 2 == 1) {
+                g.fill(x(LIST_X + 2), bandY - 1, x(LIST_X + LIST_W - 8), bandY + ROW_PITCH - 2,
+                    0x0AFFFFFF);
+            }
+            int ruleY = bandY + ROW_PITCH - 2;
             g.fill(x(LIST_X + 4), ruleY, x(LIST_X + LIST_W - 10), ruleY + 1, 0x12FFFFFF);
         }
 
