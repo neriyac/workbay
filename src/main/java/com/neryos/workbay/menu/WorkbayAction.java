@@ -78,5 +78,11 @@ public enum WorkbayAction {
      * Switches room {@code arg}'s Anchor on or off. Off is the default and the whole point: an
      * Anchor that lit every room the network owns would buy 36 ticking chunks with one upgrade.
      */
-    TOGGLE_ROOM_ANCHOR
+    TOGGLE_ROOM_ANCHOR,
+    /**
+     * Steps room {@code arg}'s biome to the next entry of {@code #workbay:room_biomes} and writes
+     * it over the room's chunks. Appended at the end for the same reason {@link #SET_LINK_NAME} is:
+     * an action travels as its ordinal.
+     */
+    CYCLE_ROOM_BIOME
 }

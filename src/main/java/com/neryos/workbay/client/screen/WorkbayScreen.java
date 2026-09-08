@@ -102,6 +102,19 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         super.init();
     }
 
+    /**
+     * The ROOMS page grows a row when a room slot is bought, and {@code imageHeight} is only read
+     * in {@link #init()} -- so installing an Annex Plate with the page open drew the new rows
+     * outside the panel. Re-running init is the same resize {@link #goTo} does.
+     */
+    @Override
+    protected void containerTick() {
+        super.containerTick();
+        if (current != null && current.height() != imageHeight) {
+            init(minecraft, width, height);
+        }
+    }
+
     public void goTo(Page next) {
         page = next;
         // Re-running init is what resizes the window: the three pages are different heights, and

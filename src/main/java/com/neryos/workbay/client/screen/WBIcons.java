@@ -369,6 +369,25 @@ public static final String[] EXTRACT = {
         "............",
     };
 
+    /**
+     * The room's biome: a hill under a sun. Not a leaf and not a snowflake — either one names a
+     * single biome, and this button steps through all of them.
+     */
+    public static final String[] BIOME = {
+        "...###......",
+        "..#####.....",
+        "...###......",
+        "............",
+        ".........##.",
+        "......####..",
+        "....######..",
+        "...########.",
+        "..##########",
+        ".###########",
+        "############",
+        "############",
+    };
+
     /** The room anchor toggle: a shackle over two flukes, read at twelve pixels as "held down". */
     public static final String[] ANCHOR = {
         "....####....",

@@ -48,7 +48,11 @@ public final class RoomBuilder {
         shell(backshop, room.region(), tier);
         backshop.setBlock(RoomGeometry.exitPos(room.region()),
             WBBlocks.EXIT.get().defaultBlockState(), Block.UPDATE_CLIENTS);
-        return room.withBuiltTier(tier);
+        RoomRecord grown = room.withBuiltTier(tier);
+        // After the shell, and on every growth: a bigger room reaches chunks that were never
+        // written, and they would otherwise carry whatever the Backshop generates.
+        RoomBiomes.apply(backshop, grown);
+        return grown;
     }
 
     /** Writes the six faces of the shell, leaving everything inside them alone. */

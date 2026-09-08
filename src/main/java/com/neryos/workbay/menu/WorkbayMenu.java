@@ -216,6 +216,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
                 com.neryos.workbay.world.RoomVisit.enter(serverPlayer, record, (int) arg);
             }
             case TOGGLE_ROOM_ANCHOR -> toggleRoomAnchor(serverPlayer, record, (int) arg);
+            case CYCLE_ROOM_BIOME -> cycleRoomBiome(serverPlayer, record, (int) arg);
             case ENTER_BAY -> {
                 // The screen where the player stands first, and the trip only if that cannot
                 // happen: a host with the mixins off (SPEC.md §0), a client with them off (arg),
@@ -613,6 +614,31 @@ public class WorkbayMenu extends AbstractContainerMenu {
         }
     }
 
+    /**
+     * Steps one room's biome and writes it over the room's chunks. Only a built room has chunks to
+     * write, which is also why the button is only drawn on one — an unopened room has no record to
+     * remember the choice on (SPEC.md §8 spends the region on first entry).
+     */
+    private void cycleRoomBiome(ServerPlayer serverPlayer, WorkbayRecord record, int index) {
+        if (!record.owner().equals(serverPlayer.getUUID())) {
+            serverPlayer.displayClientMessage(com.neryos.workbay.WorkbayLang.message("locked"), true);
+            return;
+        }
+        com.neryos.workbay.world.RoomRegistry registry =
+            com.neryos.workbay.world.RoomRegistry.get(serverPlayer.server);
+        List<com.neryos.workbay.world.RoomRecord> rooms = registry.roomsOf(record);
+        if (index < 0 || index >= rooms.size() || !rooms.get(index).built()) {
+            return;
+        }
+        com.neryos.workbay.world.RoomRecord updated = rooms.get(index).withBiome(
+            com.neryos.workbay.world.RoomBiomes.next(serverPlayer.server, rooms.get(index)));
+        registry.putRoom(updated);
+        ServerLevel backshop = serverPlayer.server.getLevel(WorkbayDimensions.BACKSHOP);
+        if (backshop != null) {
+            com.neryos.workbay.world.RoomBiomes.apply(backshop, updated);
+        }
+    }
+
     // -------------------------------------------------------------- snapshot
 
     /**
@@ -686,7 +712,8 @@ public class WorkbayMenu extends AbstractContainerMenu {
                 room == null ? 0 : com.neryos.workbay.world.RoomGeometry.interior(room.builtTier()),
                 room == null ? 0 : room.chunkCost(),
                 room != null && room.built(),
-                room != null && room.anchored()));
+                room != null && room.anchored(),
+                room == null ? "" : room.effectiveBiome().location().toString()));
         }
         return out;
     }

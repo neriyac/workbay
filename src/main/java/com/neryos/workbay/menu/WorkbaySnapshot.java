@@ -96,15 +96,21 @@ public record WorkbaySnapshot(
      * and says {@code Empty}, and a room built before an upgrade still reads its own size until
      * somebody walks back into it and it grows.
      */
+    /**
+     * {@code biome} is the biome's id, not its name: the client turns it into
+     * {@code biome.<namespace>.<path>}, which is the key every biome in every mod already has, so
+     * the row names a modded biome correctly without this mod shipping a string for it.
+     */
     public record Room(int index, String name, int interior, int chunkCost, boolean built,
-        boolean anchored) {
+        boolean anchored, String biome) {
         public static final Codec<Room> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.INT.fieldOf("Index").forGetter(Room::index),
             Codec.STRING.fieldOf("Name").forGetter(Room::name),
             Codec.INT.fieldOf("Interior").forGetter(Room::interior),
             Codec.INT.fieldOf("ChunkCost").forGetter(Room::chunkCost),
             Codec.BOOL.fieldOf("Built").forGetter(Room::built),
-            Codec.BOOL.fieldOf("Anchored").forGetter(Room::anchored)
+            Codec.BOOL.fieldOf("Anchored").forGetter(Room::anchored),
+            Codec.STRING.optionalFieldOf("Biome", "").forGetter(Room::biome)
         ).apply(i, Room::new));
     }
 

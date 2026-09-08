@@ -40,6 +40,8 @@ public class WorkbayDataGen {
         // validated against a block tag a pack might route through.
         generator.addProvider(event.includeServer(), new WBItemTagProvider(output,
             event.getLookupProvider(), blockTags.contentsGetter(), existingFileHelper));
+        generator.addProvider(event.includeServer(),
+            new WBBiomeTagProvider(output, event.getLookupProvider(), existingFileHelper));
         generator.addProvider(event.includeServer(), new WBRecipeProvider(output, event.getLookupProvider()));
         generator.addProvider(event.includeServer(), new LootTableProvider(output, java.util.Set.of(),
             List.of(new LootTableProvider.SubProviderEntry(WBLootTableProvider::new, LootContextParamSets.BLOCK)),

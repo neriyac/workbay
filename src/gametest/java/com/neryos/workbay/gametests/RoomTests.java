@@ -235,6 +235,59 @@ public class RoomTests {
         });
     }
 
+    /**
+     * The half of the room design a player actually asked for: grass or snow when a machine needs
+     * it. What a machine asks is the <b>biome</b>, so the assertion below is not "the record says
+     * snowy_plains" but "the level answers cold enough to snow at a block inside the room" -- and
+     * it checks every chunk, because a room is one, four or nine of them and writing only the first
+     * would look right from the entry pad and be wrong three walls away.
+     *
+     * <p>It grows the room afterwards for the same reason: tier 2 reaches chunks tier 1 never
+     * wrote, and they would otherwise carry whatever the Backshop generates.
+     */
+    @GameTest
+    @TestHolder(description = "A room's biome is written over every one of its chunks, and survives growth.")
+    public static void aRoomsBiomeReachesEveryChunkAndSurvivesGrowth(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            Site site = site(helper, 1);
+            helper.assertTrue(RoomVisit.enter(site.player(), site.record(), 0), "entering was refused");
+            RoomVisit.leave(site.player());
+            RoomRecord room = room(helper, site);
+            BlockPos inside = RoomGeometry.origin(room.region()).offset(2, 2, 2);
+
+            // Plains by default, and the assertion that keeps the next one from being vacuous: a
+            // room that was already cold would pass the whole test without anything being written.
+            helper.assertTrue(!site.backshop().getBiome(inside).value().coldEnoughToSnow(inside),
+                "a fresh room is already cold enough to snow, so the test below proves nothing");
+
+            com.neryos.workbay.menu.WorkbayMenu menu = menu(helper, site);
+            menu.act(com.neryos.workbay.menu.WorkbayAction.CYCLE_ROOM_BIOME, 0,
+                java.util.Optional.empty());
+            RoomRecord cold = room(helper, site);
+            helper.assertTrue(!cold.effectiveBiome().equals(net.minecraft.world.level.biome.Biomes.PLAINS),
+                "cycling the biome left the room on plains");
+            helper.assertTrue(site.backshop().getBiome(inside).value().coldEnoughToSnow(inside),
+                "the room reads " + site.backshop().getBiome(inside).value().getBaseTemperature()
+                    + " after being switched to " + cold.effectiveBiome().location());
+
+            for (net.minecraft.world.level.ChunkPos pos : RoomGeometry.chunks(cold.region(), 1)) {
+                BlockPos middle = new BlockPos(pos.getMiddleBlockX(), 2, pos.getMiddleBlockZ());
+                helper.assertTrue(site.backshop().getBiome(middle).value().coldEnoughToSnow(middle),
+                    "chunk " + pos + " of the room kept its old biome");
+            }
+
+            RoomBuilder.ensure(site.backshop(), cold, 2);
+            for (net.minecraft.world.level.ChunkPos pos : RoomGeometry.chunks(cold.region(), 2)) {
+                BlockPos middle = new BlockPos(pos.getMiddleBlockX(), 2, pos.getMiddleBlockZ());
+                helper.assertTrue(site.backshop().getBiome(middle).value().coldEnoughToSnow(middle),
+                    "chunk " + pos + " was added by growth and never got the room's biome");
+            }
+            helper.succeed();
+        });
+    }
+
     private static java.util.List<RoomRecord> rooms(ExtendedGameTestHelper helper, Site site) {
         RoomRegistry registry = RoomRegistry.get(helper.getLevel().getServer());
         return registry.roomsOf(registry.byId(site.record().id()).orElseThrow());

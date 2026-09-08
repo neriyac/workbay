@@ -167,8 +167,10 @@ class UpgradesPage extends WorkbayPage {
             // figures are right-aligned inside one fixed column, so neither can reach back into
             // the text.
             String count = installed + " / " + upgrade.max();
+            // Faint means "you cannot have this", so a maxed row is not faint: one you already own
+            // is the opposite of one you are refused. Same rule on ROOMS.
             text(g, WorkbayScreen.gui(key), px + TEXT_X, py + 6, NAME_W,
-                canInstall ? Draw.TEXT : Draw.TEXT_FAINT);
+                maxed || affordable ? Draw.TEXT : Draw.TEXT_FAINT);
             textRight(g, count, px + RIGHT_EDGE, py + 6, COUNT_W,
                 maxed ? Draw.GREEN : Draw.TEXT_DIM);
 

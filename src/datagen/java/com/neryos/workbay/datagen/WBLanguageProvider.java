@@ -392,15 +392,15 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("upgrade.expansion_plate"), "Expansion Plate");
         add(WorkbayLang.guiKey("upgrade.expansion_plate.desc"), "+1 bay");
         add(WorkbayLang.guiKey("upgrade.room_frame"), "Room Frame");
-        add(WorkbayLang.guiKey("upgrade.room_frame.desc"), "A 14x14 room, 1 chunk");
+        add(WorkbayLang.guiKey("upgrade.room_frame.desc"), "14x14");
         add(WorkbayLang.guiKey("upgrade.wide_room_frame"), "Wide Room Frame");
-        add(WorkbayLang.guiKey("upgrade.wide_room_frame.desc"), "Every room 30x30, 4 chunks");
+        add(WorkbayLang.guiKey("upgrade.wide_room_frame.desc"), "30x30");
         add(WorkbayLang.guiKey("upgrade.vast_room_frame"), "Vast Room Frame");
-        add(WorkbayLang.guiKey("upgrade.vast_room_frame.desc"), "Every room 46x46, 9 chunks");
+        add(WorkbayLang.guiKey("upgrade.vast_room_frame.desc"), "46x46");
         add(WorkbayLang.guiKey("upgrade.annex_plate"), "Annex Plate");
         add(WorkbayLang.guiKey("upgrade.annex_plate.desc"), "+1 room");
         add(WorkbayLang.guiKey("upgrade.anchor"), "Anchor");
-        add(WorkbayLang.guiKey("upgrade.anchor.desc"), "Rooms may run while empty");
+        add(WorkbayLang.guiKey("upgrade.anchor.desc"), "While empty");
 
         add(WorkbayLang.guiKey("button.rooms"), "Rooms");
         add(WorkbayLang.guiKey("button.rooms.tip"), "Somewhere to build, out the back. A room only "
@@ -408,7 +408,8 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("rooms.none"), "Install a Room Frame above for your first room.");
         add(WorkbayLang.guiKey("rooms.name"), "Room %s");
         add(WorkbayLang.guiKey("rooms.size"), "%sx%s, %s chunks");
-        add(WorkbayLang.guiKey("rooms.empty"), "Empty - open it to build it");
+        add(WorkbayLang.guiKey("rooms.size.one"), "%sx%s, %s chunk");
+        add(WorkbayLang.guiKey("rooms.empty"), "Not opened yet");
         add(WorkbayLang.guiKey("rooms.enter"), "Enter");
         add(WorkbayLang.guiKey("rooms.open"), "Open");
         add(WorkbayLang.guiKey("rooms.enter.tip"), "Go and stand in it. Click the Exit block by the "
@@ -417,6 +418,10 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("rooms.anchored.tip"), "This room keeps running while you are away, "
             + "and holds %s chunks loaded to do it. Click to switch it off.");
         add(WorkbayLang.guiKey("rooms.unanchored"), "Not anchored");
+        add(WorkbayLang.guiKey("rooms.biome"), "Biome: %s");
+        add(WorkbayLang.guiKey("rooms.biome.tip"), "What a machine in this room reads for "
+            + "temperature and rainfall. Click to step to the next one. Nothing falls from the "
+            + "sky in a room, because there is no sky: a cold room is cold, it does not snow.");
         add(WorkbayLang.guiKey("rooms.unanchored.tip"), "This room only runs while somebody is "
             + "inside it, and costs nothing while it is empty. Anchoring it holds %s chunks loaded.");
         add(WorkbayLang.messageKey("anchor_capped"), "This network may anchor %s room(s) at a time. "
