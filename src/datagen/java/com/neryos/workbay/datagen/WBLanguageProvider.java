@@ -390,7 +390,8 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("upgrade.anchor.desc"), "While empty");
 
         add(WorkbayLang.guiKey("button.rooms"), "Rooms");
-        add(WorkbayLang.guiKey("button.rooms.tip"), "Somewhere to build, out the back.");
+        add(WorkbayLang.guiKey("button.rooms.tip"), "Somewhere to build, out the back. A Connector works in a room, so one can be a "
+            + "stage in a chain rather than only a place to stand.");
         add(WorkbayLang.guiKey("rooms.none"), "Install a Room Frame above for your first room.");
         add(WorkbayLang.guiKey("rooms.name"), "Room %s");
 
@@ -423,9 +424,11 @@ public class WBLanguageProvider extends LanguageProvider {
         // The Exit block is gone; the way out is the door in the middle of each of the four walls.
         // This string still said to find an Exit block, which a player would have hunted a
         // 46-block room for.
-        add(WorkbayLang.guiKey("rooms.enter.tip"), "Go and stand in it. A door in the middle of each wall brings you back.");
+        add(WorkbayLang.guiKey("rooms.enter.tip"), "Go and stand in it. A door in the middle of each wall brings you back \u2014 and "
+            + "a Connector works in here, so a barrel in a room is a stage in a chain.");
         add(WorkbayLang.guiKey("rooms.anchored"), "Anchored");
-        add(WorkbayLang.guiKey("rooms.anchored.tip"), "Runs while you are away, holding %s chunks loaded. Click to switch off.");
+        add(WorkbayLang.guiKey("rooms.anchored.tip"), "Keeps what is inside this room running with nobody in it, holding %s "
+            + "chunks loaded. Click to switch off.");
         add(WorkbayLang.guiKey("rooms.unanchored"), "Not anchored");
         add(WorkbayLang.guiKey("door.title"), "Way out");
         add(WorkbayLang.guiKey("door.elsewhere"), "Or go straight to");
@@ -463,7 +466,8 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("rooms.biome"), "Biome: %s");
         add(WorkbayLang.guiKey("rooms.biome.tip"), "What a machine in here reads for temperature and rainfall. Nothing falls "
             + "from the sky: a cold room is cold, it does not snow.");
-        add(WorkbayLang.guiKey("rooms.unanchored.tip"), "Runs only while somebody is inside. Anchoring holds %s chunks loaded.");
+        add(WorkbayLang.guiKey("rooms.unanchored.tip"), "What is inside runs only while somebody is in here. Anchoring holds %s "
+            + "chunks loaded.");
         add(WorkbayLang.messageKey("anchor_capped"), "This network may anchor %s room(s) at a time. "
             + "Switch another one off first.");
         add(WorkbayLang.guiKey("upgrade.resonator"), "Resonator");
