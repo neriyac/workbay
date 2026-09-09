@@ -574,32 +574,20 @@ public class WorkbayBlockEntity extends BlockEntity {
         if (backshop == null || record == null) {
             return;
         }
-        // The steady state of every Workbay that owns no room: one ticket, already held, nothing
-        // to allocate. Without it this method builds a set per tick to answer a question that
-        // cannot have changed.
-        if (record.rooms().isEmpty() && mirrored.size() == 1
-            && mirrored.contains(record.bayColumn())) {
+        // The steady state of every Workbay there is: one ticket, already held, nothing to
+        // allocate. Without it this method builds a set per tick to answer a question that cannot
+        // have changed.
+        if (mirrored.size() == 1 && mirrored.contains(record.bayColumn())) {
             return;
         }
-        java.util.Set<net.minecraft.world.level.ChunkPos> wanted = new java.util.HashSet<>();
-        wanted.add(record.bayColumn());
-        if (!record.rooms().isEmpty()) {
-            java.util.List<com.neryos.workbay.world.RoomRecord> rooms =
-                RoomRegistry.get(server.getServer()).roomsOf(record);
-            for (BusConfig bus : record.buses()) {
-                if (!bus.connector().dimension().equals(WorkbayDimensions.BACKSHOP)) {
-                    continue;
-                }
-                for (com.neryos.workbay.world.RoomRecord room : rooms) {
-                    if (room.built() && com.neryos.workbay.world.RoomGeometry.inside(
-                        bus.connector().pos(), room.region(), room.builtTier())) {
-                        wanted.addAll(com.neryos.workbay.world.RoomGeometry.chunks(
-                            room.region(), room.builtTier()));
-                        break;
-                    }
-                }
-            }
-        }
+        // <b>The bay column, and nothing else.</b> Mirroring used to reach into any room holding a
+        // Connector, on the argument that a room is a stage in a chain -- and it is, but the price
+        // was not what the argument assumed: one ticket is a five-by-five square, so a network with
+        // a barrel in a Vast room quietly held forty-nine Backshop chunks that the player never
+        // asked for and no upgrade gated. A machine is what this mod sells; a room is a place you
+        // walk to, and walking to it is what loads it. Neriya's call.
+        java.util.Set<net.minecraft.world.level.ChunkPos> wanted =
+            java.util.Set.of(record.bayColumn());
         if (wanted.equals(mirrored)) {
             return;
         }

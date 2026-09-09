@@ -52,10 +52,16 @@ public class WBBlockStateProvider extends BlockStateProvider {
         // The plate's own face samples the MIDDLE 8x8 of connector.png, because Minecraft derives
         // an element's UVs from its bounds and this one starts at 4,4. tools/make-art.py draws it
         // there for that reason; a plate drawn across the whole texture shows its bolts on the rim.
+        // And a neck, poking two pixels into whatever it is stuck to. A Connector against a full
+        // block never showed a gap; against a chest, which is fourteen wide and inset by one, the
+        // plate floated with daylight behind it. An element may reach outside its own cell, so the
+        // neck bridges the inset and is simply buried inside a full block. Found by Neriya.
         ModelFile plate = models().withExistingParent("connector", mcBlock("block"))
             .texture("particle", blockTexture("connector"))
             .texture("plate", blockTexture("connector"))
             .element().from(4, 4, 0).to(12, 12, 2)
+            .allFaces((face, builder) -> builder.texture("#plate")).end()
+            .element().from(6, 6, -2).to(10, 10, 0)
             .allFaces((face, builder) -> builder.texture("#plate")).end();
 
         getVariantBuilder(WBBlocks.CONNECTOR.get()).forAllStates(state -> {

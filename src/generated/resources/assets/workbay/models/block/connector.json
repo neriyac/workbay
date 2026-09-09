@@ -32,6 +32,38 @@
         12,
         2
       ]
+    },
+    {
+      "faces": {
+        "down": {
+          "texture": "#plate"
+        },
+        "east": {
+          "texture": "#plate"
+        },
+        "north": {
+          "texture": "#plate"
+        },
+        "south": {
+          "texture": "#plate"
+        },
+        "up": {
+          "texture": "#plate"
+        },
+        "west": {
+          "texture": "#plate"
+        }
+      },
+      "from": [
+        6,
+        6,
+        -2
+      ],
+      "to": [
+        10,
+        10,
+        0
+      ]
     }
   ],
   "textures": {

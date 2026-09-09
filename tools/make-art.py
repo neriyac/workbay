@@ -398,11 +398,14 @@ def connector_item():
     Found by Neriya, looking at the Pair button."""
     im = blank()
     d = ImageDraw.Draw(im)
-    rect(d, 0, 0, 15, 15, STEEL)
-    bevel(d, 0, 0, 15, 15, STEEL_H, DARK)
-    rect(d, 4, 4, 11, 11, STEEL_D)
-    bevel(d, 4, 4, 11, 11, DARK, STEEL_L)
-    for cx, cy in ((2, 2), (13, 2), (2, 13), (13, 13)):
+    # Two pixels of margin. Filling all sixteen made it the largest thing in the hotbar -- vanilla
+    # items nearly all sit inside a border, so one that does not reads as oversized rather than as
+    # detailed. Found by Neriya, holding one.
+    rect(d, 2, 2, 13, 13, STEEL)
+    bevel(d, 2, 2, 13, 13, STEEL_H, DARK)
+    rect(d, 5, 5, 10, 10, STEEL_D)
+    bevel(d, 5, 5, 10, 10, DARK, STEEL_L)
+    for cx, cy in ((3, 3), (12, 3), (3, 12), (12, 12)):
         px(d, cx, cy, BOLT)
     rect(d, 6, 6, 9, 9, CYAN[1])
     px(d, 6, 6, CYAN[2])

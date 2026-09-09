@@ -57,18 +57,25 @@ public final class WBIcons {
         }
     }
 
+    /**
+     * <b>Upgrade.</b> A chevron standing on the rung it just left.
+     *
+     * <p>The first one was an arrow into a box, which at twelve pixels is a house with a chimney;
+     * on a tab labelled UPGRADES that is a picture of the wrong idea. A step up over a bar is the
+     * one shape the genre agrees on, and it is what every upgrade in the tier table does.
+     */
     public static final String[] UPGRADE = {
         "............",
         ".....##.....",
         "....####....",
         "...######...",
-        "..###..###..",
-        ".##......##.",
-        "....####....",
-        "....####....",
+        "..########..",
+        ".##########.",
         "....####....",
         "....####....",
         "............",
+        "..########..",
+        "..########..",
         "............",
     };
 
@@ -96,23 +103,32 @@ public static final String[] MAP = {
     // ------------------------------------------------------- what a link carries
 
     /**
-     * <b>Energy.</b> A bolt. The one glyph in the genre that needs no caption, and the reason the
-     * kink is two rows deep rather than one: at one row it reads as a lightning-shaped scratch.
+     * <b>Energy.</b> A cell, not a bolt.
+     *
+     * <p>The bolt is the genre's reflex and it is the wrong shape for twelve pixels: a diagonal
+     * two pixels wide is a scratch, and every mod on the screen beside us already has one. A cell
+     * is an <em>object</em> -- a body, a terminal proud of it, a window with the charge showing
+     * through -- which is what the item sprites beside it are, and it is lit from the top left
+     * like every texture in the game. Picked off a rendered sheet at 1x, 3x and 8x.
      */
     public static final String[] ENERGY = {
-        "............",
-        "......####..",
-        ".....####...",
-        "....####....",
-        "...####.....",
-        "..#######...",
-        "...#####....",
-        "....####....",
-        "...####.....",
-        "..####......",
-        ".####.......",
+        "....2222....",
+        "...244443...",
+        "...233333...",
+        "..22222223..",
+        ".2111111113.",
+        ".2144444413.",
+        ".2145555413.",
+        ".2144444413.",
+        ".2111111113.",
+        ".2333333333.",
+        "..33333333..",
         "............",
     };
+
+    /** Steel body, its lit edge, its shadow, and the charge in two heats. */
+    public static final int[] ENERGY_COLOURS =
+        { 0xFF4A5364, 0xFF6E7A8E, 0xFF262C36, 0xFFFFC53D, 0xFFFFF0B8 };
 
     /**
      * <b>Fluid.</b> A drop: pointed at the top, round at the bottom. Drawn rather than sampled
@@ -220,20 +236,29 @@ public static final String[] ENTER = {
         "............",
     };
 
+    /**
+     * <b>Eject.</b> The machine coming back up out of an open bay.
+     *
+     * <p>A bare eject bar is a media button. This is a box with its top gone and what was in it on
+     * the way out, which is the sentence the tooltip says. Drawn open on purpose: closed it is a
+     * crate, and a crate is what the bay rack beside it already means.
+     */
     public static final String[] EJECT = {
-        "............",
-        ".....##.....",
-        "....####....",
-        "...######...",
-        "..########..",
-        ".##########.",
-        "............",
-        "............",
-        ".##########.",
-        ".##########.",
-        "............",
-        "............",
+        ".....2......",
+        "....222.....",
+        "...22222....",
+        "..2222223...",
+        "....2223....",
+        ".....23.....",
+        "111111111111",
+        "1..........3",
+        "1..........3",
+        "1..........3",
+        "1..........3",
+        "133333333333",
     };
+
+    public static final int[] EJECT_COLOURS = { 0xFF7C8698, 0xFFB9C2D0, 0xFF3A4150 };
 
     /**
      * <b>Rename.</b> The thing you rename with, and the one object in the game that means exactly that.
@@ -241,9 +266,37 @@ public static final String[] ENTER = {
     public static final String[] RENAME = item("minecraft:name_tag");
 
     /**
-     * <b>Redstone.</b> The genre's own picture of a redstone gate; EnderIO and Mekanism both use it. The mode is carried by the button lighting and by the icon dimming when the bay ignores redstone altogether.
+     * <b>Redstone, and which of its four modes this bay is on.</b>
+     *
+     * <p>Dust and torch by turns, which is how the genre has said this since 1.12: the object
+     * changes with the meaning and the lighting says whether the gate is doing anything.
+     *
+     * <ul>
+     *   <li><b>Always</b> -- dust, dimmed. Redstone is not part of this bay's answer at all.
+     *   <li><b>With a signal</b> -- a torch, lit. It runs when there is power.
+     *   <li><b>Without a signal</b> -- the same torch, dimmed. It runs when there is none, so the
+     *       unlit torch is not a disabled control, it is the state itself.
+     *   <li><b>Pulse</b> -- a repeater, lit: the one vanilla object that means timing rather than
+     *       level, and the only mode that spends an edge instead of reading a level.
+     * </ul>
      */
-    public static final String[] REDSTONE = item("minecraft:redstone_torch");
+    public static String[] redstone(com.neryos.workbay.world.RedstoneMode mode) {
+        return switch (mode) {
+            case ALWAYS -> REDSTONE_DUST;
+            case PULSE -> REDSTONE_PULSE;
+            default -> REDSTONE_TORCH;
+        };
+    }
+
+    /** True while the mode is one the icon should be drawn lit for. See {@link #redstone}. */
+    public static boolean redstoneLit(com.neryos.workbay.world.RedstoneMode mode) {
+        return mode == com.neryos.workbay.world.RedstoneMode.WITH_SIGNAL
+            || mode == com.neryos.workbay.world.RedstoneMode.PULSE;
+    }
+
+    private static final String[] REDSTONE_DUST = item("minecraft:redstone");
+    private static final String[] REDSTONE_TORCH = item("minecraft:redstone_torch");
+    private static final String[] REDSTONE_PULSE = item("minecraft:repeater");
 
     /**
      * <b>Copy.</b> Book and quill: the pair reads as copy/paste the way a floppy disk reads as save, and the quill is what tells it from PASTE on the button beside it.
@@ -355,25 +408,75 @@ public static final String[] EXTRACT = {
         "............",
     };
 
+    /**
+     * <b>Cross.</b> Two strokes that actually cross.
+     *
+     * <p>The first one met in a two-pixel waist and read as an hourglass at the size it is drawn.
+     * Four pixels through the middle is what makes an X an X.
+     */
     public static final String[] CROSS = {
         "............",
-        "............",
-        "..#......#..",
-        "..##....##..",
-        "...##..##...",
+        ".##......##.",
+        ".###....###.",
+        "..###..###..",
+        "...######...",
         "....####....",
         "....####....",
-        "...##..##...",
-        "..##....##..",
-        "..#......#..",
-        "............",
+        "...######...",
+        "..###..###..",
+        ".###....###.",
+        ".##......##.",
         "............",
     };
 
     /**
-     * <b>Filter.</b> A funnel. The only vanilla object that means 'some of this goes through'.
+     * <b>Filter.</b> A funnel, one thing going in and one turned away at the rim.
+     *
+     * <p>The vanilla hopper was tried and rejected: at twelve pixels it is a grey wedge, and a
+     * funnel alone says "narrows" rather than "chooses". The two pips are the whole idea -- green
+     * over the mouth, red bouncing off the lip -- and they are the only part that has to survive
+     * being small, which is why they sit on the rim rather than inside the cone.
      */
-    public static final String[] FILTER = item("minecraft:hopper");
+    public static final String[] FILTER = {
+        "....4..5....",
+        "............",
+        "111111111111",
+        "211111111113",
+        ".2111111113.",
+        "..21111113..",
+        "...211113...",
+        "....2113....",
+        "....2113....",
+        "....2113....",
+        ".....44.....",
+        "............",
+    };
+
+    public static final int[] FILTER_COLOURS =
+        { 0xFF7C8698, 0xFFA8B2C4, 0xFF3A4150, 0xFF6ED06A, 0xFFC9483C };
+
+    /**
+     * <b>A sheet of paper, drawn in whatever colour the caller asks for.</b> White is a whitelist
+     * and near-black is a blacklist, which is one icon for a control that used to spend a hundred
+     * and ten pixels on the word.
+     */
+    public static final String[] PAPER = {
+        "..######....",
+        "..######3...",
+        "..##33###...",
+        "..#######3..",
+        "..##3333#.3.",
+        "..########3.",
+        "..##3333#.3.",
+        "..########3.",
+        "..##333####3",
+        "..#########3",
+        "..3333333333",
+        "............",
+    };
+
+    /** Only the fold and the ruled lines are palette; the sheet itself takes the row's colour. */
+    public static final int[] PAPER_COLOURS = { 0xFF000000, 0xFF000000, 0xFF6A7383 };
 
     public static final String[] SORT = {
         "............",
@@ -481,8 +584,23 @@ public static final String[] EXTRACT = {
      * dims exactly where a monochrome one does: a control drawn with {@link Draw#TEXT_FAINT}
      * must not be the one thing on a disabled row that stays at full strength.
      */
+    /**
+     * An icon's own colours, so a call site cannot draw one without them.
+     *
+     * <p>The palette used to be an argument, which meant every place that drew the redstone torch
+     * had to remember to pass {@code REDSTONE_COLOURS} and a place that forgot drew nothing at
+     * all. A coloured icon is coloured wherever it is drawn; an explicit palette still wins, for
+     * the one control that recolours itself.
+     */
+    private static final java.util.Map<String[], int[]> PALETTES = java.util.Map.of(
+        ENERGY, ENERGY_COLOURS, EJECT, EJECT_COLOURS, FILTER, FILTER_COLOURS,
+        PAPER, PAPER_COLOURS);
+
     public static void draw(GuiGraphics graphics, String[] icon, int x, int y, int argb,
         int... palette) {
+        if (palette.length == 0) {
+            palette = PALETTES.getOrDefault(icon, palette);
+        }
         int lit = Math.max(argb >> 16 & 0xFF, Math.max(argb >> 8 & 0xFF, argb & 0xFF));
         // A row of pixels cannot start with '@'; an item icon is nothing else. See #item.
         if (icon.length == 1 && icon[0].startsWith("@")) {

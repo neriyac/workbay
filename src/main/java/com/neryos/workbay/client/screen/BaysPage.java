@@ -500,11 +500,12 @@ class BaysPage extends WorkbayPage {
         // Lit only while the gate is actually in use, so the button says which state it is in
         // before the player hovers it.
         boolean gated = bay.redstone() != com.neryos.workbay.world.RedstoneMode.ALWAYS;
-        actionButton(g, mouseX, mouseY, x(98), WBIcons.REDSTONE, unlocked, gated,
+        actionButton(g, mouseX, mouseY, x(98), WBIcons.redstone(bay.redstone()), unlocked, gated,
             () -> screen.send(WorkbayAction.CYCLE_REDSTONE),
             WorkbayScreen.gui("redstone." + bay.redstone().getSerializedName()),
             WorkbayScreen.gui("redstone." + bay.redstone().getSerializedName() + ".tip"),
-            NO_PALETTE, !unlocked ? Draw.TEXT_FAINT : gated ? Draw.TEXT : Draw.TEXT_DIM);
+            NO_PALETTE, !unlocked ? Draw.TEXT_FAINT
+                : WBIcons.redstoneLit(bay.redstone()) ? Draw.TEXT : Draw.TEXT_DIM);
 
         // Copy and paste. Eight bays running the same machine is the first complaint this mod will
         // get, and Mekanism answers it with a Configuration Card (SPEC.md §7).
@@ -1269,14 +1270,18 @@ class BaysPage extends WorkbayPage {
         // the right as one phrase, "Only these Chest", which is a sentence the mod does not mean.
         String label = labelOf(link);
         // LINK, not FILTER: the panel carries what a link is set to and the filter is one of them.
-        text(g, "LINK \u00B7 " + label, x(LIST_X + 4), blockY + 5, 100, Draw.TEXT);
+        text(g, "LINK \u00B7 " + label, x(LIST_X + 4), blockY + 5, LIST_W - 82, Draw.TEXT);
 
-        int modeX = x(LIST_X + 108);
-        boolean modeHover = screen.hovered(modeX, blockY, 110, 18, mouseX, mouseY);
-        Draw.button(g, modeX, blockY, 110, 18, modeHover, false);
-        textCentre(g, WorkbayScreen.gui(filter.deny() ? "filter.deny" : "filter.allow").getString(),
-            modeX + 55, blockY + 5, 106, filter.deny() ? Draw.AMBER : Draw.BLUE);
-        screen.hit(modeX, blockY, 110, 18,
+        // <b>A sheet of paper, white or black.</b> The word "Whitelist" took a hundred and ten
+        // pixels of a row whose other half is the link's name, and these two states are the one
+        // thing on this panel a colour says faster than a word: a white list and a black one.
+        // Eighteen pixels now, and the name beside it gets the rest.
+        int modeX = x(LIST_X + LIST_W - 70);
+        boolean modeHover = screen.hovered(modeX, blockY, 18, 18, mouseX, mouseY);
+        Draw.button(g, modeX, blockY, 18, 18, modeHover, false);
+        WBIcons.draw(g, WBIcons.PAPER, modeX + 3, blockY + 3,
+            filter.deny() ? Draw.PAPER_BLACK : Draw.TEXT);
+        screen.hit(modeX, blockY, 18, 18,
             () -> screen.send(WorkbayAction.TOGGLE_FILTER_DENY, config.id()),
             WorkbayScreen.gui(filter.deny() ? "filter.deny" : "filter.allow"),
             WorkbayScreen.gui("filter.mode.tip"));

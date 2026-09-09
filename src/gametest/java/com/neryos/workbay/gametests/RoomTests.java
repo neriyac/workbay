@@ -197,12 +197,13 @@ public class RoomTests {
 
     /**
      * <b>A room with a Connector in it is loaded exactly while its Workbay's chunk is.</b>
-     * SPEC.md §12's mirroring, applied a second time.
+     * <b>A room is never force-loaded off its Workbay, whatever is standing in it.</b>
      *
-     * <p>Compact Machines does not do this — their rooms sit in a dimension nobody is in, and their
-     * standing complaint is that a room stops the moment you walk away, so players bolt a
-     * chunkloader to the outside. Ours costs nothing extra: a barrel in a room is exactly as
-     * expensive as a barrel on the floor next to the Workbay.
+     * <p>Mirroring used to reach into any room holding a Connector, on the argument that a barrel
+     * in a room is as cheap as a barrel on the floor. It is not: one ticket is a five-by-five
+     * square of loaded chunks, so a Connector in a Vast room quietly bought forty-nine of them
+     * with no upgrade and no way for a host to see it. A machine is what this mod sells and a room
+     * is a place you walk to — walking to it is what loads it.
      *
      * <p><b>Neither room is ever built by this test.</b> {@code RoomBuilder} would load the chunk
      * to lay the shell in it and the positive half would then pass whatever the mod did — so both
@@ -211,8 +212,8 @@ public class RoomTests {
      * is the proof of that: same tier, same registry, no Connector in it, still cold.
      */
     @GameTest
-    @TestHolder(description = "A room holding a Connector is force-loaded off the Workbay; an identical room with no Connector is not.")
-    public static void aRoomWithALinkInItIsMirroredAndOneWithoutIsNot(final DynamicTest test) {
+    @TestHolder(description = "Neither a room holding a Connector nor an empty one is force-loaded off the Workbay.")
+    public static void aRoomIsNeverForceLoadedOffTheWorkbay(final DynamicTest test) {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
 
         test.onGameTest(ExtendedGameTestHelper.class, helper -> {
@@ -252,11 +253,11 @@ public class RoomTests {
             helper.startSequence()
                 .thenIdle(4)
                 .thenExecute(() -> {
-                    helper.assertTrue(backshop.getChunkSource().hasChunk(hot.x, hot.z),
-                        "the room holding a Connector is not loaded, so nothing in it can run "
-                            + "while its Workbay is");
+                    helper.assertFalse(backshop.getChunkSource().hasChunk(hot.x, hot.z),
+                        "the room holding a Connector was force-loaded off the Workbay, which is "
+                            + "twenty-five chunks nobody asked for and no upgrade gates");
                     helper.assertFalse(backshop.getChunkSource().hasChunk(cold.x, cold.z),
-                        "a room with nothing in it was loaded too, which is a ticket spent on "
+                        "a room with nothing in it was loaded, which is a ticket spent on "
                             + "scenery");
                 })
                 .thenSucceed();

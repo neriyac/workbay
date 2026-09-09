@@ -49,6 +49,10 @@ public final class Draw {
     /** Two weights, per SPEC.md §7: bright for what the player acts on, dim for labels. */
     public static final int TEXT = 0xFFF0F2F5;
     public static final int TEXT_DIM = 0xFFA6AEBA;
+
+    /** A blacklist's sheet. Not pure black: the panel behind it is dark and a black sheet on it
+     * is a hole, so this is the darkest ink that still reads as an object. */
+    public static final int PAPER_BLACK = 0xFF23272E;
     /** The third exists only for disabled, and disabled must look disabled. */
     public static final int TEXT_FAINT = 0xFF636A76;
 
