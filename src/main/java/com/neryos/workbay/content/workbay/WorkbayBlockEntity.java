@@ -528,9 +528,14 @@ public class WorkbayBlockEntity extends BlockEntity {
      * <p>Gated on {@code maxAnchoredWorkbaysPerPlayer}, which is the switch this asked for and was
      * until now read by nothing. Zero means a host who bought the Anchor for rooms does not also
      * get a permanently ticking overworld chunk with it.
+     *
+     * <p>And gated on the owner being <b>online</b> ({@link com.neryos.workbay.world.AnchorPresence},
+     * OPEN_ISSUES #55). This is the release half only: once the ticket drops this block stops
+     * ticking, so the arming half has to come from the login hook.
      */
     private void anchor(ServerLevel server) {
-        boolean wanted = record().map(RoomAnchors::anchorsOwnChunk).orElse(false);
+        boolean wanted = record()
+            .map(record -> RoomAnchors.anchorsOwnChunk(server.getServer(), record)).orElse(false);
         if (wanted == holdingOwnChunk) {
             return;
         }

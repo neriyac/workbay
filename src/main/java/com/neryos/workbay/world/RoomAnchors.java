@@ -1,13 +1,11 @@
 package com.neryos.workbay.world;
 
-import com.neryos.workbay.Workbay;
 import com.neryos.workbay.config.WorkbayConfig;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.event.server.ServerStartedEvent;
+
+import java.util.UUID;
 
 /**
  * What a room costs to keep loaded. SPEC.md §12.
@@ -18,8 +16,10 @@ import net.neoforged.neoforge.event.server.ServerStartedEvent;
  * Anchor upgrade flips on for everything at once.
  *
  * <p>The count is the price and the page prints it: 1, 4 or 9 chunks by tier.
+ *
+ * <p><b>And every ticket here is conditional on {@link AnchorPresence}</b>, which is §12's last
+ * line: anchored says what the network is entitled to, online says whether it holds it now.
  */
-@EventBusSubscriber(modid = Workbay.MOD_ID)
 public final class RoomAnchors {
     private RoomAnchors() {}
 
@@ -42,11 +42,14 @@ public final class RoomAnchors {
      *
      * <p>{@code maxAnchoredWorkbaysPerPlayer} is the switch, and this is its first reader. A host
      * who wants the Anchor to run rooms and nothing else sets it to zero. OPEN_ISSUES #52.
+     *
+     * <p>"Nobody around" is not "nobody online". OPEN_ISSUES #55.
      */
-    public static boolean anchorsOwnChunk(WorkbayRecord record) {
+    public static boolean anchorsOwnChunk(MinecraftServer server, WorkbayRecord record) {
         return WorkbayConfig.SERVER.allowAnchors.get()
             && WorkbayConfig.SERVER.maxAnchoredWorkbaysPerPlayer.get() > 0
-            && record.upgrades().anchors() > 0;
+            && record.upgrades().anchors() > 0
+            && AnchorPresence.holding(server, record.owner());
     }
 
     /** Registers or drops the tickets for one room, keyed by its own stable UUID (SPEC.md §12). */
@@ -54,8 +57,13 @@ public final class RoomAnchors {
         if (!room.built()) {
             return;
         }
+        MinecraftServer server = backshop.getServer();
+        // An orphaned room is listed by nobody, so it has no owner who could be online — and
+        // `orElse(false)` releasing it is the right answer rather than a fallback.
+        boolean hold = room.anchored() && RoomRegistry.get(server).ownerOf(room)
+            .map(owner -> AnchorPresence.holding(server, owner)).orElse(false);
         for (ChunkPos chunk : RoomGeometry.chunks(room.region(), room.builtTier())) {
-            if (room.anchored()) {
+            if (hold) {
                 WorkbayTickets.force(backshop, room.id(), chunk);
             } else {
                 WorkbayTickets.release(backshop, room.id(), chunk);
@@ -64,44 +72,35 @@ public final class RoomAnchors {
     }
 
     /**
-     * Re-registers every anchored room after a restart.
+     * The other ticket a network owns: the chunk its Workbay block stands in.
      *
-     * <p>{@code WorkbayTickets#validate} purges every ticket on world load, which is FTB-Chunks'
-     * answer and the right one — a ticket nobody can account for leaks forever. The other half of
-     * that answer is putting back the ones the registry does vouch for, and it has to happen
-     * <em>after</em> the server is up, because the callback runs while the registry may not be
-     * loaded yet.
+     * <p>Registered from here rather than only from the block's own tick because the block cannot
+     * arm itself. Once the ticket is gone the chunk unloads, the block stops ticking, and nothing
+     * in the world is left that could notice the owner logged back in — the same reason
+     * {@code onServerStarted} used to re-register it after a restart, except that a restart is now
+     * covered by the same login that covers a logout, and one path is fewer than two.
      */
-    @SubscribeEvent
-    public static void onServerStarted(ServerStartedEvent event) {
-        MinecraftServer server = event.getServer();
-        ServerLevel backshop = server.getLevel(WorkbayDimensions.BACKSHOP);
-        if (backshop == null) {
-            return;
-        }
-        RoomRegistry registry = RoomRegistry.get(server);
-        for (WorkbayRecord record : registry.all()) {
-            for (RoomRecord room : registry.roomsOf(record)) {
-                if (room.anchored()) {
-                    apply(backshop, room);
-                }
+    static void applyOwnChunk(MinecraftServer server, WorkbayRecord record) {
+        record.lastKnownPos().ifPresent(where -> {
+            ServerLevel level = server.getLevel(where.dimension());
+            if (level == null) {
+                return;
             }
-            // And the Workbay's own chunk. Without this an anchored network comes back from a
-            // restart with nothing ticking until somebody walks to the block, which is the same
-            // silence OPEN_ISSUES #52 is about with a longer fuse. `lastKnownPos` is where the
-            // record says its block is; one deployed Workbay per network is the default, and a
-            // second one re-forces its own chunk on its first tick.
-            if (!anchorsOwnChunk(record)) {
-                continue;
+            UUID owner = WorkbayTickets.owner(where.dimension(), where.pos());
+            ChunkPos chunk = new ChunkPos(where.pos());
+            if (!anchorsOwnChunk(server, record)) {
+                WorkbayTickets.release(level, owner, chunk);
+                return;
             }
-            record.lastKnownPos().ifPresent(where -> {
-                ServerLevel level = server.getLevel(where.dimension());
-                if (level != null) {
-                    WorkbayTickets.force(level,
-                        WorkbayTickets.owner(where.dimension(), where.pos()),
-                        new net.minecraft.world.level.ChunkPos(where.pos()));
-                }
-            });
-        }
+            WorkbayTickets.force(level, owner, chunk);
+            // `lastKnownPos` is where the record last saw its block, and nothing clears it when
+            // somebody breaks one -- so without this a Workbay that no longer exists holds a chunk
+            // from every login until the owner leaves again. Forcing sync-loads the chunk, so by
+            // here the block is readable and the answer is not a guess.
+            if (!(level.getBlockEntity(where.pos())
+                instanceof com.neryos.workbay.content.workbay.WorkbayBlockEntity)) {
+                WorkbayTickets.release(level, owner, chunk);
+            }
+        });
     }
 }

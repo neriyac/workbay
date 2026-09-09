@@ -1102,28 +1102,115 @@ public class RoomTests {
             RoomRecord room = rooms(helper, site).get(0);
             helper.assertTrue(room.anchored(), "the anchor did not switch on");
 
-            helper.startSequence().thenIdle(20).thenExecute(() -> {
-                net.minecraft.world.level.ChunkPos first =
-                    new net.minecraft.world.level.ChunkPos(RoomGeometry.origin(room.region()));
-                int side = (int) Math.round(Math.sqrt(room.chunkCost()));
-                int loaded = 0;
-                // Two chunks of slack past the halo on every side, so a wider one would be seen
-                // rather than cropped out by the window this counts in.
-                for (int dx = -4; dx < side + 4; dx++) {
-                    for (int dz = -4; dz < side + 4; dz++) {
-                        if (site.backshop().getChunkSource().hasChunk(first.x + dx, first.z + dz)) {
-                            loaded++;
-                        }
-                    }
-                }
-                helper.assertValueEqual(loaded, RoomGeometry.anchorChunks(room.chunkCost()),
+            helper.startSequence().thenIdle(20).thenExecute(() ->
+                helper.assertValueEqual(held(site, room), RoomGeometry.anchorChunks(room.chunkCost()),
                     "chunks the Backshop really holds for an anchored " + room.chunkCost()
-                        + "-chunk room");
-            }).thenExecute(() -> registry.putRoom(rooms(helper, site).get(0).withAnchored(false)))
+                        + "-chunk room")).thenExecute(() -> registry.putRoom(rooms(helper, site).get(0).withAnchored(false)))
                 .thenExecute(() -> com.neryos.workbay.world.RoomAnchors.apply(site.backshop(),
                     rooms(helper, site).get(0)))
                 .thenSucceed();
         });
+    }
+
+    /**
+     * SPEC.md §12's last line, and the bill a server owner is actually afraid of: <b>an Anchor
+     * holds nothing while its owner is offline.</b>
+     *
+     * <p>Counted in the world on both sides of the boundary rather than asserted off the flag,
+     * because "anchored" and "loaded now" are two different words on purpose — the room stays
+     * anchored the whole way through this test and the chunks do not.
+     *
+     * <p>The logout is the real one: {@code disconnectGameTest} goes through
+     * {@code PlayerList#remove}, which is what fires {@code PlayerLoggedOutEvent} for a real
+     * player. The return cannot be, because a disconnected mock player cannot log in again — so the
+     * network is handed to a second player who <em>is</em> online and {@code resume} is called by
+     * hand, which is the one line {@code onLogin} consists of.
+     *
+     * <p>{@code anchorGraceMinutes} is set to zero for the test. At the shipped five it would have
+     * to idle six thousand ticks to see anything, and the grace itself is arithmetic on a game
+     * time, not behaviour.
+     */
+    @GameTest(timeoutTicks = 600)
+    @TestHolder(description = "An anchored room holds no chunks while its owner is offline.")
+    public static void anAnchoredRoomHoldsNothingWhileItsOwnerIsOffline(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            var config = com.neryos.workbay.config.WorkbayConfig.SERVER;
+            int wasGrace = config.anchorGraceMinutes.get();
+            // The shipped default first, so "it released" cannot mean "the grace was always zero".
+            helper.assertValueEqual(wasGrace, 5, "the shipped anchor grace");
+            config.anchorGraceMinutes.set(0);
+
+            Site site = site(helper, 1, 0, 1);
+            helper.assertTrue(RoomVisit.enter(site.player(), site.record(), 0), "room refused");
+            RoomVisit.leave(site.player());
+
+            RoomRegistry registry = RoomRegistry.get(helper.getLevel().getServer());
+            menu(helper, site).act(com.neryos.workbay.menu.WorkbayAction.TOGGLE_ROOM_ANCHOR, 0,
+                java.util.Optional.empty());
+            RoomRecord room = rooms(helper, site).get(0);
+            helper.assertTrue(room.anchored(), "the anchor did not switch on");
+            int cost = RoomGeometry.anchorChunks(room.chunkCost());
+
+            helper.startSequence()
+                .thenIdle(20)
+                .thenExecute(() -> helper.assertValueEqual(held(site, room), cost,
+                    "chunks an anchored room holds while its owner is online"))
+                // The logout, and then long enough for the release to propagate and the chunks to
+                // actually leave the map -- a dropped ticket is not an unloaded chunk on the same
+                // tick.
+                .thenExecute(() -> site.player().disconnectGameTest())
+                .thenIdle(80)
+                .thenExecute(() -> {
+                    helper.assertTrue(rooms(helper, site).get(0).anchored(),
+                        "the room stopped being anchored, which is not what going offline means");
+                    helper.assertValueEqual(held(site, room), 0,
+                        "chunks an anchored room still holds after its owner logged out");
+                })
+                // And back. A second player, handed the network, standing in for the first walking
+                // in through the door -- nothing else touched.
+                .thenExecute(() -> {
+                    GameTestPlayer back =
+                        helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+                    WorkbayRecord was = registry.byId(site.record().id()).orElseThrow();
+                    registry.put(new WorkbayRecord(was.id(), was.code(), back.getUUID(),
+                        back.getGameProfile().getName(), was.locked(), was.bayColumn(),
+                        was.upgrades(), was.lastKnownPos(), was.bays(), was.rooms(), was.buses(),
+                        was.deployedCount(), was.assay()));
+                    com.neryos.workbay.world.AnchorPresence.resume(
+                        helper.getLevel().getServer(), back.getUUID());
+                })
+                .thenIdle(20)
+                .thenExecute(() -> helper.assertValueEqual(held(site, room), cost,
+                    "chunks an anchored room holds again once its owner is back"))
+                .thenExecute(() -> {
+                    registry.putRoom(rooms(helper, site).get(0).withAnchored(false));
+                    com.neryos.workbay.world.RoomAnchors.apply(site.backshop(),
+                        rooms(helper, site).get(0));
+                    config.anchorGraceMinutes.set(wasGrace);
+                })
+                .thenSucceed();
+        });
+    }
+
+    /**
+     * Chunks the Backshop really holds around a room. Two chunks of slack past the halo on every
+     * side, so a wider hold would be seen rather than cropped out by the window this counts in.
+     */
+    private static int held(Site site, RoomRecord room) {
+        net.minecraft.world.level.ChunkPos first =
+            new net.minecraft.world.level.ChunkPos(RoomGeometry.origin(room.region()));
+        int side = (int) Math.round(Math.sqrt(room.chunkCost()));
+        int loaded = 0;
+        for (int dx = -4; dx < side + 4; dx++) {
+            for (int dz = -4; dz < side + 4; dz++) {
+                if (site.backshop().getChunkSource().hasChunk(first.x + dx, first.z + dz)) {
+                    loaded++;
+                }
+            }
+        }
+        return loaded;
     }
 
     @GameTest
