@@ -1049,4 +1049,97 @@ public class RoomTests {
         });
     }
 
+    /**
+     * A room's light has a source. OPEN_ISSUES #45: the shell emits block light off every face, so
+     * a room was lit and had nothing in it that was doing the lighting.
+     *
+     * <p>Three claims, and the third is the one that was actually wrong before. The ceiling carries
+     * fixtures on a grid; a column that is not on the grid is plain ceiling, so the grid is a grid
+     * and not "every block is a lamp"; and a fixture <b>emits more light than the surface it is set
+     * into</b>, which is the difference between a source and a picture of one.
+     *
+     * <p>Then it takes one out and re-enters, because {@code RoomBuilder.repair} is a three-block
+     * probe and every room built before this existed is exactly the case it has to catch.
+     */
+    @GameTest
+    @TestHolder(description = "A room's ceiling carries light fixtures on a grid, and repairs one that is missing.")
+    public static void aRoomsCeilingCarriesItsOwnLight(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            Site site = site(helper, 1);
+            helper.assertTrue(RoomVisit.enter(site.player(), site.record(), 0), "entering was refused");
+            RoomRecord room = room(helper, site);
+            BlockPos origin = RoomGeometry.origin(room.region());
+            int ceiling = RoomGeometry.ceilingY(1);
+            int[] axis = RoomGeometry.lightAxis(1);
+            helper.assertTrue(axis.length >= 2,
+                "a 14-block room got " + axis.length + " fixtures on an axis, not two");
+
+            for (int x : axis) {
+                for (int z : axis) {
+                    BlockPos at = origin.offset(x, ceiling, z);
+                    helper.assertTrue(site.backshop().getBlockState(at)
+                            .getValue(com.neryos.workbay.content.room.RoomWallBlock.PART)
+                            == com.neryos.workbay.content.room.RoomPart.LIGHT,
+                        "no light fixture in the ceiling at " + at);
+                }
+            }
+            // One block off the grid, which must still be plain ceiling: a lamp everywhere is the
+            // uniform glow this is meant to replace.
+            BlockPos between = origin.offset(axis[0] + 1, ceiling, axis[0]);
+            helper.assertTrue(site.backshop().getBlockState(between)
+                    .getValue(com.neryos.workbay.content.room.RoomWallBlock.PART)
+                    == com.neryos.workbay.content.room.RoomPart.CEILING,
+                "the ceiling beside a fixture is a fixture too, so the grid is not a grid");
+
+            BlockPos lamp = origin.offset(axis[0], ceiling, axis[0]);
+            BlockPos wall = origin.offset(0, 3, 3);
+            int lit = site.backshop().getBlockState(lamp).getLightEmission(site.backshop(), lamp);
+            int shell = site.backshop().getBlockState(wall).getLightEmission(site.backshop(), wall);
+            helper.assertTrue(lit > shell,
+                "a fixture emits " + lit + " and the wall beside it " + shell
+                    + ", so the room's light still has no source");
+
+            // A room built before the ceiling had fixtures: right size, right colour, no lamp.
+            site.backshop().setBlock(lamp, site.backshop().getBlockState(between),
+                Block.UPDATE_CLIENTS);
+            RoomBuilder.ensure(site.backshop(), room, 1);
+            helper.assertTrue(site.backshop().getBlockState(lamp)
+                    .getValue(com.neryos.workbay.content.room.RoomWallBlock.PART)
+                    == com.neryos.workbay.content.room.RoomPart.LIGHT,
+                "a room whose fixture was missing was not repaired on entry");
+            helper.succeed();
+        });
+    }
+
+    /**
+     * A room takes a name. The row derives "Room 1" from its index, so the thing to assert is that
+     * an empty name goes <b>back</b> to that rather than being stored as a room called nothing.
+     */
+    @GameTest
+    @TestHolder(description = "A room takes a name of its own, and an empty one falls back to the derived one.")
+    public static void aRoomTakesANameAndAnEmptyOneClearsIt(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            Site site = site(helper, 1);
+            helper.assertTrue(RoomVisit.enter(site.player(), site.record(), 0), "entering was refused");
+            RoomVisit.leave(site.player());
+            com.neryos.workbay.menu.WorkbayMenu menu = menu(helper, site);
+
+            menu.act(com.neryos.workbay.menu.WorkbayAction.SET_ROOM_NAME, 0,
+                java.util.Optional.empty(), java.util.Optional.of("  Smeltery  "), false);
+            helper.assertTrue(rooms(helper, site).getFirst().name()
+                    .equals(java.util.Optional.of("Smeltery")),
+                "the room is called " + rooms(helper, site).getFirst().name() + ", not Smeltery");
+
+            menu.act(com.neryos.workbay.menu.WorkbayAction.SET_ROOM_NAME, 0,
+                java.util.Optional.empty(), java.util.Optional.of("   "), false);
+            helper.assertTrue(rooms(helper, site).getFirst().name().isEmpty(),
+                "an empty name was stored as a name instead of clearing it");
+            helper.succeed();
+        });
+    }
+
 }

@@ -128,7 +128,10 @@ function Say([string]$text) {
   Set-Clipboard -Value $text
   Start-Sleep -Milliseconds 300
   Key 0x54            # T
-  Start-Sleep -Milliseconds 400
+  # 600, not 400. A T pressed too soon after a GUI closes lands before the world screen is taking
+  # keys again, so chat never opens and the whole command is typed into nothing and lost -- and it
+  # is lost SILENTLY, which cost half a session of "why did that setblock not happen".
+  Start-Sleep -Milliseconds 600
   CtrlKey 0x41         # select whatever is already in the box, stray or not
   Start-Sleep -Milliseconds 80
   CtrlKey 0x56         # replaces the selection with the clipboard

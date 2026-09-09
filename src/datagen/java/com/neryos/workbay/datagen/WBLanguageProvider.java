@@ -402,6 +402,9 @@ public class WBLanguageProvider extends LanguageProvider {
             + "stage in a chain rather than only a place to stand.");
         add(WorkbayLang.guiKey("rooms.none"), "Install a Room Frame above for your first room.");
         add(WorkbayLang.guiKey("rooms.name"), "Room %s");
+        add(WorkbayLang.guiKey("rooms.rename.tip"),
+            "Right-click to name this room. Empty goes back to Room 1, Room 2.");
+        add(WorkbayLang.guiKey("rooms.rename.unbuilt"), "Open the room first.");
 
         // The room window's two tabs, and everything on the guests one.
         add(WorkbayLang.guiKey("rooms.tab.room"), "Room");

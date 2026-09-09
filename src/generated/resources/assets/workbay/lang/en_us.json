@@ -257,6 +257,8 @@
   "gui.workbay.rooms.name": "Room %s",
   "gui.workbay.rooms.none": "Install a Room Frame above for your first room.",
   "gui.workbay.rooms.open": "Open",
+  "gui.workbay.rooms.rename.tip": "Right-click to name this room. Empty goes back to Room 1, Room 2.",
+  "gui.workbay.rooms.rename.unbuilt": "Open the room first.",
   "gui.workbay.rooms.settings": "Room settings",
   "gui.workbay.rooms.settings.close": "Done",
   "gui.workbay.rooms.size": "%sx%s, %s chunks",

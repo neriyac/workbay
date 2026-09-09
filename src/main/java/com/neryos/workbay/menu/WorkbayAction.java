@@ -131,5 +131,13 @@ public enum WorkbayAction {
      * {@link com.neryos.workbay.bus.BusConfig#SPEEDS}: a free number would not divide the tick
      * wheel, which is the whole reason the list is fixed.
      */
-    SET_LINK_SPEED
+    SET_LINK_SPEED,
+    /**
+     * What to call room {@code arg}. {@code text} is the name; empty clears it, and the row falls
+     * back to "Room 1" the way a bay falls back to its machine's own name.
+     *
+     * <p>Last in the enum, for the reason every room action before it was appended: an action
+     * travels as its ordinal, so inserting one silently renames every action after it on the wire.
+     */
+    SET_ROOM_NAME
 }

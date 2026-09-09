@@ -100,7 +100,9 @@ public class WBBlockStateProvider extends BlockStateProvider {
             new java.util.EnumMap<>(com.neryos.workbay.content.room.RoomPart.class);
         for (com.neryos.workbay.content.room.RoomPart part
                 : com.neryos.workbay.content.room.RoomPart.values()) {
-            parts.put(part, tintedCube(part.texture(), part.texture()));
+            parts.put(part, part == com.neryos.workbay.content.room.RoomPart.LIGHT
+                ? lampCube(part.texture(), part.texture())
+                : tintedCube(part.texture(), part.texture()));
         }
         getVariantBuilder(WBBlocks.ROOM_WALL.get()).forAllStates(state -> ConfiguredModel.builder()
             .modelFile(parts.get(state.getValue(RoomWallBlock.PART))).build());
@@ -113,6 +115,24 @@ public class WBBlockStateProvider extends BlockStateProvider {
             .texture("all", blockTexture(texture))
             .element().from(0, 0, 0).to(16, 16, 16)
             .allFaces((face, builder) -> builder.texture("#all").tintindex(0).cullface(face))
+            .end();
+    }
+
+    /**
+     * The ceiling's light fixture. The one shell model with no tint index, no diffuse shading and
+     * full block light — OPEN_ISSUES #45, which is exactly the three reasons a bright ceiling
+     * texture could not be one: a lamp wearing the room's colour is not a lamp, a bottom face is
+     * multiplied by <b>half</b> whatever value is drawn on it, and a fixture shaded by the light it
+     * is itself emitting is lit from behind.
+     */
+    private ModelFile lampCube(String name, String texture) {
+        return models().withExistingParent(name, mcBlock("block"))
+            .texture("particle", blockTexture(texture))
+            .texture("all", blockTexture(texture))
+            .element().from(0, 0, 0).to(16, 16, 16)
+            .shade(false)
+            .emissivity(15, 15)
+            .allFaces((face, builder) -> builder.texture("#all").cullface(face))
             .end();
     }
 

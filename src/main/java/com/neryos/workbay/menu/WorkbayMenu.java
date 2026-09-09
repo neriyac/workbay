@@ -232,6 +232,8 @@ public class WorkbayMenu extends AbstractContainerMenu {
                 text.orElse(""));
             case SET_ROOM_COLOUR -> setRoomColour(serverPlayer, record, (int) (arg & 0xFFFF),
                 (int) (arg >> 16));
+            case SET_ROOM_NAME -> setRoomName(serverPlayer, record, (int) arg,
+                text.orElse("").strip());
             case INVITE_ROOM_GUEST -> inviteGuest(serverPlayer, record, (int) arg,
                 text.orElse("").strip());
             case CYCLE_ROOM_GUEST -> editGuest(serverPlayer, record, (int) (arg & 0xFFFF),
@@ -816,6 +818,23 @@ public class WorkbayMenu extends AbstractContainerMenu {
             // The room's own tier, not the network's: repainting must never also grow it.
             com.neryos.workbay.world.RoomBuilder.ensure(backshop, painted, painted.builtTier());
         }
+        refreshNow();
+    }
+
+    /**
+     * What to call one room. Nothing is written to the world: a name is the one room setting that
+     * changes no block, which is why this is four lines and repainting is twenty.
+     */
+    private void setRoomName(ServerPlayer serverPlayer, WorkbayRecord record, int index,
+        String name) {
+        com.neryos.workbay.world.RoomRecord room = editableRoom(serverPlayer, record, index);
+        if (room == null) {
+            return;
+        }
+        // Empty is "no name", not a name that is empty -- the row derives "Room 1" from the index,
+        // and a stored blank would draw as a blank.
+        com.neryos.workbay.world.RoomRegistry.get(serverPlayer.server).putRoom(
+            room.withName(name.isEmpty() ? Optional.empty() : Optional.of(name)));
         refreshNow();
     }
 

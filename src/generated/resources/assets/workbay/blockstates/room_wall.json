@@ -18,6 +18,9 @@
     "colour=bone,part=floor": {
       "model": "workbay:block/room_floor"
     },
+    "colour=bone,part=light": {
+      "model": "workbay:block/room_light"
+    },
     "colour=bone,part=skirting": {
       "model": "workbay:block/room_skirting"
     },
@@ -41,6 +44,9 @@
     },
     "colour=charcoal,part=floor": {
       "model": "workbay:block/room_floor"
+    },
+    "colour=charcoal,part=light": {
+      "model": "workbay:block/room_light"
     },
     "colour=charcoal,part=skirting": {
       "model": "workbay:block/room_skirting"
@@ -66,6 +72,9 @@
     "colour=clay,part=floor": {
       "model": "workbay:block/room_floor"
     },
+    "colour=clay,part=light": {
+      "model": "workbay:block/room_light"
+    },
     "colour=clay,part=skirting": {
       "model": "workbay:block/room_skirting"
     },
@@ -89,6 +98,9 @@
     },
     "colour=overworld,part=floor": {
       "model": "workbay:block/room_floor"
+    },
+    "colour=overworld,part=light": {
+      "model": "workbay:block/room_light"
     },
     "colour=overworld,part=skirting": {
       "model": "workbay:block/room_skirting"
@@ -114,6 +126,9 @@
     "colour=plum,part=floor": {
       "model": "workbay:block/room_floor"
     },
+    "colour=plum,part=light": {
+      "model": "workbay:block/room_light"
+    },
     "colour=plum,part=skirting": {
       "model": "workbay:block/room_skirting"
     },
@@ -137,6 +152,9 @@
     },
     "colour=rose,part=floor": {
       "model": "workbay:block/room_floor"
+    },
+    "colour=rose,part=light": {
+      "model": "workbay:block/room_light"
     },
     "colour=rose,part=skirting": {
       "model": "workbay:block/room_skirting"
@@ -162,6 +180,9 @@
     "colour=sage,part=floor": {
       "model": "workbay:block/room_floor"
     },
+    "colour=sage,part=light": {
+      "model": "workbay:block/room_light"
+    },
     "colour=sage,part=skirting": {
       "model": "workbay:block/room_skirting"
     },
@@ -185,6 +206,9 @@
     },
     "colour=sand,part=floor": {
       "model": "workbay:block/room_floor"
+    },
+    "colour=sand,part=light": {
+      "model": "workbay:block/room_light"
     },
     "colour=sand,part=skirting": {
       "model": "workbay:block/room_skirting"
@@ -210,6 +234,9 @@
     "colour=sky,part=floor": {
       "model": "workbay:block/room_floor"
     },
+    "colour=sky,part=light": {
+      "model": "workbay:block/room_light"
+    },
     "colour=sky,part=skirting": {
       "model": "workbay:block/room_skirting"
     },
@@ -234,6 +261,9 @@
     "colour=slate,part=floor": {
       "model": "workbay:block/room_floor"
     },
+    "colour=slate,part=light": {
+      "model": "workbay:block/room_light"
+    },
     "colour=slate,part=skirting": {
       "model": "workbay:block/room_skirting"
     },
@@ -257,6 +287,9 @@
     },
     "colour=teal,part=floor": {
       "model": "workbay:block/room_floor"
+    },
+    "colour=teal,part=light": {
+      "model": "workbay:block/room_light"
     },
     "colour=teal,part=skirting": {
       "model": "workbay:block/room_skirting"

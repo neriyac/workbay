@@ -278,7 +278,27 @@ class RoomsPage extends WorkbayPage {
 
             String name = room.name().isEmpty()
                 ? WorkbayScreen.gui("rooms.name", room.index() + 1).getString() : room.name();
-            text(g, name, px + ROOM_NAME_X, py + TEXT_Y, ROOM_NAME_W, Draw.TEXT);
+            // Hidden while any rename is open, exactly as BAYS and LINKS do it: the field is drawn
+            // over the line it replaces, and a name left underneath shows through it.
+            if (!screen.renaming()) {
+                text(g, name, px + ROOM_NAME_X, py + TEXT_Y, ROOM_NAME_W, Draw.TEXT);
+            }
+            // Right-click the name to give the room one of your own -- the same gesture a link's
+            // name takes, and for the same reason: the row has no spare control and a name is the
+            // one thing a player edits by pointing at the thing that is wrong. Only a built room,
+            // because an unopened slot has no record to remember a name on.
+            final int nameX = px + ROOM_NAME_X;
+            final int nameY = py;
+            final int index = room.index();
+            final String named = room.name();
+            final boolean built = room.built();
+            screen.hit(nameX, py + 3, ROOM_NAME_W, 12, () -> {
+                if (built && screen.back()) {
+                    screen.beginRename(nameX, nameY + 4, ROOM_NAME_W, 12, named,
+                        typed -> screen.sendText(WorkbayAction.SET_ROOM_NAME, index, typed));
+                }
+            }, Component.literal(name),
+                WorkbayScreen.gui(built ? "rooms.rename.tip" : "rooms.rename.unbuilt"));
 
             // Size and price on one line, because they are one decision. An unopened slot says so
             // rather than showing a size it has not got.

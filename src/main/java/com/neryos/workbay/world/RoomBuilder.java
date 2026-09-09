@@ -99,8 +99,14 @@ public final class RoomBuilder {
         // leave every existing room a one-value box for ever.
         var doors = RoomGeometry.doors(room.region(), room.builtTier()).entrySet().iterator().next();
         BlockPos corner = RoomGeometry.origin(room.region());
+        // And one lamp, which is what catches a room built before the ceiling had any: its floor,
+        // its skirting and its doors are all already right, so probing only those would leave every
+        // existing room unlit for ever.
+        int first = RoomGeometry.lightAxis(room.builtTier())[0];
+        BlockPos lamp = corner.offset(first, RoomGeometry.ceilingY(room.builtTier()), first);
         if (!backshop.getBlockState(corner).equals(shellState(room, RoomPart.FLOOR))
             || !backshop.getBlockState(corner.above()).equals(shellState(room, RoomPart.SKIRTING))
+            || !backshop.getBlockState(lamp).equals(shellState(room, RoomPart.LIGHT))
             || !backshop.getBlockState(doors.getKey()).equals(shellState(room, doors.getValue()))) {
             paint(backshop, room);
         }
@@ -145,6 +151,13 @@ public final class RoomBuilder {
         BlockState floor = shellState(room, RoomPart.FLOOR);
         BlockState skirting = shellState(room, RoomPart.SKIRTING);
         BlockState ceiling = shellState(room, RoomPart.CEILING);
+        BlockState light = shellState(room, RoomPart.LIGHT);
+        // The fixture grid, as one lookup per axis: a lamp stands where both axes want one, which
+        // is what makes it a grid rather than two crossing lines.
+        boolean[] lamp = new boolean[side];
+        for (int at : RoomGeometry.lightAxis(tier)) {
+            lamp[at] = true;
+        }
         BlockPos origin = RoomGeometry.origin(room.region());
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
         for (int x = 0; x < side; x++) {
@@ -160,7 +173,7 @@ public final class RoomBuilder {
                     // skirting, so the room has a line where the two meet; the ceiling is its own
                     // thing so looking up is not looking sideways.
                     BlockState piece = y == 0 ? floor
-                        : y == top ? ceiling
+                        : y == top ? (lamp[x] && lamp[z] ? light : ceiling)
                         : y == 1 ? skirting
                         : wall;
                     // UPDATE_CLIENTS, not UPDATE_ALL: nothing observes the Backshop and neighbour

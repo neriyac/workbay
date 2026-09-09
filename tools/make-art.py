@@ -690,6 +690,31 @@ def room_floor():
     return im
 
 
+def room_light():
+    """The ceiling's light fixture, and the one shell texture that is NOT greyscale-for-tinting.
+
+    Its model carries no tint index, no diffuse shading and full block light, so what is drawn here
+    is exactly what is seen -- which is why the panel can be near-white without going to mud, and
+    why the frame around it can be dark without going to black. Both are the point: a lamp is a
+    bright thing inside a dark surround, and a bright square with no surround is a hole.
+
+    Drawn flush rather than as a recessed can. A recess needs the four side walls to be shaded to
+    read as depth, and this model deliberately has no shading at all -- so a recess would render as
+    five equally bright faces, which is a glowing box and not a lamp."""
+    im = blank()
+    d = ImageDraw.Draw(im)
+    # The frame, two steps: near-black against the ceiling, then the fitting itself.
+    rect(d, 0, 0, 15, 15, (58, 58, 58, 255))
+    rect(d, 1, 1, 14, 14, (108, 108, 108, 255))
+    # The panel. Warm rather than pure white -- every light source in this game is warm, and a
+    # neutral one reads as a hole cut in the ceiling to somewhere brighter.
+    rect(d, 2, 2, 13, 13, (252, 246, 228, 255))
+    # One dimmer course inside the panel's edge, so the diffuser has a thickness. Without it the
+    # panel is a flat rectangle of one value and the fixture reads as a decal.
+    d.rectangle([2, 2, 13, 13], outline=(226, 218, 196, 255))
+    return im
+
+
 def _door_sheet():
     """One 32x32 door, sliced into four blocks by the callers below.
 
@@ -747,7 +772,7 @@ def room_door_br():
 
 BLOCK_ART = {"connector": connector, "port": port,
              "assay_face": assay_face, "assay_edge": assay_edge,
-             "room_wall": room_wall, "room_floor": room_floor,
+             "room_wall": room_wall, "room_floor": room_floor, "room_light": room_light,
              "room_door_tl": room_door_tl, "room_door_tr": room_door_tr,
              "room_door_bl": room_door_bl, "room_door_br": room_door_br}
 ITEM_ART = {"shopsteel": shopsteel, "housing": housing,

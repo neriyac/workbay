@@ -88,6 +88,29 @@ public final class RoomGeometry {
         return chunks * chunks;
     }
 
+    /**
+     * Shell-relative coordinates, on one axis, of the ceiling's light fixtures. OPEN_ISSUES #45.
+     *
+     * <p>One roughly every eight blocks and symmetric about the middle, so a 14 room gets two per
+     * axis (four lamps), a 30 gets four (sixteen) and a 46 gets six (thirty-six) — and every tier
+     * lands three blocks in from each wall, which is what stops the grid reading as having been cut
+     * off at one end. The spacing is the number, not the count: a lamp every eight blocks is the
+     * same room at every size, and a fixed count would put four lamps in a 46-block hall.
+     */
+    public static int[] lightAxis(int tier) {
+        int inside = interior(tier);
+        if (inside == 0) {
+            return new int[0];
+        }
+        int lamps = Math.max(1, Math.round(inside / 8.0F));
+        int[] out = new int[lamps];
+        for (int i = 0; i < lamps; i++) {
+            // Shell-relative, so the +1 is the wall the interior starts after.
+            out[i] = 1 + (int) ((i + 0.5) * inside / lamps);
+        }
+        return out;
+    }
+
     /** The shell's ceiling layer. */
     public static int ceilingY(int tier) {
         return FLOOR_Y + height(tier) + 1;

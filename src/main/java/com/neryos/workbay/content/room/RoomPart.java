@@ -35,6 +35,18 @@ public enum RoomPart implements StringRepresentable {
      * copy of its sides.
      */
     CEILING("ceiling"),
+    /**
+     * A light fixture, set into the ceiling on a grid. OPEN_ISSUES #45: the shell emits block light
+     * everywhere and nothing in the room showed where it came from, which reads as a lit box rather
+     * than as a lit room.
+     *
+     * <p>It is the one part of the shell that is <b>untinted, unshaded and full-bright</b>. Untinted
+     * because a lamp wearing the room's colour is not a lamp; unshaded because Minecraft multiplies
+     * a bottom face by half, which is the exact reason a bright ceiling texture could not work; and
+     * full-bright because a fixture that takes its brightness from the light it is emitting is
+     * lighting itself from behind.
+     */
+    LIGHT("light"),
     DOOR_BOTTOM_LEFT("door_bl"),
     DOOR_BOTTOM_RIGHT("door_br"),
     DOOR_TOP_LEFT("door_tl"),

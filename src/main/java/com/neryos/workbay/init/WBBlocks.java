@@ -71,7 +71,10 @@ public class WBBlocks {
             // had to floor it with torches before it looked like anywhere. 11 is under a torch's
             // 14 and over the 9 crops want, so a bare room grows things and still leaves a reason
             // to hang a lamp. It is BLOCK light, not sky -- nothing here feeds a solar panel.
-            .lightLevel(state -> 11)
+            // The ceiling's fixtures are the one part above that, at 15: a room lit to the same
+            // value off every one of its faces has no source, which is OPEN_ISSUES #45.
+            .lightLevel(state -> state.getValue(com.neryos.workbay.content.room.RoomWallBlock.PART)
+                == com.neryos.workbay.content.room.RoomPart.LIGHT ? 15 : 11)
             .strength(-1.0F, 3600000.0F)
             .noLootTable()
             .pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK)
