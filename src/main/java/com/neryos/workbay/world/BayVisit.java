@@ -5,6 +5,7 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.neryos.workbay.Workbay;
 import com.neryos.workbay.WorkbayLang;
+import com.neryos.workbay.WorkbaySounds;
 import com.neryos.workbay.init.WBAttachments;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -120,10 +121,10 @@ public final class BayVisit {
      * The Backshop's only door. Rooms come through it too rather than opening a second one, so
      * {@link #onTravel} stays the single place that decides who may cross.
      */
-    static void admit(Runnable move) {
+    static void admit(ServerPlayer player, Runnable move) {
         admitting = true;
         try {
-            move.run();
+            WorkbaySounds.travel(player, move);
         } finally {
             admitting = false;
         }
@@ -166,7 +167,7 @@ public final class BayVisit {
         OPENING.put(player.getUUID(), 0);
         SENT.remove(player.getUUID());
         CLOSED.remove(player.getUUID());
-        admit(() -> player.teleportTo(backshop, spot.x, spot.y, spot.z, Set.of(), -90.0F, 7.0F));
+        admit(player, () -> player.teleportTo(backshop, spot.x, spot.y, spot.z, Set.of(), -90.0F, 7.0F));
         if (!player.level().dimension().equals(WorkbayDimensions.BACKSHOP)) {
             forget(player);
             return false;
@@ -187,8 +188,9 @@ public final class BayVisit {
             level = player.server.overworld();
         }
         forget(player);
-        player.teleportTo(level, home.where().x, home.where().y, home.where().z, Set.of(),
-            home.yRot(), home.xRot());
+        ServerLevel back = level;
+        WorkbaySounds.travel(player, () -> player.teleportTo(back, home.where().x, home.where().y,
+            home.where().z, Set.of(), home.yRot(), home.xRot()));
         if (home.workbay().isPresent()) {
             REOPEN.put(player.getUUID(), 0);
             OWED.put(player.getUUID(), home);
@@ -293,14 +295,14 @@ public final class BayVisit {
             if (SENT.remove(id)) {
                 OPENING.remove(id);
                 if (!open(player, home.machine())) {
-                    player.displayClientMessage(WorkbayLang.message("bay_no_screen",
-                        player.serverLevel().getBlockState(home.machine()).getBlock().getName()), true);
+                    WorkbaySounds.refuse(player, WorkbayLang.message("bay_no_screen",
+                        player.serverLevel().getBlockState(home.machine()).getBlock().getName()));
                     leave(player);
                 }
             } else if (waited >= OPEN_TIMEOUT) {
                 LOGGER.warn("{} waited {} ticks for Backshop chunk {} to reach their client; sending them home",
                     player.getGameProfile().getName(), waited, new ChunkPos(home.machine()));
-                player.displayClientMessage(WorkbayLang.message("bay_load_timeout"), true);
+                WorkbaySounds.refuse(player, WorkbayLang.message("bay_load_timeout"));
                 leave(player);
             } else {
                 OPENING.put(id, waited + 1);

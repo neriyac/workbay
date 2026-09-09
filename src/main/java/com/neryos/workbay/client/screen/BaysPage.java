@@ -446,6 +446,19 @@ class BaysPage extends WorkbayPage {
             text(g, WorkbayScreen.gui("power.none"), x(98), y(69), room, Draw.TEXT_FAINT);
         }
 
+        // <b>A fresh Workbay is an empty rack, and nothing on it said so.</b> The instruction
+        // existed only as the slot's tooltip, which has to be found by hovering a 40x40 square
+        // that looks like every other recess on the screen -- and the one player who most needs
+        // it is the one who does not yet know there is anything to hover. It goes in the band the
+        // power bar leaves free while a bay is empty, so nothing moves when a machine arrives:
+        // the bar takes the line back and the hint is gone, which is the whole of "goes away once
+        // there is anything to show". The status line under it is skipped while it shows, because
+        // "Empty bay" said the same thing in fewer, less useful words.
+        boolean hint = empty && bay.state() != WorkbaySnapshot.State.LOCKED;
+        if (hint) {
+            wrapped(g, WorkbayScreen.gui("bay.rack.hint"), x(98), y(66), room, Draw.TEXT_DIM);
+        }
+
         // The redstone mode shares this line with the status, right-aligned, and it is the short
         // form: "Redstone: without a signal" is 156 pixels on a line 130 wide and ran straight
         // through the status text. The long form is the button's tooltip title.
@@ -456,7 +469,9 @@ class BaysPage extends WorkbayPage {
             textRight(g, mode, x(FACES_X - 4), y(82), modeRoom, Draw.TEXT_DIM);
         }
         int statusRoom = room - (mode.isEmpty() ? 0 : modeRoom + 6);
-        text(g, statusLine(bay), x(98), y(82), statusRoom, statusColour(bay.state()));
+        if (!hint) {
+            text(g, statusLine(bay), x(98), y(82), statusRoom, statusColour(bay.state()));
+        }
 
         // The button row at y=98, 20x20 on a 24px pitch. Bay View is the last of the six and is
         // real now: SPEC.md §4's rule is that a control whose screen is not built is hidden rather

@@ -34,6 +34,14 @@ public final class WorkbayLang {
         return Component.translatable(statusKey(path), args);
     }
 
+    /**
+     * The guide pages, shown on an item's Information tab in JEI and EMI. SPEC.md §6's voice, at
+     * the length a paragraph needs -- this is the one place in the mod with room for one.
+     */
+    public static MutableComponent info(String path, Object... args) {
+        return Component.translatable(infoKey(path), args);
+    }
+
     public static String guiKey(String path) {
         return Util.makeDescriptionId("gui", Workbay.rl(path));
     }
@@ -48,5 +56,9 @@ public final class WorkbayLang {
 
     public static String statusKey(String path) {
         return Util.makeDescriptionId("status", Workbay.rl(path));
+    }
+
+    public static String infoKey(String path) {
+        return Util.makeDescriptionId("info", Workbay.rl(path));
     }
 }

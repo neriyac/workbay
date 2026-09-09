@@ -1,6 +1,7 @@
 package com.neryos.workbay.content.workbay;
 
 import com.neryos.workbay.WorkbayLang;
+import com.neryos.workbay.WorkbaySounds;
 import com.neryos.workbay.config.WorkbayConfig;
 import com.neryos.workbay.init.WBDataComponents;
 import com.neryos.workbay.world.RoomRegistry;
@@ -37,15 +38,15 @@ public class WorkbayItem extends BlockItem {
             WorkbayRecord target = targetNetwork(registry, player, context.getItemInHand());
             int maxDeployed = WorkbayConfig.SERVER.maxDeployedWorkbaysPerNetwork.get();
             if (target != null && target.deployedCount() >= maxDeployed) {
-                player.displayClientMessage(
-                    WorkbayLang.message("network_deployed_full", maxDeployed), true);
+                WorkbaySounds.refuse(player,
+                    WorkbayLang.message("network_deployed_full", maxDeployed));
                 return InteractionResult.FAIL;
             }
             if (target == null) {
                 int maxNetworks = WorkbayConfig.SERVER.maxNetworksPerPlayer.get();
                 if (registry.ownedBy(player.getUUID()).size() >= maxNetworks) {
-                    player.displayClientMessage(
-                        WorkbayLang.message("network_cap_reached", maxNetworks), true);
+                    WorkbaySounds.refuse(player,
+                        WorkbayLang.message("network_cap_reached", maxNetworks));
                     return InteractionResult.FAIL;
                 }
             }

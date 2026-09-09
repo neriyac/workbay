@@ -175,6 +175,9 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("bay.empty"), "Empty bay");
         add(WorkbayLang.guiKey("bay.empty.tip"), "Hold a machine and click here to rack it.");
         add(WorkbayLang.guiKey("bay.rack.tip"), "Hold a machine and click to rack it in this bay.");
+        // The same instruction, drawn rather than hovered: a fresh Workbay is an empty rack and
+        // the tooltip was the only place that said what to do about it. BaysPage#machine.
+        add(WorkbayLang.guiKey("bay.rack.hint"), "Hold a machine and click the slot.");
         add(WorkbayLang.guiKey("bay.locked"), "Locked bay");
         add(WorkbayLang.guiKey("bay.locked.tip"), "Install an Expansion Plate to open this bay.");
         add(WorkbayLang.guiKey("bay.running"), "Running");
@@ -597,5 +600,85 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.tooltipKey("connector_unpaired"), "Not paired. Right-click a Workbay with "
             + "this to pair it.");
         add(WorkbayLang.tooltipKey("connector_paired"), "Paired \u00b7 bay %s");
+
+        // The guide, on every item's Information tab in JEI and EMI. SPEC.md §6's voice at the one
+        // length it is ever allowed: a player right-clicking a Workbay in a recipe viewer used to
+        // get a crafting grid and no sentence saying what the block is for. The Workbay's page is
+        // the only one that teaches a sequence, because it is the only one anybody reads first.
+        add(WorkbayLang.infoKey("workbay.1"), "A Workbay hosts other mods' machines inside a "
+            + "private dimension and reaches them wirelessly. A racked machine runs exactly as it "
+            + "did on your floor \u2014 it is out of sight, not out of the world. It does not save "
+            + "TPS. What it saves is the floor space, and the cables.");
+        add(WorkbayLang.infoKey("workbay.2"), "The first three things to do:");
+        add(WorkbayLang.infoKey("workbay.3"), "1. Place it and right-click it. The column down the "
+            + "left is your bays; a fresh Workbay has two, and the rest are bought later. Hold a "
+            + "machine and click the large slot beside the name to rack it.");
+        add(WorkbayLang.infoKey("workbay.4"), "2. Right-click the Workbay with a Connector to pair "
+            + "the two, then place that Connector against any chest, tank or machine in the world. "
+            + "Placing it is what makes the link, and the link appears as a row on this screen.");
+        add(WorkbayLang.infoKey("workbay.5"), "3. Set that row's direction and what it carries. "
+            + "Insert pushes into the block the Connector is stuck to; Extract pulls out of it. "
+            + "The Workbay glows while goods are moving and goes amber when a link needs you.");
+        add(WorkbayLang.infoKey("workbay.6"), "Everything past that costs Levy. Rack an Assay, "
+            + "raise its dial, and a share of everything your links move is banked as Levy to "
+            + "spend on the Upgrades tab \u2014 more bays, faster links, and rooms out the back.");
+
+        add(WorkbayLang.infoKey("connector.1"), "One end of a link, as a block you can point at. "
+            + "Right-click a Workbay with it to pair the two; its tooltip then names which Workbay "
+            + "and which bay. Place it against a chest, tank or machine and the link exists. Break "
+            + "it and the link is gone.");
+        add(WorkbayLang.infoKey("connector.2"), "It reaches all six faces of the block it is stuck "
+            + "to, so which side you put it on does not matter. One Connector carries one kind of "
+            + "resource; with the Multichannel upgrade fitted, right-click a placed Connector with "
+            + "an empty hand to add the next kind.");
+        add(WorkbayLang.infoKey("connector.3"), "A link out of the dimension its Workbay stands in "
+            + "needs a Resonator. Anything inside that dimension, and anything in the Backshop, "
+            + "does not.");
+
+        add(WorkbayLang.infoKey("assay.1"), "The only machine this mod ships, and the only source "
+            + "of Levy. Rack it in a bay: it has no faces and does nothing standing on the floor.");
+        add(WorkbayLang.infoKey("assay.2"), "The Skim dial on the Bays screen says what share of "
+            + "everything your links move is taken and converted. That share is the price of every "
+            + "upgrade in the mod. Levy is a balance on your network rather than an item \u2014 "
+            + "there is nothing to pipe, store or lose.");
+
+        add(WorkbayLang.infoKey("expansion_plate.1"), "One more bay, consumed on install. Each one "
+            + "costs more Levy than the last, up to the eight the rack holds.");
+        add(WorkbayLang.infoKey("annex_plate.1"), "One more room, consumed on install. It needs a "
+            + "Room Frame first \u2014 with no rooms to add to it would install and do nothing, so "
+            + "it refuses instead.");
+
+        add(WorkbayLang.infoKey("room_frame.1"), "A room: a private, sealed cube out the back of "
+            + "the Backshop that you walk into and build in. Consumed on install.");
+        add(WorkbayLang.infoKey("room_frame.2"), "The Frame you install sets the size of every room "
+            + "you own \u2014 14 blocks on a side, 30 for a Wide Frame, 46 for a Vast one. A larger "
+            + "Frame expands the room you already have rather than giving you a second; the Annex "
+            + "Plate is what gives you a second.");
+        add(WorkbayLang.infoKey("room_frame.3"), "Pick a room's biome and its colour on the Rooms "
+            + "tab, and invite other players in there while you are at it. The four doors in the "
+            + "walls are the way out, and they cannot be broken.");
+
+        add(WorkbayLang.infoKey("anchor.1"), "Keeps the Backshop running with nobody standing at "
+            + "the Workbay, so a chain of machines out the back carries on while you are away "
+            + "doing something else. Switch it on per room, on the Rooms tab.");
+        add(WorkbayLang.infoKey("anchor.2"), "It holds nothing while its owner is offline. Log out "
+            + "and the chunks are let go; log back in and they are taken again, with the chain "
+            + "carrying on from where it stopped. Nothing is lost in the gap, because nothing this "
+            + "mod moves is ever in transit between two ticks.");
+
+        add(WorkbayLang.infoKey("resonator.1"), "Lets this network's links reach into other "
+            + "dimensions. Without one, a Connector in the Nether pointing at a Workbay in the "
+            + "Overworld sits still, and its row says so.");
+        add(WorkbayLang.infoKey("multichannel.1"), "Lets one Connector carry items, fluids and "
+            + "energy to the same target at once instead of one of them. Right-click a placed "
+            + "Connector with an empty hand to add the next kind.");
+        add(WorkbayLang.infoKey("impeller.1"), "Doubles what every link moves in a step and halves "
+            + "the wait between steps \u2014 both, on every link this network has. Two may be "
+            + "fitted. Throughput is the one thing a fresh Workbay is deliberately short of.");
+
+        add(WorkbayLang.infoKey("shopsteel.1"), "An intermediate. Smelted, and used in almost "
+            + "everything this mod makes.");
+        add(WorkbayLang.infoKey("housing.1"), "An intermediate. The shell every craftable in this "
+            + "mod is built on.");
     }
 }

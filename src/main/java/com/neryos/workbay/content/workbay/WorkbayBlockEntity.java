@@ -404,6 +404,25 @@ public class WorkbayBlockEntity extends BlockEntity {
             && state.getValue(WorkbayBlock.POWERED) == powered) {
             return;
         }
+        // The one edge worth hearing, and it is free: this branch is reached only when the reading
+        // has actually changed, and RUNNING is already held for four seconds past the last move.
+        // A link on the wheel therefore makes one sound when the chain starts and one when it runs
+        // dry, whatever it does in between -- which is the whole reason a sound hangs off this and
+        // not off BusRunner, where it would be a metronome. See WorkbaySounds.
+        WorkbayState had = state.getValue(WorkbayBlock.STATE);
+        if (want != had) {
+            switch (want) {
+                case RUNNING -> com.neryos.workbay.WorkbaySounds.started(server, pos);
+                case STUCK -> com.neryos.workbay.WorkbaySounds.stuck(server, pos);
+                case IDLE -> {
+                    // Only from RUNNING. Coming down off STUCK is a fault the player just cleared,
+                    // and it is followed by the machine starting again a moment later.
+                    if (had == WorkbayState.RUNNING) {
+                        com.neryos.workbay.WorkbaySounds.stopped(server, pos);
+                    }
+                }
+            }
+        }
         server.setBlock(pos, state.setValue(WorkbayBlock.STATE, want)
             .setValue(WorkbayBlock.POWERED, powered), net.minecraft.world.level.block.Block.UPDATE_ALL);
     }

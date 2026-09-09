@@ -1,5 +1,6 @@
 package com.neryos.workbay.menu;
 
+import com.neryos.workbay.WorkbaySounds;
 import com.neryos.workbay.bus.BusConfig;
 import com.neryos.workbay.bus.BusRunner;
 import com.neryos.workbay.content.assay.AssayBlock;
@@ -214,8 +215,8 @@ public class WorkbayMenu extends AbstractContainerMenu {
             case SET_SKIM -> setSkim(serverPlayer, record, back);
             case OPEN_BAY_VIEW -> {
                 if (!BayViewMenu.open(serverPlayer, workbay, record, selectedBay)) {
-                    serverPlayer.displayClientMessage(
-                        com.neryos.workbay.WorkbayLang.message("bayview_unreachable"), true);
+                    WorkbaySounds.refuse(serverPlayer,
+                        com.neryos.workbay.WorkbayLang.message("bayview_unreachable"));
                 }
             }
             case ENTER_ROOM -> {
@@ -260,8 +261,8 @@ public class WorkbayMenu extends AbstractContainerMenu {
                 if (!com.neryos.workbay.world.BayVisit.enter(serverPlayer, record, selectedBay,
                     workbay == null ? null : net.minecraft.core.GlobalPos.of(
                         serverPlayer.level().dimension(), workbay.getBlockPos()))) {
-                    serverPlayer.displayClientMessage(
-                        com.neryos.workbay.WorkbayLang.message("bay_enter_failed"), true);
+                    WorkbaySounds.refuse(serverPlayer,
+                        com.neryos.workbay.WorkbayLang.message("bay_enter_failed"));
                 }
             }
             case CREATE_INTERNAL_LINK -> createInternalLink(serverPlayer, record, (int) arg);
@@ -402,7 +403,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
         if (!record.locked() || record.owner().equals(who.getUUID())) {
             return false;
         }
-        who.displayClientMessage(com.neryos.workbay.WorkbayLang.message("locked"), true);
+        WorkbaySounds.refuse(who, com.neryos.workbay.WorkbayLang.message("locked"));
         return true;
     }
 
@@ -446,8 +447,8 @@ public class WorkbayMenu extends AbstractContainerMenu {
                 com.neryos.workbay.compat.MekanismChemicals.chemicalsIn(targetLevel,
                     link.target().pos());
             if (inTank.isEmpty()) {
-                serverPlayer.displayClientMessage(
-                    com.neryos.workbay.WorkbayLang.message("filter_no_chemical"), true);
+                WorkbaySounds.refuse(serverPlayer,
+                    com.neryos.workbay.WorkbayLang.message("filter_no_chemical"));
                 return;
             }
             boolean already = link.filter().ids().equals(inTank);
@@ -461,7 +462,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
             return;
         }
         if (selectedBay >= record.bayCapacity()) {
-            serverPlayer.displayClientMessage(com.neryos.workbay.WorkbayLang.message("reject.no_bay"), true);
+            WorkbaySounds.refuse(serverPlayer, com.neryos.workbay.WorkbayLang.message("reject.no_bay"));
             return;
         }
         ServerLevel backshop = serverPlayer.server.getLevel(WorkbayDimensions.BACKSHOP);
@@ -474,19 +475,19 @@ public class WorkbayMenu extends AbstractContainerMenu {
         // does nothing is the worst failure a screen has, because there is no next thing to try.
         if (!backshop.getBlockState(
             BayGeometry.machinePos(record.bayColumn(), selectedBay)).isAir()) {
-            serverPlayer.displayClientMessage(
-                com.neryos.workbay.WorkbayLang.message("reject.bay_occupied"), true);
+            WorkbaySounds.refuse(serverPlayer,
+                com.neryos.workbay.WorkbayLang.message("reject.bay_occupied"));
             return;
         }
         ItemStack held = serverPlayer.getMainHandItem();
         if (held.isEmpty()) {
-            serverPlayer.displayClientMessage(
-                com.neryos.workbay.WorkbayLang.message("reject.empty_hand"), true);
+            WorkbaySounds.refuse(serverPlayer,
+                com.neryos.workbay.WorkbayLang.message("reject.empty_hand"));
             return;
         }
         HostResult verdict = HostChecks.evaluate(held);
         if (!verdict.allowed()) {
-            serverPlayer.displayClientMessage(verdict.message(), true);
+            WorkbaySounds.refuse(serverPlayer, verdict.message());
             return;
         }
         ItemStack one = held.copyWithCount(1);
@@ -497,24 +498,28 @@ public class WorkbayMenu extends AbstractContainerMenu {
         // answer rather than bypassing the gate: the gate is vanilla's and it is about who may
         // author block NBT, and a bay is not the place to win that argument. OPEN_ISSUES #15.
         if (stripsBlockEntityData(serverPlayer, one)) {
-            serverPlayer.displayClientMessage(
+            WorkbaySounds.refuse(serverPlayer,
                 com.neryos.workbay.WorkbayLang.message("reject.op_only_data",
-                    one.getHoverName()).withStyle(net.minecraft.ChatFormatting.RED), true);
+                    one.getHoverName()).withStyle(net.minecraft.ChatFormatting.RED));
             return;
         }
         if (!BayHosting.rack(backshop, record.bayColumn(), selectedBay, one, serverPlayer,
             Direction.NORTH)) {
             // The placement was undone (SPEC.md §10 step 4: setPlacedBy threw). Say so rather
             // than leaving the click looking like it was ignored.
-            serverPlayer.displayClientMessage(
+            WorkbaySounds.refuse(serverPlayer,
                 com.neryos.workbay.WorkbayLang.message("reject.rack_failed",
-                    one.getHoverName()), true);
+                    one.getHoverName()));
             return;
         }
         held.shrink(1);
         RoomRegistry.get(serverPlayer.server).put(record.withBay(record.bay(selectedBay)
             .withHosted(Optional.ofNullable(BuiltInRegistries.ITEM.getKey(one.getItem())))));
         workbay.setChanged();
+        // In the machine's own voice, at the Workbay rather than in the Backshop where the block
+        // actually landed: the bay is nine hundred chunks away and nobody is standing in it.
+        WorkbaySounds.racked(workbay.getLevel(), workbay.getBlockPos(),
+            backshop.getBlockState(BayGeometry.machinePos(record.bayColumn(), selectedBay)));
     }
 
     private void eject(ServerPlayer serverPlayer, WorkbayRecord record) {
@@ -525,10 +530,14 @@ public class WorkbayMenu extends AbstractContainerMenu {
         if (backshop == null) {
             return;
         }
+        // Read before the block goes, because the sound is the block's and afterwards it is air.
+        BlockState was = backshop.getBlockState(
+            BayGeometry.machinePos(record.bayColumn(), selectedBay));
         ItemStack machine = BayHosting.eject(backshop, record.bayColumn(), selectedBay, serverPlayer);
         if (machine.isEmpty()) {
             return;
         }
+        WorkbaySounds.ejected(workbay.getLevel(), workbay.getBlockPos(), was);
         serverPlayer.getInventory().placeItemBackInInventory(machine);
         RoomRegistry.get(serverPlayer.server).put(record.withBay(
             record.bay(selectedBay).withHosted(Optional.empty())));
@@ -538,7 +547,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
     /** Only the owner may lock or unlock. Everything else on the screen stays readable. */
     private void toggleLock(ServerPlayer serverPlayer, WorkbayRecord record) {
         if (!record.owner().equals(serverPlayer.getUUID())) {
-            serverPlayer.displayClientMessage(com.neryos.workbay.WorkbayLang.message("locked"), true);
+            WorkbaySounds.refuse(serverPlayer, com.neryos.workbay.WorkbayLang.message("locked"));
             return;
         }
         RoomRegistry.get(serverPlayer.server).put(record.withLocked(!record.locked()));
@@ -597,14 +606,14 @@ public class WorkbayMenu extends AbstractContainerMenu {
             held = serverPlayer.getOffhandItem();
         }
         if (!held.is(WBBlocks.CONNECTOR.get().asItem())) {
-            serverPlayer.displayClientMessage(
-                com.neryos.workbay.WorkbayLang.message("pair_needs_connector"), true);
+            WorkbaySounds.refuse(serverPlayer,
+                com.neryos.workbay.WorkbayLang.message("pair_needs_connector"));
             return;
         }
         WorkbayBlock.pair(held, record,
             GlobalPos.of(serverPlayer.level().dimension(), workbay.getBlockPos()), selectedBay);
-        serverPlayer.displayClientMessage(
-            com.neryos.workbay.WorkbayLang.message("connector_paired", selectedBay + 1), true);
+        WorkbaySounds.confirm(serverPlayer,
+            com.neryos.workbay.WorkbayLang.message("connector_paired", selectedBay + 1));
     }
 
     /**
@@ -616,8 +625,8 @@ public class WorkbayMenu extends AbstractContainerMenu {
     private void createInternalLink(ServerPlayer serverPlayer, WorkbayRecord record, int wanted) {
         int capacity = record.bayCapacity();
         if (capacity < 2) {
-            serverPlayer.displayClientMessage(
-                com.neryos.workbay.WorkbayLang.message("internal_link_needs_second_bay"), true);
+            WorkbaySounds.refuse(serverPlayer,
+                com.neryos.workbay.WorkbayLang.message("internal_link_needs_second_bay"));
             return;
         }
         // The picker names the bay it wants. A bay that is out of range, or the source bay itself,
@@ -685,40 +694,41 @@ public class WorkbayMenu extends AbstractContainerMenu {
         }
         WorkbayUpgrade upgrade = WorkbayUpgrade.values()[ordinal];
         if (!record.owner().equals(serverPlayer.getUUID())) {
-            serverPlayer.displayClientMessage(com.neryos.workbay.WorkbayLang.message("locked"), true);
+            WorkbaySounds.refuse(serverPlayer, com.neryos.workbay.WorkbayLang.message("locked"));
             return;
         }
         // An Annex Plate with no Room Frame fitted is the "installs and does nothing" failure
         // SPEC.md §1 warns about: roomCapacity is zero without a Frame, so the plate would be
         // eaten for a room slot that cannot exist.
         if (upgrade == WorkbayUpgrade.ANNEX_PLATE && record.upgrades().roomTier() == 0) {
-            serverPlayer.displayClientMessage(
-                com.neryos.workbay.WorkbayLang.message("annex_needs_frame"), true);
+            WorkbaySounds.refuse(serverPlayer,
+                com.neryos.workbay.WorkbayLang.message("annex_needs_frame"));
             return;
         }
         int installed = record.upgrades().installed(upgrade);
         if (installed >= upgrade.max()) {
-            serverPlayer.displayClientMessage(
-                com.neryos.workbay.WorkbayLang.message("upgrade_maxed"), true);
+            WorkbaySounds.refuse(serverPlayer,
+                com.neryos.workbay.WorkbayLang.message("upgrade_maxed"));
             return;
         }
         int cost = upgrade.levyCost(installed);
         if (record.assay().levy() < cost) {
-            serverPlayer.displayClientMessage(
+            WorkbaySounds.refuse(serverPlayer,
                 com.neryos.workbay.WorkbayLang.message("upgrade_needs_levy", cost,
-                    record.assay().levy()), true);
+                    record.assay().levy()));
             return;
         }
         int slot = serverPlayer.getInventory().findSlotMatchingItem(new ItemStack(upgrade.item()));
         if (slot < 0) {
-            serverPlayer.displayClientMessage(
-                com.neryos.workbay.WorkbayLang.message("upgrade_missing"), true);
+            WorkbaySounds.refuse(serverPlayer,
+                com.neryos.workbay.WorkbayLang.message("upgrade_missing"));
             return;
         }
         serverPlayer.getInventory().removeItem(slot, 1);
         RoomRegistry.get(serverPlayer.server).put(record
             .withUpgrades(record.upgrades().plus(upgrade))
             .withAssay(record.assay().withLevy(record.assay().levy() - cost)));
+        WorkbaySounds.upgraded(workbay.getLevel(), workbay.getBlockPos());
     }
 
     /**
@@ -729,7 +739,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
      */
     private void toggleRoomAnchor(ServerPlayer serverPlayer, WorkbayRecord record, int index) {
         if (!record.owner().equals(serverPlayer.getUUID())) {
-            serverPlayer.displayClientMessage(com.neryos.workbay.WorkbayLang.message("locked"), true);
+            WorkbaySounds.refuse(serverPlayer, com.neryos.workbay.WorkbayLang.message("locked"));
             return;
         }
         com.neryos.workbay.world.RoomRegistry registry =
@@ -741,10 +751,9 @@ public class WorkbayMenu extends AbstractContainerMenu {
         com.neryos.workbay.world.RoomRecord room = rooms.get(index);
         boolean turningOn = !room.anchored();
         if (turningOn && !com.neryos.workbay.world.RoomAnchors.canAnchorAnother(registry, record, room)) {
-            serverPlayer.displayClientMessage(
+            WorkbaySounds.refuse(serverPlayer,
                 com.neryos.workbay.WorkbayLang.message("anchor_capped",
-                    com.neryos.workbay.config.WorkbayConfig.SERVER.maxAnchoredRoomsPerNetwork.get()),
-                true);
+                    com.neryos.workbay.config.WorkbayConfig.SERVER.maxAnchoredRoomsPerNetwork.get()));
             return;
         }
         com.neryos.workbay.world.RoomRecord updated = room.withAnchored(turningOn);
@@ -753,6 +762,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
         if (backshop != null) {
             com.neryos.workbay.world.RoomAnchors.apply(backshop, updated);
         }
+        WorkbaySounds.anchored(workbay.getLevel(), workbay.getBlockPos(), turningOn);
     }
 
     /**
@@ -770,7 +780,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
     private void inviteGuest(ServerPlayer serverPlayer, WorkbayRecord record, int index,
         String name) {
         if (!record.owner().equals(serverPlayer.getUUID())) {
-            serverPlayer.displayClientMessage(com.neryos.workbay.WorkbayLang.message("locked"), true);
+            WorkbaySounds.refuse(serverPlayer, com.neryos.workbay.WorkbayLang.message("locked"));
             return;
         }
         if (name.isEmpty()) {
@@ -789,13 +799,13 @@ public class WorkbayMenu extends AbstractContainerMenu {
                 ? java.util.Optional.empty()
                 : serverPlayer.server.getProfileCache().get(name);
         if (profile.isEmpty()) {
-            serverPlayer.displayClientMessage(
-                com.neryos.workbay.WorkbayLang.message("guest_unknown", name), true);
+            WorkbaySounds.refuse(serverPlayer,
+                com.neryos.workbay.WorkbayLang.message("guest_unknown", name));
             return;
         }
         if (profile.get().getId().equals(record.owner())) {
-            serverPlayer.displayClientMessage(
-                com.neryos.workbay.WorkbayLang.message("guest_is_owner"), true);
+            WorkbaySounds.refuse(serverPlayer,
+                com.neryos.workbay.WorkbayLang.message("guest_is_owner"));
             return;
         }
         registry.putRoom(rooms.get(index).withGuest(profile.get().getId(), profile.get().getName(),
@@ -810,7 +820,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
     private void editGuest(ServerPlayer serverPlayer, WorkbayRecord record, int index,
         int guest, boolean step) {
         if (!record.owner().equals(serverPlayer.getUUID())) {
-            serverPlayer.displayClientMessage(com.neryos.workbay.WorkbayLang.message("locked"), true);
+            WorkbaySounds.refuse(serverPlayer, com.neryos.workbay.WorkbayLang.message("locked"));
             return;
         }
         com.neryos.workbay.world.RoomRegistry registry =
@@ -836,7 +846,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
      */
     private void cycleRoomBiome(ServerPlayer serverPlayer, WorkbayRecord record, int index) {
         if (!record.owner().equals(serverPlayer.getUUID())) {
-            serverPlayer.displayClientMessage(com.neryos.workbay.WorkbayLang.message("locked"), true);
+            WorkbaySounds.refuse(serverPlayer, com.neryos.workbay.WorkbayLang.message("locked"));
             return;
         }
         com.neryos.workbay.world.RoomRegistry registry =
@@ -861,7 +871,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
     private void cycleRoomColour(ServerPlayer serverPlayer, WorkbayRecord record, int index,
         boolean backwards) {
         if (!record.owner().equals(serverPlayer.getUUID())) {
-            serverPlayer.displayClientMessage(com.neryos.workbay.WorkbayLang.message("locked"), true);
+            WorkbaySounds.refuse(serverPlayer, com.neryos.workbay.WorkbayLang.message("locked"));
             return;
         }
         com.neryos.workbay.world.RoomRegistry registry =
@@ -953,7 +963,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
     private com.neryos.workbay.world.RoomRecord editableRoom(ServerPlayer serverPlayer,
         WorkbayRecord record, int index) {
         if (!record.owner().equals(serverPlayer.getUUID())) {
-            serverPlayer.displayClientMessage(com.neryos.workbay.WorkbayLang.message("locked"), true);
+            WorkbaySounds.refuse(serverPlayer, com.neryos.workbay.WorkbayLang.message("locked"));
             return null;
         }
         List<com.neryos.workbay.world.RoomRecord> rooms =

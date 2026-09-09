@@ -3,6 +3,7 @@ package com.neryos.workbay.world;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.neryos.workbay.Workbay;
+import com.neryos.workbay.WorkbaySounds;
 import com.neryos.workbay.init.WBAttachments;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.registries.Registries;
@@ -134,8 +135,8 @@ public final class RoomVisit {
         // action on the screen with no owner check on it at all -- not even the lock. Standing at
         // somebody's Workbay was standing in every room they own.
         if (!mayEnter(registry, player.getUUID(), room)) {
-            player.displayClientMessage(
-                com.neryos.workbay.WorkbayLang.message("room_not_yours"), true);
+            WorkbaySounds.refuse(player,
+                com.neryos.workbay.WorkbayLang.message("room_not_yours"));
             return false;
         }
         // Every entry re-checks the size, because a Frame installed while nobody was in here has
@@ -151,7 +152,7 @@ public final class RoomVisit {
         player.setData(WBAttachments.ROOM_RETURN.get(), new Inside(grown.id(),
             player.level().dimension(), player.position(), player.getYRot(), player.getXRot()));
         Vec3 spot = RoomGeometry.entrySpot(grown.region());
-        BayVisit.admit(() -> player.teleportTo(backshop, spot.x, spot.y, spot.z, Set.of(),
+        BayVisit.admit(player, () -> player.teleportTo(backshop, spot.x, spot.y, spot.z, Set.of(),
             RoomGeometry.ENTRY_YAW, 0.0F));
         if (!player.level().dimension().equals(WorkbayDimensions.BACKSHOP)) {
             player.removeData(WBAttachments.ROOM_RETURN.get());
@@ -199,8 +200,9 @@ public final class RoomVisit {
             level = player.server.overworld();
         }
         player.removeData(WBAttachments.ROOM_RETURN.get());
-        player.teleportTo(level, home.where().x, home.where().y, home.where().z, Set.of(),
-            home.yRot(), home.xRot());
+        ServerLevel back = level;
+        WorkbaySounds.travel(player, () -> player.teleportTo(back, home.where().x, home.where().y,
+            home.where().z, Set.of(), home.yRot(), home.xRot()));
         return true;
     }
 
@@ -270,8 +272,8 @@ public final class RoomVisit {
         }
         // Which refusal, because the two say different things to the player: somebody who may work
         // the room and just tried to break a barrel is not being told they may only look at it.
-        player.displayClientMessage(
-            com.neryos.workbay.WorkbayLang.message(uses ? "room_use_only" : "room_look_only"), true);
+        WorkbaySounds.refuse(player,
+            com.neryos.workbay.WorkbayLang.message(uses ? "room_use_only" : "room_look_only"));
         return true;
     }
 

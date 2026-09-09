@@ -7,6 +7,7 @@ import mezz.jei.api.JeiPlugin;
 import mezz.jei.api.gui.handlers.IGhostIngredientHandler;
 import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.api.registration.IGuiHandlerRegistration;
+import mezz.jei.api.registration.IRecipeRegistration;
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
@@ -34,6 +35,18 @@ public class WorkbayJeiPlugin implements IModPlugin {
     @Override
     public void registerGuiHandlers(IGuiHandlerRegistration registration) {
         registration.addGhostIngredientHandler(WorkbayScreen.class, new FilterSlots());
+    }
+
+    /**
+     * The guide pages, on each item's Information tab. {@link WorkbayGuide} holds the list; this
+     * is the whole of JEI's half of it.
+     */
+    @Override
+    public void registerRecipes(IRecipeRegistration registration) {
+        for (WorkbayGuide.Page page : WorkbayGuide.pages()) {
+            registration.addIngredientInfo(page.item().get(),
+                page.lines().toArray(net.minecraft.network.chat.Component[]::new));
+        }
     }
 
     private static final class FilterSlots implements IGhostIngredientHandler<WorkbayScreen> {

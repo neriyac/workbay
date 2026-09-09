@@ -1,5 +1,6 @@
 package com.neryos.workbay.content.room;
 
+import com.neryos.workbay.WorkbaySounds;
 import com.neryos.workbay.menu.RoomDoorMenu;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
@@ -100,6 +101,7 @@ public class RoomWallBlock extends Block {
             return InteractionResult.SUCCESS;
         }
         if (player instanceof ServerPlayer server) {
+            WorkbaySounds.door(level, pos);
             RoomDoorMenu.open(server, pos);
         }
         return InteractionResult.CONSUME;

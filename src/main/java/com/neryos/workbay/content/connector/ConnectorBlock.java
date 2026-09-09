@@ -2,6 +2,7 @@ package com.neryos.workbay.content.connector;
 
 import com.mojang.serialization.MapCodec;
 import com.neryos.workbay.WorkbayLang;
+import com.neryos.workbay.WorkbaySounds;
 import com.neryos.workbay.bus.BusConfig;
 import com.neryos.workbay.content.workbay.WorkbayBlockEntity;
 import com.neryos.workbay.init.WBBlockEntities;
@@ -149,7 +150,7 @@ public class ConnectorBlock extends BaseEntityBlock {
         ConnectorPairing pairing = stack.get(WBDataComponents.PAIRING.get());
         if (pairing == null) {
             if (placer instanceof Player player) {
-                player.displayClientMessage(WorkbayLang.message("connector_unpaired"), true);
+                WorkbaySounds.refuse(player, WorkbayLang.message("connector_unpaired"));
             }
             return;
         }
@@ -173,12 +174,12 @@ public class ConnectorBlock extends BaseEntityBlock {
             return InteractionResult.PASS;
         }
         if (connector.pairing().isEmpty()) {
-            player.displayClientMessage(WorkbayLang.message("connector_unpaired"), true);
+            WorkbaySounds.refuse(player, WorkbayLang.message("connector_unpaired"));
             return InteractionResult.CONSUME;
         }
         BusConfig.Resource next = nextFreeResource(level, pos, connector);
         if (next == null) {
-            player.displayClientMessage(WorkbayLang.message("connector_full"), true);
+            WorkbaySounds.refuse(player, WorkbayLang.message("connector_full"));
             return InteractionResult.CONSUME;
         }
         addLink(level, pos, state, connector, next, player);
@@ -226,7 +227,7 @@ public class ConnectorBlock extends BaseEntityBlock {
         WorkbayBlockEntity workbay = connector.workbay().orElse(null);
         if (workbay == null) {
             if (player != null) {
-                player.displayClientMessage(WorkbayLang.message("connector_no_workbay"), true);
+                WorkbaySounds.refuse(player, WorkbayLang.message("connector_no_workbay"));
             }
             return;
         }
@@ -243,8 +244,9 @@ public class ConnectorBlock extends BaseEntityBlock {
                 net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(
                     level.getBlockState(targetPos).getBlock()))));
         if (player != null) {
-            player.displayClientMessage(WorkbayLang.message("connector_linked",
-                level.getBlockState(target(state, pos)).getBlock().getName(), pairing.code()), true);
+            WorkbaySounds.confirm(player, WorkbayLang.message("connector_linked",
+                level.getBlockState(target(state, pos)).getBlock().getName(), pairing.code()),
+                net.minecraft.sounds.SoundEvents.COPPER_BULB_TURN_ON, 1.0F);
         }
     }
 }

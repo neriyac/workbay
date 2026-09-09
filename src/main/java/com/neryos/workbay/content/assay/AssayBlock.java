@@ -3,7 +3,7 @@ package com.neryos.workbay.content.assay;
 import com.mojang.serialization.MapCodec;
 import com.neryos.workbay.Workbay;
 import com.neryos.workbay.WorkbayLang;
-import com.neryos.workbay.config.WorkbayConfig;
+import com.neryos.workbay.WorkbaySounds;
 import com.neryos.workbay.config.WorkbayConfig;
 import com.neryos.workbay.init.WBBlocks;
 import com.neryos.workbay.world.WorkbayRecord;
@@ -110,7 +110,7 @@ public class AssayBlock extends Block {
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
         Player player, BlockHitResult hit) {
         if (!level.isClientSide) {
-            player.displayClientMessage(WorkbayLang.message("reject.assay_needs_bay"), true);
+            WorkbaySounds.refuse(player, WorkbayLang.message("reject.assay_needs_bay"));
         }
         return InteractionResult.SUCCESS;
     }

@@ -26,6 +26,18 @@ public class WorkbayEmiPlugin implements EmiPlugin {
     @Override
     public void register(EmiRegistry registry) {
         registry.addDragDropHandler(WorkbayScreen.class, new FilterSlots());
+        // The same guide pages JEI shows, from the same list. EMI has no "add an info page" call:
+        // an info page *is* a recipe in a built-in category, so this constructs one per item.
+        for (WorkbayGuide.Page page : WorkbayGuide.pages()) {
+            net.minecraft.world.item.ItemStack stack =
+                new net.minecraft.world.item.ItemStack(page.item().get());
+            registry.addRecipe(new dev.emi.emi.api.recipe.EmiInfoRecipe(
+                java.util.List.of(dev.emi.emi.api.stack.EmiStack.of(stack)),
+                page.lines(),
+                com.neryos.workbay.Workbay.rl("info/"
+                    + net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(
+                        stack.getItem()).getPath())));
+        }
     }
 
     private static final class FilterSlots implements EmiDragDropHandler<WorkbayScreen> {

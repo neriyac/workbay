@@ -2,6 +2,7 @@ package com.neryos.workbay.content.workbay;
 
 import com.mojang.serialization.MapCodec;
 import com.neryos.workbay.WorkbayLang;
+import com.neryos.workbay.WorkbaySounds;
 import com.neryos.workbay.content.connector.ConnectorPairing;
 import com.neryos.workbay.init.WBBlockEntities;
 import com.neryos.workbay.init.WBBlocks;
@@ -191,7 +192,8 @@ public class WorkbayBlock extends BaseEntityBlock {
         // Which bay, because this path always lands on the first occupied one and a player with a
         // full rack has no way to know that from a message that does not say it. Aiming somewhere
         // else is the screen's Pair button.
-        player.displayClientMessage(WorkbayLang.message("connector_paired", bay + 1), true);
+        WorkbaySounds.confirm(player, WorkbayLang.message("connector_paired", bay + 1),
+            net.minecraft.sounds.SoundEvents.COMPARATOR_CLICK, 1.6F);
         return net.minecraft.world.ItemInteractionResult.CONSUME;
     }
 
