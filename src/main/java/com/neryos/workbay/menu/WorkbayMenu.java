@@ -191,8 +191,11 @@ public class WorkbayMenu extends AbstractContainerMenu {
                 link -> link.withTargetFace(BusConfig.stepFace(link.targetFace(), back)));
             case SET_FILTER -> editLink(linkId, link -> link.withFilter(
                 link.filter().with((int) (arg >>> 32), filterEntry(link, (int) arg))));
+            case CYCLE_FILTER_TAG -> editLink(linkId,
+                link -> link.withFilter(cycleTag(link, (int) arg, back)));
             case TOGGLE_FILTER_DENY -> editLink(linkId,
                 link -> link.withFilter(link.filter().withDeny(!link.filter().deny())));
+            case FILTER_FROM_TANK -> filterFromTank(serverPlayer, linkId);
             // Clamped here and nowhere else: the ceiling is a server config, and a client that
             // sends 4000 has to be told no by the side that owns the number.
             case SET_LINK_RATE -> editLink(linkId, link -> link.withRate((int) Math.clamp(arg, 1,
@@ -209,11 +212,12 @@ public class WorkbayMenu extends AbstractContainerMenu {
             case CYCLE_REDSTONE -> editBay(serverPlayer, record,
                 bay -> bay.withRedstone(bay.redstone().step(back)));
             case SET_SKIM -> setSkim(serverPlayer, record, back);
-            // Bay View is withdrawn (OPEN_ISSUES #35) and no button sends this any more. The case
-            // stays because the action is a network enum and dropping a constant renumbers the
-            // rest; the menu itself is untouched and still tested, so bringing it back is one
-            // button and this line.
-            case OPEN_BAY_VIEW -> { }
+            case OPEN_BAY_VIEW -> {
+                if (!BayViewMenu.open(serverPlayer, workbay, record, selectedBay)) {
+                    serverPlayer.displayClientMessage(
+                        com.neryos.workbay.WorkbayLang.message("bayview_unreachable"), true);
+                }
+            }
             case ENTER_ROOM -> {
                 // Closing first, for the same reason a bay visit does: the player is about to be
                 // somewhere this menu's stillValid would refuse, and a screen left open over a
@@ -291,6 +295,47 @@ public class WorkbayMenu extends AbstractContainerMenu {
      * items, a fluid link fluids — and an id this server does not know clears the slot rather than
      * being trusted into an array index.
      */
+    /**
+     * One step round a filter row's tags. SPEC.md §5, OPEN_ISSUES #33.
+     *
+     * <p>The ring is <b>the resource itself, then each of its tags in registry order</b>, so a row
+     * always steps back to what the player dropped in and nothing is ever stranded on a tag they
+     * cannot get off. Sorted by id rather than left in whatever order the tag manager hands them
+     * back, because the ring has to be the same one on the next click and a hash order is not.
+     *
+     * <p>A resource in no tags at all steps nowhere, which is the honest answer and is why the
+     * gesture is safe to offer on every row.
+     */
+    private static com.neryos.workbay.bus.BusFilter cycleTag(BusConfig link, int slot,
+        boolean back) {
+        var filter = link.filter();
+        var row = filter.at(slot).orElse(null);
+        if (row == null) {
+            return filter;
+        }
+        List<ResourceLocation> tags = switch (link.resource()) {
+            case ITEM -> BuiltInRegistries.ITEM.getHolder(
+                    net.minecraft.resources.ResourceKey.create(
+                        net.minecraft.core.registries.Registries.ITEM, row.id()))
+                .map(holder -> holder.tags().map(tag -> tag.location()).sorted().toList())
+                .orElse(List.of());
+            case FLUID -> BuiltInRegistries.FLUID.getHolder(
+                    net.minecraft.resources.ResourceKey.create(
+                        net.minecraft.core.registries.Registries.FLUID, row.id()))
+                .map(holder -> holder.tags().map(tag -> tag.location()).sorted().toList())
+                .orElse(List.of());
+            case ENERGY, CHEMICAL -> List.of();
+        };
+        if (tags.isEmpty()) {
+            return filter;
+        }
+        // Position on the ring: 0 is the resource, 1..n are its tags.
+        int at = row.tag().map(tag -> tags.indexOf(tag) + 1).orElse(0);
+        int next = Math.floorMod(at + (back ? -1 : 1), tags.size() + 1);
+        return filter.withTag(slot,
+            next == 0 ? Optional.empty() : Optional.of(tags.get(next - 1)));
+    }
+
     private static Optional<ResourceLocation> filterEntry(BusConfig link, int plusOne) {
         if (plusOne <= 0) {
             return Optional.empty();
@@ -361,6 +406,56 @@ public class WorkbayMenu extends AbstractContainerMenu {
         return true;
     }
 
+    /**
+     * Whether racking this stack would quietly throw its block entity data away.
+     *
+     * <p>Asked of a block entity built off the block rather than of the one in the bay, because by
+     * the time there is one in the bay the data has already been dropped. Only a stack that is
+     * actually carrying data can lose any, so a plain spawner out of the creative menu racks as it
+     * always did.
+     */
+    private static boolean stripsBlockEntityData(ServerPlayer serverPlayer, ItemStack stack) {
+        if (serverPlayer.canUseGameMasterBlocks()
+            || stack.getOrDefault(net.minecraft.core.component.DataComponents.BLOCK_ENTITY_DATA,
+                net.minecraft.world.item.component.CustomData.EMPTY).isEmpty()
+            || !(stack.getItem() instanceof net.minecraft.world.item.BlockItem blockItem)
+            || !(blockItem.getBlock() instanceof net.minecraft.world.level.block.EntityBlock entity)) {
+            return false;
+        }
+        net.minecraft.world.level.block.entity.BlockEntity probe = entity.newBlockEntity(
+            net.minecraft.core.BlockPos.ZERO, blockItem.getBlock().defaultBlockState());
+        return probe != null && probe.onlyOpCanSetNbt();
+    }
+
+    /**
+     * Fills a chemical link's filter from the tanks it points at, or empties it if it is already
+     * exactly that. One button rather than a picker: the tank holds one or two chemicals, and a
+     * list to choose from would be a second screen for a choice with no alternatives in it.
+     *
+     * <p>Reads the target through the level, which means the target's chunk has to be loaded — an
+     * unloaded one reports nothing and the filter is left alone rather than being emptied by a
+     * click that could not see anything. OPEN_ISSUES #41.
+     */
+    private void filterFromTank(ServerPlayer serverPlayer, java.util.Optional<java.util.UUID> linkId) {
+        linkId.flatMap(workbay::bus).ifPresent(link -> {
+            ServerLevel targetLevel = serverPlayer.server.getLevel(link.target().dimension());
+            if (targetLevel == null) {
+                return;
+            }
+            List<net.minecraft.resources.ResourceLocation> inTank =
+                com.neryos.workbay.compat.MekanismChemicals.chemicalsIn(targetLevel,
+                    link.target().pos());
+            if (inTank.isEmpty()) {
+                serverPlayer.displayClientMessage(
+                    com.neryos.workbay.WorkbayLang.message("filter_no_chemical"), true);
+                return;
+            }
+            boolean already = link.filter().ids().equals(inTank);
+            editLink(linkId, edited -> edited.withFilter(com.neryos.workbay.bus.BusFilter.ofIds(
+                already ? List.of() : inTank, edited.filter().deny())));
+        });
+    }
+
     private void rack(ServerPlayer serverPlayer, WorkbayRecord record) {
         if (refused(serverPlayer, record)) {
             return;
@@ -395,6 +490,18 @@ public class WorkbayMenu extends AbstractContainerMenu {
             return;
         }
         ItemStack one = held.copyWithCount(1);
+        // A block whose NBT only an operator may place would be racked *stripped*: SPEC.md §10's
+        // step 2 is `BlockItem.updateCustomBlockEntityTag`, which returns false without loading
+        // anything when `onlyOpCanSetNbt` and the placer is not a game master. A silk-touched
+        // spawner would come back a pig spawner and nothing would have said so. Refusing is the
+        // answer rather than bypassing the gate: the gate is vanilla's and it is about who may
+        // author block NBT, and a bay is not the place to win that argument. OPEN_ISSUES #15.
+        if (stripsBlockEntityData(serverPlayer, one)) {
+            serverPlayer.displayClientMessage(
+                com.neryos.workbay.WorkbayLang.message("reject.op_only_data",
+                    one.getHoverName()).withStyle(net.minecraft.ChatFormatting.RED), true);
+            return;
+        }
         if (!BayHosting.rack(backshop, record.bayColumn(), selectedBay, one, serverPlayer,
             Direction.NORTH)) {
             // The placement was undone (SPEC.md §10 step 4: setPlacedBy threw). Say so rather
@@ -653,8 +760,8 @@ public class WorkbayMenu extends AbstractContainerMenu {
      *
      * <p><b>Only the owner may.</b> Same guard as the Anchor and the colour, and for a stronger
      * reason: this one hands somebody else the key. An invitation starts at
-     * {@link com.neryos.workbay.world.RoomGuest#LOOK} because the safe end of a two-level ring is
-     * the one an accidental click lands on.
+     * {@link com.neryos.workbay.world.RoomGuest#LOOK} because the safe end of the ring is the one
+     * an accidental click lands on, and the ring steps upward from there.
      *
      * <p>The name is resolved against the players who are online and then against the profile
      * cache, which is what a whitelist command does. Somebody this server has never seen cannot be

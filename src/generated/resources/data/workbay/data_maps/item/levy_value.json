@@ -1,0 +1,19 @@
+{
+  "values": {
+    "#c:dusts": 1,
+    "#c:dyes": 1,
+    "#c:gems": 4,
+    "#c:gems/diamond": 12,
+    "#c:gems/emerald": 10,
+    "#c:ingots": 2,
+    "#c:ingots/copper": 1,
+    "#c:ingots/gold": 3,
+    "#c:ingots/netherite": 40,
+    "#c:storage_blocks": 18,
+    "minecraft:amethyst_shard": 3,
+    "minecraft:diamond_block": 108,
+    "minecraft:emerald_block": 90,
+    "minecraft:netherite_block": 360,
+    "minecraft:netherite_scrap": 10
+  }
+}

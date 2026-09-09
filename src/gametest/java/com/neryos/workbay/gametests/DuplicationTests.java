@@ -1148,7 +1148,15 @@ public class DuplicationTests {
                         helper.fail("the skim was at " + AssayBlock.maxRate() + "% and the Assay has "
                             + "nothing to show for it, so nothing was actually taken");
                     }
-                    helper.assertValueEqual(arrived + held + banked, 128,
+                    // What the Assay holds is a value, not a count (OPEN_ISSUES #34). Conservation
+                    // is still the question — nothing the skim took may go missing — and it is
+                    // still asked in ingots, which means dividing the value back down by what one
+                    // ingot is worth. The division is exact or the skim took a fraction of an item.
+                    int perItem = com.neryos.workbay.init.WBDataMaps.levyValue(
+                        new ItemStack(Items.IRON_INGOT));
+                    helper.assertValueEqual((held + banked) % perItem, 0,
+                        "the value the Assay holds, as a remainder of one ingot's worth");
+                    helper.assertValueEqual(arrived + (held + banked) / perItem, 128,
                         "ingots that arrived plus ingots the Assay is holding or has banked");
                 })
                 .thenSucceed();

@@ -56,6 +56,8 @@ public class WBLanguageProvider extends LanguageProvider {
         // decides, because the answer is never "the server" and never "wait a bit".
         add(WorkbayLang.messageKey("room_not_yours"), "That room isn't yours. Ask its owner to "
             + "invite you from the room's own settings.");
+        add(WorkbayLang.messageKey("room_use_only"), "You were invited to work this room, not to "
+            + "change it. Open what is here as you like; its owner can raise that to May build.");
         add(WorkbayLang.messageKey("room_look_only"), "You were invited to look at this room, not "
             + "to change it. Its owner can raise that to Build.");
         add(WorkbayLang.messageKey("guest_unknown"), "This server has never seen a player called "
@@ -290,6 +292,14 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("filter.listed.allow"), "Only what is listed goes through.");
         add(WorkbayLang.guiKey("filter.listed.deny"), "Everything except what is listed goes through.");
         add(WorkbayLang.guiKey("filter.empty"), "Nothing listed. This link carries everything.");
+        add(WorkbayLang.guiKey("filter.entry.tag.tip"), "Everything in this tag, not just this "
+            + "one thing. Shift-click for the next tag, or round to the item itself.");
+        add(WorkbayLang.guiKey("filter.chemical"), "List what is in the tank");
+        add(WorkbayLang.guiKey("filter.chemical.tip"), "A chemical has no item to drag in, so a "
+            + "chemical filter is named from the tank it is already in. Click again to carry "
+            + "everything.");
+        add(WorkbayLang.guiKey("filter.chemical.none"), "Carrying every chemical this tank offers.");
+        add(WorkbayLang.guiKey("filter.chemical.faces"), "Faces are Mekanism's side config.");
         add(WorkbayLang.guiKey("filter.close"), "Back to the links");
         add(WorkbayLang.guiKey("filter.close.tip"), "Saved as you change it.");
         add(WorkbayLang.guiKey("links.unknown"), "not loaded");
@@ -417,13 +427,16 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("rooms.guests.name"), "player name");
         add(WorkbayLang.guiKey("rooms.guests.none"), "Nobody but you.");
         add(WorkbayLang.guiKey("rooms.guests.invite"), "Invite");
-        add(WorkbayLang.guiKey("rooms.guests.invite.tip"), "Invites them to look. Raise to Build if they are here to work.");
+        add(WorkbayLang.guiKey("rooms.guests.invite.tip"), "Invites them to look. Raise to May work if they are here to run the place, or to May build if they are here to change it.");
         add(WorkbayLang.guiKey("rooms.guests.remove"), "Remove %s");
         add(WorkbayLang.guiKey("rooms.guests.remove.tip"), "They are put out of the room at once, "
             + "even if they are standing in it.");
         add(WorkbayLang.guiKey("rooms.guest.look"), "Look only");
         add(WorkbayLang.guiKey("rooms.guest.look.tip"), "May stand here. No blocks broken or "
-            + "placed, and no containers opened. Click to raise to Build.");
+            + "placed, and no containers opened. Click to raise to May work.");
+        add(WorkbayLang.guiKey("rooms.guest.use"), "May work");
+        add(WorkbayLang.guiKey("rooms.guest.use.tip"), "May open what is here and take from it, "
+            + "and may break or place nothing. Click to raise to May build.");
         add(WorkbayLang.guiKey("rooms.guest.build"), "May build");
         add(WorkbayLang.guiKey("rooms.guest.build.tip"), "May do anything in this room that you "
             + "can. Click to drop back to Look only.");
@@ -533,6 +546,10 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("bayview.energy.tip"), "The machine's own buffer. The Workbay shares power to it.");
         add(WorkbayLang.guiKey("button.bayview"), "Bay View");
         add(WorkbayLang.guiKey("button.bayview.tip"), "This machine's slots, tanks and power, to top up by hand.");
+        add(WorkbayLang.messageKey("reject.op_only_data"), "%s carries settings only an operator "
+            + "may place. Racking it would rack an empty one, so it is refused instead.");
+        add(WorkbayLang.messageKey("filter_no_chemical"), "There is no chemical in that tank to "
+            + "name. Fill it first, then list what is in it.");
         add(WorkbayLang.messageKey("bayview_unreachable"), "Nothing in this bay answers by hand. "
             + "A machine with no slots, tanks or power is reached by a link or not at all.");
         // Entering the bay. SPEC.md §5: the machine's own screen is reachable only by standing in

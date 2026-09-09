@@ -83,10 +83,22 @@ public final class RoomVisit {
             || room.guestLevel(player).isPresent();
     }
 
-    /** May change what is in here: the owner, or a guest invited at {@link RoomGuest#BUILD}. */
+    /** May change the room itself: the owner, or a guest invited at {@link RoomGuest#BUILD}. */
     public static boolean mayBuild(RoomRegistry registry, UUID player, RoomRecord room) {
         return registry.ownerOf(room).map(owner -> owner.equals(player)).orElse(false)
             || room.guestLevel(player).filter(level -> level == RoomGuest.BUILD).isPresent();
+    }
+
+    /**
+     * May work what is standing here without rebuilding it: {@link RoomGuest#USE} and up.
+     *
+     * <p>Separate from {@link #mayBuild} because they are the two halves the middle level splits.
+     * Opening a chest is a change to what is <em>in</em> the room and breaking the chest is a
+     * change to the room, and a factory has people meant to do the first and not the second.
+     */
+    public static boolean mayUse(RoomRegistry registry, UUID player, RoomRecord room) {
+        return registry.ownerOf(room).map(owner -> owner.equals(player)).orElse(false)
+            || room.guestLevel(player).filter(RoomGuest::mayUse).isPresent();
     }
 
     /** True when this player may still be standing where they are. Used on login and every tick. */
@@ -228,33 +240,44 @@ public final class RoomVisit {
     // ----------------------------------------------------------- block guards
 
     /**
-     * What a {@link RoomGuest#LOOK} guest may not do: break a block, place one, or right-click one.
+     * What a guest may not do here, asked twice: {@code changesTheRoom} separates breaking, placing
+     * and attacking — which need {@link RoomGuest#BUILD} — from opening and clicking,
+     * which need {@link RoomGuest#USE}.
      *
-     * <p>The third is on the list on purpose. Opening a chest does not change a block and does
-     * change what is in it, which is the whole of what a room in a chain holds -- a level that let
-     * a guest empty every barrel in the room would be "look only" in name.
+     * <p>Right-clicking is on the second list on purpose. Opening a chest does not change a block
+     * and does change what is in it, which is the whole of what a room in a chain holds -- a level
+     * that let a LOOK guest empty every barrel would be "look only" in name, and one that made a
+     * USE guest break the barrel to reach the ingots would be no level at all.
      *
      * <p>Scoped to a room's own interior. Everything else in the Backshop is void with a bedrock
      * floor that {@link BayVisit} already refuses to let anybody stand on.
      */
     private static boolean refused(net.minecraft.world.entity.Entity who,
-        net.minecraft.core.BlockPos where) {
+        net.minecraft.core.BlockPos where, boolean changesTheRoom) {
         if (!(who instanceof ServerPlayer player)
             || !player.level().dimension().equals(WorkbayDimensions.BACKSHOP)) {
             return false;
         }
         RoomRegistry registry = RoomRegistry.get(player.server);
         RoomRecord room = registry.roomAt(where).orElse(null);
-        if (room == null || mayBuild(registry, player.getUUID(), room)) {
+        if (room == null) {
             return false;
         }
-        player.displayClientMessage(com.neryos.workbay.WorkbayLang.message("room_look_only"), true);
+        UUID id = player.getUUID();
+        boolean uses = mayUse(registry, id, room);
+        if (changesTheRoom ? mayBuild(registry, id, room) : uses) {
+            return false;
+        }
+        // Which refusal, because the two say different things to the player: somebody who may work
+        // the room and just tried to break a barrel is not being told they may only look at it.
+        player.displayClientMessage(
+            com.neryos.workbay.WorkbayLang.message(uses ? "room_use_only" : "room_look_only"), true);
         return true;
     }
 
     @SubscribeEvent
     public static void onBreak(net.neoforged.neoforge.event.level.BlockEvent.BreakEvent event) {
-        if (refused(event.getPlayer(), event.getPos())) {
+        if (refused(event.getPlayer(), event.getPos(), true)) {
             event.setCanceled(true);
         }
     }
@@ -262,7 +285,7 @@ public final class RoomVisit {
     @SubscribeEvent
     public static void onPlace(
         net.neoforged.neoforge.event.level.BlockEvent.EntityPlaceEvent event) {
-        if (refused(event.getEntity(), event.getPos())) {
+        if (refused(event.getEntity(), event.getPos(), true)) {
             event.setCanceled(true);
         }
     }
@@ -270,7 +293,7 @@ public final class RoomVisit {
     @SubscribeEvent
     public static void onRightClick(
         net.neoforged.neoforge.event.entity.player.PlayerInteractEvent.RightClickBlock event) {
-        if (refused(event.getEntity(), event.getPos())) {
+        if (refused(event.getEntity(), event.getPos(), false)) {
             event.setCanceled(true);
         }
     }
@@ -287,7 +310,7 @@ public final class RoomVisit {
     @SubscribeEvent
     public static void onAttackEntity(
         net.neoforged.neoforge.event.entity.player.AttackEntityEvent event) {
-        if (refused(event.getEntity(), event.getTarget().blockPosition())) {
+        if (refused(event.getEntity(), event.getTarget().blockPosition(), true)) {
             event.setCanceled(true);
         }
     }
@@ -295,7 +318,7 @@ public final class RoomVisit {
     @SubscribeEvent
     public static void onEntityInteract(
         net.neoforged.neoforge.event.entity.player.PlayerInteractEvent.EntityInteract event) {
-        if (refused(event.getEntity(), event.getTarget().blockPosition())) {
+        if (refused(event.getEntity(), event.getTarget().blockPosition(), false)) {
             event.setCanceled(true);
         }
     }

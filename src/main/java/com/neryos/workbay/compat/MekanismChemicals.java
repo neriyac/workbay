@@ -73,14 +73,31 @@ public final class MekanismChemicals {
      */
     public static Move move(ServerLevel sourceLevel, BlockPos sourcePos,
         @Nullable Direction sourceFace, ServerLevel sinkLevel, BlockPos sinkPos,
-        @Nullable Direction sinkFace, long budget) {
+        @Nullable Direction sinkFace, long budget,
+        java.util.function.Predicate<ResourceLocation> allowed) {
         if (!present()) {
             return Move.NO_SOURCE_PORT;
         }
         if (!sourceLevel.isLoaded(sourcePos) || !sinkLevel.isLoaded(sinkPos)) {
             return Move.NOT_LOADED;
         }
-        return Impl.move(sourceLevel, sourcePos, sourceFace, sinkLevel, sinkPos, sinkFace, budget);
+        return Impl.move(sourceLevel, sourcePos, sourceFace, sinkLevel, sinkPos, sinkFace, budget,
+            allowed);
+    }
+
+    /**
+     * The ids of every chemical standing in this block's tanks. OPEN_ISSUES #41.
+     *
+     * <p><b>This is what a chemical filter is picked from.</b> The other three resources have
+     * something to drag into a ghost slot — an item, a bucket — and a chemical has neither, so the
+     * only honest way to name one is to read the tank it is already in. Ids rather than names,
+     * because an id is what {@link com.neryos.workbay.bus.BusFilter} stores for the other two.
+     */
+    public static List<ResourceLocation> chemicalsIn(ServerLevel level, BlockPos pos) {
+        if (!present() || !level.isLoaded(pos)) {
+            return List.of();
+        }
+        return Impl.chemicalsIn(level, pos);
     }
 
     /**
@@ -130,28 +147,53 @@ public final class MekanismChemicals {
             return null;
         }
 
-        /** What this handler would give up, up to the budget. Empty when it has nothing to offer. */
-        private static ChemicalStack offer(IChemicalHandler handler, long budget) {
+        /**
+         * What this handler would give up, up to the budget, of something the link may carry.
+         * Empty when it has nothing to offer — which now includes a tank full of a chemical the
+         * filter says no to, and that has to be the same answer as an empty tank or a filtered
+         * link would report a fault for doing exactly what it was told.
+         */
+        private static ChemicalStack offer(IChemicalHandler handler, long budget,
+            java.util.function.Predicate<ResourceLocation> allowed) {
             for (int tank = 0; tank < handler.getChemicalTanks(); tank++) {
                 ChemicalStack drawn = handler.extractChemical(tank, budget, mekanism.api.Action.SIMULATE);
-                if (!drawn.isEmpty()) {
+                if (!drawn.isEmpty() && allowed.test(drawn.getChemical().getRegistryName())) {
                     return drawn;
                 }
             }
             return ChemicalStack.EMPTY;
         }
 
+        static List<ResourceLocation> chemicalsIn(ServerLevel level, BlockPos pos) {
+            IChemicalHandler handler = level.getCapability(CHEMICAL, pos, null);
+            if (handler == null) {
+                return List.of();
+            }
+            List<ResourceLocation> found = new ArrayList<>();
+            for (int tank = 0; tank < handler.getChemicalTanks(); tank++) {
+                ChemicalStack held = handler.getChemicalInTank(tank);
+                if (!held.isEmpty()) {
+                    ResourceLocation id = held.getChemical().getRegistryName();
+                    if (!found.contains(id)) {
+                        found.add(id);
+                    }
+                }
+            }
+            return List.copyOf(found);
+        }
+
         static Move move(ServerLevel sourceLevel, BlockPos sourcePos, @Nullable Direction sourceFace,
-            ServerLevel sinkLevel, BlockPos sinkPos, @Nullable Direction sinkFace, long budget) {
+            ServerLevel sinkLevel, BlockPos sinkPos, @Nullable Direction sinkFace, long budget,
+            java.util.function.Predicate<ResourceLocation> allowed) {
             IChemicalHandler from = handler(sourceLevel, sourcePos, sourceFace,
-                h -> !offer(h, budget).isEmpty());
+                h -> !offer(h, budget, allowed).isEmpty());
             if (from == null) {
                 // Empty and unreachable are different things, and one answer for both is how a dead
                 // link spends a session looking like a resting one.
                 boolean any = handler(sourceLevel, sourcePos, sourceFace, h -> h.getChemicalTanks() > 0) != null;
                 return any ? Move.NOTHING_TO_MOVE : Move.NO_SOURCE_PORT;
             }
-            ChemicalStack offered = offer(from, budget);
+            ChemicalStack offered = offer(from, budget, allowed);
             IChemicalHandler to = handler(sinkLevel, sinkPos, sinkFace,
                 h -> h.insertChemical(offered, mekanism.api.Action.SIMULATE).getAmount() < offered.getAmount());
             if (to == null) {

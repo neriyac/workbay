@@ -1326,6 +1326,87 @@ public class BusTests {
     }
 
     /**
+     * The other end of the same cache, and the one that shipped without a guard. OPEN_ISSUES #25.
+     *
+     * <p>{@code addBus} drops a link's cached endpoint on every replacement because an edit can
+     * move either end. {@code assigningALinkToAnotherBayMovesWhereItPullsFrom} covers the source
+     * end; this is the target end, which is a different map keyed the same way: an internal link
+     * pointed at bay 2, cycled to bay 3, has to <b>deliver</b> to bay 3. Without the drop it keeps
+     * pushing into the bay it used to point at while every screen names the new one.
+     */
+    @GameTest(timeoutTicks = 900)
+    @TestHolder(description = "Retargeting an internal link moves where it actually delivers.")
+    public static void retargetingAnInternalLinkMovesWhereItDelivers(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.CHEST));
+            RoomRegistry registry = RoomRegistry.get(level.getServer());
+            WorkbayRecord record = workbay.record().orElseThrow();
+            // Two Expansion Plates: bay 0 is the source, bays 1 and 2 are the two targets.
+            registry.put(record.withUpgrades(new WorkbayRecord.Upgrades(2, 0, 0, 0, 0, 0, 0)));
+            record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BayHosting.rack(backshop, record.bayColumn(), 1, new ItemStack(Blocks.CHEST), player,
+                Direction.NORTH);
+            BayHosting.rack(backshop, record.bayColumn(), 2, new ItemStack(Blocks.CHEST), player,
+                Direction.NORTH);
+
+            BlockPos bay0 = BayGeometry.machinePos(record.bayColumn(), 0);
+            BlockPos bay1 = BayGeometry.machinePos(record.bayColumn(), 1);
+            BlockPos bay2 = BayGeometry.machinePos(record.bayColumn(), 2);
+            if (backshop.getBlockEntity(bay0) instanceof Container hosted) {
+                hosted.setItem(0, new ItemStack(Items.IRON_INGOT, 64));
+            }
+
+            player.moveTo(workbayPos.getX() + 0.5, workbayPos.getY(), workbayPos.getZ() + 0.5);
+            WorkbayMenu menu = new WorkbayMenu(1, player.getInventory(), workbay,
+                WorkbayMenu.build(workbay, player, 0));
+            menu.act(WorkbayAction.SELECT_BAY, 0, Optional.empty());
+            menu.act(WorkbayAction.CREATE_INTERNAL_LINK, 0, Optional.empty());
+            BusConfig created = workbay.buses().stream().filter(BusConfig::internal).findFirst()
+                .orElse(null);
+            if (created == null) {
+                helper.fail("CREATE_INTERNAL_LINK made no internal link");
+                return;
+            }
+            helper.assertValueEqual(created.target().pos(), bay1, "the link's first target bay");
+            menu.act(WorkbayAction.LINK_TOGGLE_ENABLED, 0, Optional.of(created.id()));
+            workbay.addBus(workbay.bus(created.id()).orElseThrow().withRate(8).withSpeed(10));
+
+            helper.startSequence()
+                // Let it resolve and cache bay 1 before the retarget, or the drop has nothing to
+                // drop and the test would pass against a cache that was never populated.
+                .thenWaitUntil(() -> {
+                    if (countIn(backshop, bay1, Items.IRON_INGOT) <= 0) {
+                        throw new GameTestAssertException("nothing has reached bay 2 yet; status is "
+                            + workbay.busStatus(created.id()));
+                    }
+                })
+                .thenExecute(() -> {
+                    menu.act(WorkbayAction.LINK_CYCLE_TARGET_BAY, 0, Optional.of(created.id()));
+                    helper.assertValueEqual(
+                        workbay.bus(created.id()).orElseThrow().target().pos(), bay2,
+                        "the link's target bay after one cycle");
+                })
+                .thenWaitUntil(() -> {
+                    if (countIn(backshop, bay2, Items.IRON_INGOT) <= 0) {
+                        throw new GameTestAssertException("the retargeted link has delivered "
+                            + countIn(backshop, bay2, Items.IRON_INGOT) + " to bay 3 and "
+                            + countIn(backshop, bay1, Items.IRON_INGOT) + " sits in bay 2; status "
+                            + "is " + workbay.busStatus(created.id()));
+                    }
+                })
+                .thenExecute(() -> tearDown(helper, workbayPos))
+                .thenSucceed();
+        });
+    }
+
+    /**
      * Handing a link to another bay, which is what the Add picker does. The assertion that matters
      * is the second one: the runner caches a resolved capability per link, and that cache is keyed
      * on the link but built from the bay it had at the time. Without dropping it on the edit, the
@@ -1717,7 +1798,7 @@ public class BusTests {
 
             BusConfig link = connect(helper, workbay, targetPos.above(), Direction.DOWN, player);
             workbay.addBus(link.withRate(8).withSpeed(10).withFilter(
-                new com.neryos.workbay.bus.BusFilter(java.util.List.of(
+                com.neryos.workbay.bus.BusFilter.ofIds(java.util.List.of(
                     BuiltInRegistries.ITEM.getKey(Items.GOLD_INGOT)), true)));
 
             helper.startSequence()
@@ -1788,7 +1869,7 @@ public class BusTests {
             BusConfig link = connect(helper, workbay, targetPos.above(), Direction.DOWN, player)
                 .withResource(BusConfig.Resource.FLUID).withRate(20).withSpeed(10);
             // Lava, into a tank holding only water. The entries are fluid ids on a fluid link.
-            workbay.addBus(link.withFilter(new com.neryos.workbay.bus.BusFilter(
+            workbay.addBus(link.withFilter(com.neryos.workbay.bus.BusFilter.ofIds(
                 java.util.List.of(BuiltInRegistries.FLUID.getKey(
                     net.minecraft.world.level.material.Fluids.LAVA)), false)));
 
@@ -1799,7 +1880,7 @@ public class BusTests {
                 // Same link, same tank, water listed instead. Everything else is unchanged, so the
                 // only thing that can move it now is the filter.
                 .thenExecute(() -> workbay.addBus(link.withFilter(
-                    new com.neryos.workbay.bus.BusFilter(java.util.List.of(
+                    com.neryos.workbay.bus.BusFilter.ofIds(java.util.List.of(
                         BuiltInRegistries.FLUID.getKey(water)), false))))
                 .thenWaitUntil(() -> {
                     if (inTanks(level, targetPos, water) < filled) {

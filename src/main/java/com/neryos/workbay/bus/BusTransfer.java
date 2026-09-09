@@ -112,17 +112,33 @@ public final class BusTransfer {
      *
      * @return how many items were actually taken
      */
-    public static int take(IItemHandler from, int budget,
+    /**
+     * What one skim took: how many items left the source, and what they were worth.
+     *
+     * <p>Two numbers because they answer different questions and stopped being the same one. The
+     * <b>count</b> is what the fractional carry is settled against — the dial is a percentage of
+     * the goods a link carries, and goods are counted in items. The <b>value</b> is what the Assay
+     * banks, and OPEN_ISSUES #34 is that it used to be the count: a Levy was sixty-four of
+     * anything, diamonds included.
+     */
+    public record Taken(int count, int value) {
+        public static final Taken NOTHING = new Taken(0, 0);
+    }
+
+    public static Taken take(IItemHandler from, int budget,
         java.util.function.Predicate<ItemStack> allowed) {
         int taken = 0;
+        int worth = 0;
         for (int slot = 0; slot < from.getSlots() && taken < budget; slot++) {
             ItemStack sample = from.extractItem(slot, budget - taken, true);
             if (sample.isEmpty() || !allowed.test(sample)) {
                 continue;
             }
-            taken += from.extractItem(slot, sample.getCount(), false).getCount();
+            ItemStack got = from.extractItem(slot, sample.getCount(), false);
+            taken += got.getCount();
+            worth += com.neryos.workbay.init.WBDataMaps.levyValue(got);
         }
-        return taken;
+        return new Taken(taken, worth);
     }
 
     /**

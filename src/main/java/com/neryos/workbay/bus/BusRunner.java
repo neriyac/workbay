@@ -85,7 +85,12 @@ public class BusRunner {
     private final Map<Integer, BusEndpoint<IEnergyStorage>> machineEnergy = new HashMap<>();
     private final Map<UUID, BusEndpoint<IFluidHandler>> targetFluids = new HashMap<>();
     private final Map<Integer, BusEndpoint<IFluidHandler>> machineFluids = new HashMap<>();
-    private final Map<UUID, BusStatus> statuses = new HashMap<>();
+    /**
+     * What each link last reported. <b>Borrowed, not owned</b> — {@link #shareStatuses} points
+     * every Workbay on one network at one map, so the blocks that lose the per-network bus turn
+     * report what the block that took it found rather than Idle. OPEN_ISSUES #39.
+     */
+    private Map<UUID, BusStatus> statuses = new HashMap<>();
 
     private static final java.util.Set<Direction> EVERY_FACE =
         java.util.EnumSet.allOf(Direction.class);
@@ -201,6 +206,11 @@ public class BusRunner {
             .collect(java.util.stream.Collectors.toSet());
     }
 
+    /** Points this runner at its network's shared status map. Called before the bus election. */
+    public void shareStatuses(Map<UUID, BusStatus> shared) {
+        statuses = shared;
+    }
+
     public BusStatus status(UUID busId) {
         return statuses.getOrDefault(busId, BusStatus.IDLE);
     }
@@ -302,8 +312,12 @@ public class BusRunner {
      * install and a class is what resolves the types in it. The guard and the work must not live
      * together: that is the exact shape of the crash that shipped in 0.1.0.
      *
-     * <p>No face config and no filter. Which face a Mekanism machine offers gas on is its own side
-     * config's answer, and a chemical filter is a fifth kind of entry for a screen that has three.
+     * <p>No face config, still: which face a Mekanism machine offers gas on is its own side
+     * config's answer, and a Connector stuck to the wrong one would only ever be a preference.
+     * <b>A filter, now</b> — carried in the same id list the item and fluid filters use, because
+     * a chemical id is a {@code ResourceLocation} like any other. What is different is how an entry
+     * gets in: there is no chemical item to drag, so the panel names what is standing in the tank.
+     * OPEN_ISSUES #41.
      */
     private BusStatus runChemical(WorkbayRecord record, BusConfig bus, ServerLevel targetLevel,
         BlockPos targetPos, ServerLevel backshop, BlockPos machinePos) {
@@ -319,7 +333,7 @@ public class BusRunner {
         // constant would be a second number meaning the same thing.
         long budget = Math.max(1, (long) rate(record, bus) * MB_PER_RATE);
         return switch (com.neryos.workbay.compat.MekanismChemicals.move(sourceLevel, sourcePos,
-            sourceFace, sinkLevel, sinkPos, sinkFace, budget)) {
+            sourceFace, sinkLevel, sinkPos, sinkFace, budget, bus.filter()::allowsId)) {
             case MOVED -> BusStatus.RUNNING;
             case NOTHING_TO_MOVE -> BusStatus.IDLE;
             case NOT_LOADED -> BusStatus.TARGET_NOT_LOADED;
@@ -406,14 +420,18 @@ public class BusRunner {
         if (cut <= 0) {
             return 0;
         }
-        int taken = BusTransfer.take(from, cut,
+        BusTransfer.Taken taken = BusTransfer.take(from, cut,
             allowed.and(stack -> stack.is(AssayBlock.LEVY_INPUT)));
         // Whatever the source could not supply is dropped rather than owed: keeping it would grow
         // without bound on a link that never carries a taggable item, and then tax a stack of iron
         // at a hundred percent the moment one arrived.
-        skimCarry = taken < cut ? skimCarry % 100 : skimCarry - taken * 100;
-        pendingSkim += taken;
-        return taken;
+        skimCarry = taken.count() < cut ? skimCarry % 100 : skimCarry - taken.count() * 100;
+        // The bank takes the <em>value</em> and the budget takes the <em>count</em>. They were one
+        // number, which is what made a diamond worth a copper ingot (OPEN_ISSUES #34); they part
+        // company here and nowhere else, because everything above this line is about how much of
+        // the link's step the tax spends and everything below is about the Assay.
+        pendingSkim += taken.value();
+        return taken.count();
     }
 
     /**

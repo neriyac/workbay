@@ -42,11 +42,11 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
     private WorkbayPage current;
 
     /**
-     * The rename field, when one is open. SPEC.md §4: an {@code EditBox} over the name line,
+     * The rename field, when one is open. SPEC.md §4: a {@link WBTextField} over the name line,
      * committed by Return and abandoned by Escape.
      */
     @Nullable
-    private net.minecraft.client.gui.components.EditBox renaming;
+    private WBTextField renaming;
 
     @Nullable
     private java.util.function.Consumer<String> onRenamed;
@@ -61,7 +61,7 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
      * click and unfilter the list underneath it in the same frame.
      */
     @Nullable
-    private net.minecraft.client.gui.components.EditBox filter;
+    private WBTextField filter;
 
     /**
      * True while a right-click is being dispatched, so every cycling control steps <b>backwards</b>.
@@ -123,6 +123,12 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
     @Override
     protected void containerTick() {
         super.containerTick();
+        if (renaming != null) {
+            renaming.tick();
+        }
+        if (filter != null) {
+            filter.tick();
+        }
         if (current != null && current.height() != imageHeight) {
             init(minecraft, width, height);
         }
@@ -157,11 +163,10 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         if (renaming != null) {
             return;
         }
-        renaming = new net.minecraft.client.gui.components.EditBox(font, x, y, w, h,
-            Component.empty());
+        renaming = new WBTextField(font, x, y, w, h);
         renaming.setMaxLength(48);
         renaming.setValue(initial);
-        renaming.moveCursorToEnd(false);
+        renaming.moveCursorToEnd();
         renaming.setFocused(true);
         setFocused(renaming);
         onRenamed = committed;
@@ -178,8 +183,7 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
      */
     public String openFilter(int x, int y, int w, int h) {
         if (filter == null) {
-            filter = new net.minecraft.client.gui.components.EditBox(font, x, y, w, h,
-                Component.empty());
+            filter = new WBTextField(font, x, y, w, h);
             filter.setMaxLength(32);
             // No frame of its own: the page draws a well behind it, so the box is the text and the
             // caret and nothing else. Vanilla's own border would be a second edge inside ours.

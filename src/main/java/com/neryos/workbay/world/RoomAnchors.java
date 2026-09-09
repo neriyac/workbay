@@ -35,6 +35,20 @@ public final class RoomAnchors {
         return already < WorkbayConfig.SERVER.maxAnchoredRoomsPerNetwork.get();
     }
 
+    /**
+     * Whether this network's Workbay holds <b>its own</b> chunk loaded. SPEC.md §12's first Anchor
+     * row — "the bay column stays loaded with nobody around" — which needs the block itself to keep
+     * ticking, because the block is what runs the links and mirrors the column.
+     *
+     * <p>{@code maxAnchoredWorkbaysPerPlayer} is the switch, and this is its first reader. A host
+     * who wants the Anchor to run rooms and nothing else sets it to zero. OPEN_ISSUES #52.
+     */
+    public static boolean anchorsOwnChunk(WorkbayRecord record) {
+        return WorkbayConfig.SERVER.allowAnchors.get()
+            && WorkbayConfig.SERVER.maxAnchoredWorkbaysPerPlayer.get() > 0
+            && record.upgrades().anchors() > 0;
+    }
+
     /** Registers or drops the tickets for one room, keyed by its own stable UUID (SPEC.md §12). */
     public static void apply(ServerLevel backshop, RoomRecord room) {
         if (!room.built()) {
@@ -72,6 +86,22 @@ public final class RoomAnchors {
                     apply(backshop, room);
                 }
             }
+            // And the Workbay's own chunk. Without this an anchored network comes back from a
+            // restart with nothing ticking until somebody walks to the block, which is the same
+            // silence OPEN_ISSUES #52 is about with a longer fuse. `lastKnownPos` is where the
+            // record says its block is; one deployed Workbay per network is the default, and a
+            // second one re-forces its own chunk on its first tick.
+            if (!anchorsOwnChunk(record)) {
+                continue;
+            }
+            record.lastKnownPos().ifPresent(where -> {
+                ServerLevel level = server.getLevel(where.dimension());
+                if (level != null) {
+                    WorkbayTickets.force(level,
+                        WorkbayTickets.owner(where.dimension(), where.pos()),
+                        new net.minecraft.world.level.ChunkPos(where.pos()));
+                }
+            });
         }
     }
 }

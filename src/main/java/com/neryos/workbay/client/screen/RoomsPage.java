@@ -691,20 +691,27 @@ class RoomsPage extends WorkbayPage {
             int gx = wx + WIN_PAD + 1;
             int gy = cursor + 1 + row * BIOME_H;
             Draw.well(g, gx, gy, rowW, BIOME_H);
-            boolean builds = guest.level() == com.neryos.workbay.world.RoomGuest.BUILD;
+            com.neryos.workbay.world.RoomGuest level = guest.level();
+            boolean builds = level == com.neryos.workbay.world.RoomGuest.BUILD;
             Draw.text(g, screen.font(), guest.name(), gx + 4, gy + 3, rowW - 32, Draw.TEXT);
             long packed = index | ((long) at << 16);
             // The lock, not a new icon. "May not change anything" is exactly what a closed padlock
-            // says everywhere else in this screen, and the two levels are the two states it has.
+            // says everywhere else in this screen, and the middle level is the same padlock in the
+            // colour the rest of the mod uses for "running, and watch it": the room's shape is
+            // still shut, the things standing in it are not.
             int levelX = gx + rowW - 26;
             boolean levelHover = screen.hovered(levelX, gy + 1, 11, 11, mouseX, mouseY);
             Draw.button(g, levelX, gy + 1, 11, 11, levelHover, builds);
-            WBIcons.draw(g, builds ? WBIcons.UNLOCK : WBIcons.LOCK, levelX, gy,
-                builds ? Draw.GREEN : Draw.TEXT_DIM);
+            int levelColour = switch (level) {
+                case LOOK -> Draw.TEXT_DIM;
+                case USE -> Draw.BLUE;
+                case BUILD -> Draw.GREEN;
+            };
+            WBIcons.draw(g, builds ? WBIcons.UNLOCK : WBIcons.LOCK, levelX, gy, levelColour);
+            String levelKey = "rooms.guest." + level.getSerializedName();
             screen.hit(levelX, gy + 1, 11, 11,
                 () -> screen.send(WorkbayAction.CYCLE_ROOM_GUEST, packed),
-                WorkbayScreen.gui(builds ? "rooms.guest.build" : "rooms.guest.look"),
-                WorkbayScreen.gui(builds ? "rooms.guest.build.tip" : "rooms.guest.look.tip"));
+                WorkbayScreen.gui(levelKey), WorkbayScreen.gui(levelKey + ".tip"));
 
             int dropX = gx + rowW - 13;
             boolean dropHover = screen.hovered(dropX, gy + 1, 11, 11, mouseX, mouseY);

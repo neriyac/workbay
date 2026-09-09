@@ -331,8 +331,14 @@ public class AssayTests {
                 .thenExecute(() -> {
                     WorkbayRecord now = workbay.record().orElseThrow();
                     int delivered = countIn(level, targetPos, Items.IRON_INGOT);
-                    int taken = now.assay().skimmed()
-                        + now.assay().levy() * AssayBlock.itemsPerLevy();
+                    // The Assay banks what the goods are *worth*, not how many there were
+                    // (OPEN_ISSUES #34), so counting items out of it means dividing by what one of
+                    // them is worth. Read from the data map rather than written as a 2 here, or
+                    // this test starts failing the day somebody edits the shipped table.
+                    int perItem = com.neryos.workbay.init.WBDataMaps.levyValue(
+                        new ItemStack(Items.IRON_INGOT));
+                    int taken = (now.assay().skimmed()
+                        + now.assay().levy() * AssayBlock.itemsPerLevy()) / perItem;
                     int left = taken + delivered;
                     helper.assertValueEqual(left, 256, "iron that left the bay");
                     // A whole-item skim on a whole-item budget lands on the dial exactly; the
@@ -398,6 +404,80 @@ public class AssayTests {
                 level.setBlock(workbayPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
             }
             helper.succeed();
+        });
+    }
+
+    /**
+     * A diamond is not a cobblestone, and until now the Assay could not tell. OPEN_ISSUES #34.
+     *
+     * <p>{@code #workbay:levy_input} says <em>whether</em> a thing feeds the Assay and never how
+     * much, so sixty-four of anything was one Levy. The value is a NeoForge data map keyed on tags,
+     * and this asserts the whole path: that the shipped table is loaded at all, that it reaches the
+     * skim, and that two different goods through the same rig bank different amounts.
+     *
+     * <p>Both halves matter. Reading the data map alone would pass on a mod that never consults it;
+     * running one item alone would pass on a mod that multiplies everything by two.
+     */
+    @GameTest(timeoutTicks = 900)
+    @TestHolder(description = "The Assay banks a gem for more than an ingot.")
+    public static void theAssayPaysMoreForBetterGoods(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos targetPos = helper.absolutePos(new BlockPos(4, 1, 4));
+            level.setBlock(targetPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+
+            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
+            WorkbayMenu menu = menuFor(workbay, player);
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+
+            // The table itself, before anything moves: if the data map did not load, everything is
+            // worth one and the run below would prove nothing while still going green.
+            int perIngot = com.neryos.workbay.init.WBDataMaps.levyValue(
+                new ItemStack(Items.IRON_INGOT));
+            int perGem = com.neryos.workbay.init.WBDataMaps.levyValue(new ItemStack(Items.DIAMOND));
+            helper.assertTrue(perGem > perIngot,
+                "the shipped levy_value table is not loaded: a diamond reads " + perGem
+                    + " and an iron ingot " + perIngot);
+
+            helper.startSequence()
+                .thenIdle(3)
+                .thenExecute(() -> {
+                    rack(menu, player, 0, new ItemStack(WBBlocks.ASSAY.get()));
+                    rack(menu, player, 1, new ItemStack(Blocks.CHEST));
+                    fill(backshop, BayGeometry.machinePos(
+                        workbay.record().orElseThrow().bayColumn(), 1),
+                        new ItemStack(Items.DIAMOND, 64), 1);
+                    connect(helper, workbay, 1, targetPos.above(), player);
+                    setSkim(menu, AssayBlock.maxRate());
+                })
+                .thenWaitUntil(() -> {
+                    if (countIn(backshop, BayGeometry.machinePos(
+                        workbay.record().orElseThrow().bayColumn(), 1), Items.DIAMOND) > 0) {
+                        throw new GameTestAssertException("the bay still holds diamonds");
+                    }
+                })
+                .thenExecute(() -> {
+                    var assay = workbay.record().orElseThrow().assay();
+                    int banked = assay.skimmed() + assay.levy() * AssayBlock.itemsPerLevy();
+                    int diamonds = 64 - countIn(level, targetPos, Items.DIAMOND);
+                    if (diamonds <= 0) {
+                        helper.fail("the skim took no diamonds at all, so there is nothing to value");
+                        return;
+                    }
+                    helper.assertValueEqual(banked, diamonds * perGem,
+                        diamonds + " diamonds banked at " + perGem + " each");
+                    // And the same run in iron would have banked less. Stated as arithmetic rather
+                    // than as a second rig: the multiplication above is the whole mechanism.
+                    helper.assertTrue(diamonds * perGem > diamonds * perIngot,
+                        "the same goods in iron would have banked at least as much");
+                })
+                .thenExecute(() -> level.setBlock(workbayPos, Blocks.AIR.defaultBlockState(),
+                    Block.UPDATE_ALL))
+                .thenSucceed();
         });
     }
 

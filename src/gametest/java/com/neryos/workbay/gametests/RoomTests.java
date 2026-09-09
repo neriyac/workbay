@@ -540,6 +540,59 @@ public class RoomTests {
     }
 
     /**
+     * The middle level, which kept suggesting itself until it was built. OPEN_ISSUES #51.
+     *
+     * <p>{@link com.neryos.workbay.world.RoomGuest#USE} is <em>may work what is here, may not
+     * change it</em>: a factory has people meant to run it and not rebuild it, and with two levels
+     * the only way to let somebody take an ingot out of a barrel was to let them break the barrel.
+     *
+     * <p>Both halves, because either one alone is a level that means nothing: a USE guest who
+     * cannot open the chest is LOOK with extra steps, and one who can break it is BUILD.
+     */
+    @GameTest
+    @TestHolder(description = "A guest at May work can open what is here and still cannot break it.")
+    public static void aUseGuestOpensWhatIsHereAndBreaksNothing(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            Site site = site(helper, 1);
+            GameTestPlayer guest = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            RoomRegistry registry = RoomRegistry.get(helper.getLevel().getServer());
+            helper.assertTrue(RoomVisit.enter(site.player(), site.record(), 0), "entering was refused");
+            RoomRecord room = room(helper, site);
+            registry.putRoom(room.withGuest(guest.getUUID(), guest.getGameProfile().getName(),
+                com.neryos.workbay.world.RoomGuest.USE));
+
+            BlockPos chest = RoomGeometry.origin(room.region()).offset(5, 1, 5);
+            site.backshop().setBlock(chest, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            RoomVisit.enter(guest, registry.byId(site.record().id()).orElseThrow(), 0);
+            helper.assertTrue(guest.level().dimension().equals(WorkbayDimensions.BACKSHOP),
+                "the guest is not in the room, so neither half of this proves anything");
+
+            RoomRecord now = registry.room(room.id()).orElseThrow();
+            // Asked of the two guards themselves rather than of one event, because they are what
+            // every one of the five handlers routes through and the level is the thing under test.
+            helper.assertTrue(RoomVisit.mayUse(registry, guest.getUUID(), now),
+                "a guest at May work cannot open a container, which makes it Look only again");
+            helper.assertFalse(RoomVisit.mayBuild(registry, guest.getUUID(), now),
+                "a guest at May work may build, which makes it May build again");
+
+            // And the break really is refused, through the call a left-click makes.
+            guest.gameMode.destroyBlock(chest);
+            helper.assertTrue(site.backshop().getBlockState(chest).is(Blocks.CHEST),
+                "a guest at May work broke a block in somebody else's room");
+
+            // One step round the ring is May build, and then it may.
+            registry.putRoom(now.withGuest(guest.getUUID(), guest.getGameProfile().getName(),
+                com.neryos.workbay.world.RoomGuest.USE.step()));
+            helper.assertTrue(RoomVisit.mayBuild(registry, guest.getUUID(),
+                    registry.room(room.id()).orElseThrow()),
+                "one step up from May work is not May build, so the ring is in the wrong order");
+            helper.succeed();
+        });
+    }
+
+    /**
      * A {@link com.neryos.workbay.world.RoomGuest#LOOK} guest changes nothing, and the owner does.
      *
      * <p>Both halves, because a guard that refuses everybody is not a permission — it is a room

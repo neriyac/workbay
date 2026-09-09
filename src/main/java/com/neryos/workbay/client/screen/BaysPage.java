@@ -494,12 +494,17 @@ class BaysPage extends WorkbayPage {
             WorkbayScreen.gui("button.paste"),
             WorkbayScreen.gui(copied == null ? "button.paste.empty" : "button.paste.tip"));
 
-        // No Bay View button. It named a machine's slots by simulating an insert into each, which
-        // reads a *full* input slot as one that takes nothing -- so a furnace holding 64 iron and
-        // 64 coal labelled both of them "Output slot". A screen that names a slot wrongly is worse
-        // than no screen: the player believes it. Withdrawn until the roles are read from
-        // something a full slot cannot flip. OPEN_ISSUES #35; the machine's own screen, next along,
-        // is the way in meanwhile and shows the truth because the machine draws it.
+        // Bay View, back. SPEC.md §1 grants it to the base Workbay, which is what settles §5's
+        // stray "unlocked by the first Expansion Plate": a racked container that cannot be filled
+        // by hand is a hole in the loop, not a feature to sell an upgrade with.
+        //
+        // It was withdrawn for naming a slot by simulating an insert, which reads a *full* input
+        // slot as one that takes nothing -- a furnace holding 64 iron and 64 coal labelled both of
+        // them "Output slot". A full slot is now asked a question its fullness cannot answer for
+        // it; OPEN_ISSUES #35, and `aFullInputSlotIsStillAnInputSlot` is the guard.
+        actionButton(g, mouseX, mouseY, x(170), WBIcons.SCREEN, !empty, false,
+            () -> screen.send(WorkbayAction.OPEN_BAY_VIEW),
+            WorkbayScreen.gui("button.bayview"), WorkbayScreen.gui("button.bayview.tip"));
 
         // The machine's own screen. The other half of §5, and the half a player asks for first:
         // Bay View can only show what a capability exposes, and a machine's recipe mode, side
@@ -512,7 +517,7 @@ class BaysPage extends WorkbayPage {
         // and it is the only one that knows its own file.
         boolean here = snapshot().remoteScreens()
             && com.neryos.workbay.remote.RemoteConfig.remoteScreensEnabled();
-        actionButton(g, mouseX, mouseY, x(170), WBIcons.ENTER, !empty, false,
+        actionButton(g, mouseX, mouseY, x(194), WBIcons.ENTER, !empty, false,
             () -> screen.send(WorkbayAction.ENTER_BAY, here ? 1 : 0),
             WorkbayScreen.gui(here ? "button.open" : "button.enter"),
             WorkbayScreen.gui(here ? "button.open.tip" : "button.enter.tip"));
@@ -1148,7 +1153,7 @@ class BaysPage extends WorkbayPage {
         if (filter.isEmpty()) {
             WBIcons.draw(g, WBIcons.FILTER, px + 2, py + 2, Draw.TEXT_FAINT);
         } else {
-            entryIcon(g, config.resource(), filter.entries().get(0), px, py);
+            entryIcon(g, config.resource(), filter.entries().get(0).id(), px, py);
             // Which way round the list is read, on the row. A blacklist drawn exactly like a
             // whitelist is the one way a filter can be understood backwards, and the row is where
             // it is read. Not amber-as-warning but amber-as-the-other-mode, the same pair the
@@ -1182,7 +1187,11 @@ class BaysPage extends WorkbayPage {
         // One line taller than the slots need: SPEC.md 5's link settings put Rate and Speed on the
         // panel the row's gear opens, and until now a link had both and the player could see
         // neither. OPEN_ISSUES #32.
-        int panelH = SLOT_PITCH + 26 + STEP_H + 4;
+        // A chemical link's panel carries one line the others do not — the sentence about which
+        // face carries gas — and on its first screenshot that line was drawn below the well and
+        // cut in the middle of a word. The height is part of the layout, not a constant.
+        int panelH = SLOT_PITCH + 26 + STEP_H + 4
+            + (config.resource() == BusConfig.Resource.CHEMICAL ? 14 : 0);
         int blockH = 18 + 6 + panelH;
         int blockY = y(linksY) + (18 + rows * ROW_PITCH + 12 - blockH) / 2;
 
@@ -1225,10 +1234,15 @@ class BaysPage extends WorkbayPage {
         // Centred, for the same reason. Nine slots pinned to the left edge of a 268-wide box read
         // as a list that ran out rather than as the whole of the filter.
         throughput(g, mouseX, mouseY, config, panelY + 5);
+        int entriesY = panelY + 6 + STEP_H + 4;
+        if (config.resource() == BusConfig.Resource.CHEMICAL) {
+            chemicalFilter(g, mouseX, mouseY, config, entriesY);
+            return;
+        }
         int slotsW = (com.neryos.workbay.bus.BusFilter.MAX - 1) * SLOT_PITCH + 18;
         int slotsX = LIST_X + (LIST_W - slotsW) / 2;
         for (int slot = 0; slot < com.neryos.workbay.bus.BusFilter.MAX; slot++) {
-            filterEntry(g, x(slotsX + slot * SLOT_PITCH), panelY + 6 + STEP_H + 4, config, slot);
+            filterEntry(g, x(slotsX + slot * SLOT_PITCH), entriesY, config, slot);
         }
         // One sentence, and it has to be true of what is on screen. It said "Nothing listed. This
         // link carries everything." over a slot with something in it -- caught on the first
@@ -1241,6 +1255,50 @@ class BaysPage extends WorkbayPage {
         textCentre(g, WorkbayScreen.gui(said).getString(),
             x(LIST_X + LIST_W / 2), panelY + SLOT_PITCH + 12 + STEP_H + 4, LIST_W - 16,
             carrying ? Draw.SELECT : Draw.TEXT_FAINT);
+    }
+
+    /**
+     * The chemical link's half of the filter panel. OPEN_ISSUES #41.
+     *
+     * <p>Nine ghost slots and nothing that can ever be dropped in them is what a chemical link had:
+     * the panel opened, the sentence under it said the link carried everything, and there was no
+     * gesture anywhere that could change that. A chemical has no item and no bucket, so the entries
+     * are named from the tank instead — one button, and the ids it wrote listed underneath in the
+     * mod's own font rather than drawn as slots, because there is no sprite to draw.
+     *
+     * <p>The line about faces is here because this is where a player looks for the face row the
+     * other three resources have. It is Mekanism's side configuration that decides, and saying so
+     * is cheaper than a row that would be a suggestion.
+     */
+    private void chemicalFilter(GuiGraphics g, int mouseX, int mouseY, BusConfig config, int py) {
+        com.neryos.workbay.bus.BusFilter filter = config.filter();
+        int buttonW = 130;
+        int buttonX = x(LIST_X + (LIST_W - buttonW) / 2);
+        boolean hover = screen.hovered(buttonX, py, buttonW, 18, mouseX, mouseY);
+        Draw.button(g, buttonX, py, buttonW, 18, hover, !filter.isEmpty());
+        textCentre(g, WorkbayScreen.gui("filter.chemical").getString(), buttonX + buttonW / 2,
+            py + 5, buttonW - 8, filter.isEmpty() ? Draw.TEXT : Draw.CHEMICAL);
+        screen.hit(buttonX, py, buttonW, 18,
+            () -> screen.send(WorkbayAction.FILTER_FROM_TANK, config.id()),
+            WorkbayScreen.gui("filter.chemical"), WorkbayScreen.gui("filter.chemical.tip"));
+
+        // What it wrote, one line per entry, so the button's effect is visible without a tooltip.
+        int line = py + 22;
+        if (filter.isEmpty()) {
+            textCentre(g, WorkbayScreen.gui("filter.chemical.none").getString(),
+                x(LIST_X + LIST_W / 2), line, LIST_W - 16, Draw.TEXT_FAINT);
+            line += 11;
+        } else {
+            for (ResourceLocation id : filter.ids()) {
+                textCentre(g, id.getPath().replace('_', ' '), x(LIST_X + LIST_W / 2), line,
+                    LIST_W - 16, filter.deny() ? Draw.AMBER : Draw.CHEMICAL);
+                line += 11;
+            }
+        }
+        // Under whatever the button wrote, however many lines that was, rather than at a fixed
+        // offset that a second listed chemical would have been drawn straight through.
+        textCentre(g, WorkbayScreen.gui("filter.chemical.faces").getString(),
+            x(LIST_X + LIST_W / 2), line + 2, LIST_W - 16, Draw.TEXT_FAINT);
     }
 
     /** How tall one line of stepper controls is. */
@@ -1327,7 +1385,9 @@ class BaysPage extends WorkbayPage {
      */
     private void filterEntry(GuiGraphics g, int px, int py, BusConfig config, int slot) {
         Draw.slot(g, px, py, 18, 18);
-        Optional<ResourceLocation> entry = config.filter().at(slot);
+        Optional<com.neryos.workbay.bus.BusFilter.Entry> row = config.filter().at(slot);
+        Optional<ResourceLocation> entry = row.map(
+            com.neryos.workbay.bus.BusFilter.Entry::id);
         // Carrying makes every slot a destination, filled or not: dropping onto a filled slot
         // replaces it, which is what somebody who has just picked something up expects.
         boolean carrying = !screen.carried().isEmpty();
@@ -1337,7 +1397,18 @@ class BaysPage extends WorkbayPage {
         if (entry.isPresent()) {
             entryIcon(g, config.resource(), entry.get(), px + 1, py + 1);
             ItemStack lifted = new ItemStack(BuiltInRegistries.ITEM.get(entry.get()));
+            // A row matching by tag keeps its sprite and wears a corner mark, because the picture
+            // is now standing for a whole shelf rather than for itself. The tooltip is the tag.
+            boolean tagged = row.get().tag().isPresent();
+            if (tagged) {
+                Draw.ring(g, px, py, 18, 18, 1, Draw.BLUE);
+            }
             screen.hit(px, py, 18, 18, () -> {
+                // Shift is "the other question about this slot", which here is what it matches on.
+                if (net.minecraft.client.gui.screens.Screen.hasShiftDown()) {
+                    screen.send(WorkbayAction.CYCLE_FILTER_TAG, slot, config.id());
+                    return;
+                }
                 boolean lift = !carrying && !screen.back();
                 if (carrying) {
                     dropCarried(config, slot);
@@ -1351,7 +1422,10 @@ class BaysPage extends WorkbayPage {
                     // draw there.
                     screen.carry(lifted);
                 }
-            }, entryName(config.resource(), entry.get()), WorkbayScreen.gui("filter.entry.tip"));
+            }, tagged
+                ? Component.literal("#" + row.get().tag().get())
+                : entryName(config.resource(), entry.get()),
+                WorkbayScreen.gui(tagged ? "filter.entry.tag.tip" : "filter.entry.tip"));
         } else {
             screen.hit(px, py, 18, 18, () -> {
                 if (carrying) {

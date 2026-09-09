@@ -9,6 +9,7 @@ import com.neryos.workbay.init.WBBlocks;
 import com.neryos.workbay.init.WBCapabilities;
 import com.neryos.workbay.init.WBCreativeTabs;
 import com.neryos.workbay.init.WBDataComponents;
+import com.neryos.workbay.init.WBDataMaps;
 import com.neryos.workbay.init.WBItems;
 import com.neryos.workbay.init.WBMenus;
 import com.neryos.workbay.world.WorkbayTickets;
@@ -37,6 +38,7 @@ public class Workbay {
         WBCreativeTabs.register(modEventBus);
         WBMenus.register(modEventBus);
         WBAttachments.register(modEventBus);
+        WBDataMaps.register(modEventBus);
         WorkbayTickets.register(modEventBus);
         modEventBus.addListener(WBCapabilities::register);
 

@@ -196,6 +196,189 @@ public class MenuTests {
     }
 
     /**
+     * "All ores into this chest" as one row rather than nine. SPEC.md §5, OPEN_ISSUES #33.
+     *
+     * <p>Three things have to hold and each has caught a different mistake in this feature. The
+     * ring has to <b>start at the item</b>, so a filter behaves exactly as it always did until
+     * somebody asks for a tag. Stepping has to <b>keep the item</b>, so the row still has a sprite
+     * and a way back. And the tag has to be what the filter actually <b>matches on</b> — the
+     * interesting half, and the one a UI-only change would have left undone.
+     */
+    @GameTest
+    @TestHolder(description = "A filter row can be stepped onto a tag, and matches everything in it.")
+    public static void aFilterRowSteppedOntoATagMatchesTheWholeTag(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            WorkbayBlockEntity workbay = placeWorkbay(helper, helper.absolutePos(new BlockPos(0, 1, 0)), player);
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = helper.getLevel().getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            WorkbayTickets.force(backshop, record.id(), record.bayColumn());
+
+            BlockPos chest = helper.absolutePos(new BlockPos(2, 1, 2));
+            helper.getLevel().setBlock(chest, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            GlobalPos where = GlobalPos.of(helper.getLevel().dimension(), chest);
+            BusConfig link = BusConfig.create(java.util.UUID.randomUUID(), 0,
+                BusConfig.Resource.ITEM, BusConfig.Mode.INSERT, where, where);
+            workbay.addBus(link);
+            WorkbayMenu menu = menuFor(workbay, player);
+
+            // One iron ingot in slot 0, the ordinary way.
+            menu.act(WorkbayAction.SET_FILTER,
+                net.minecraft.core.registries.BuiltInRegistries.ITEM.getId(Items.IRON_INGOT) + 1L,
+                Optional.of(link.id()));
+            helper.assertTrue(workbay.bus(link.id()).orElseThrow().filter()
+                    .at(0).orElseThrow().tag().isEmpty(),
+                "a row starts on the item itself, not on one of its tags");
+            helper.assertFalse(workbay.bus(link.id()).orElseThrow().filter()
+                    .allows(new ItemStack(Items.GOLD_INGOT)),
+                "a row on the item must still match only that item");
+
+            // Step it until it lands on an ingot tag, which is the one a player is reaching for.
+            // Bounded: the ring is the item plus its tags, so it cannot be longer than that.
+            com.neryos.workbay.bus.BusFilter reached = null;
+            for (int step = 0; step < 24; step++) {
+                menu.act(WorkbayAction.CYCLE_FILTER_TAG, 0, Optional.of(link.id()));
+                var filter = workbay.bus(link.id()).orElseThrow().filter();
+                var tag = filter.at(0).orElseThrow().tag();
+                helper.assertValueEqual(filter.at(0).orElseThrow().id(),
+                    net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(Items.IRON_INGOT),
+                    "the item a stepped row still remembers");
+                if (tag.isPresent() && tag.get().toString().equals("c:ingots")) {
+                    reached = filter;
+                    break;
+                }
+            }
+            if (reached == null) {
+                helper.fail("stepping the row never reached #c:ingots: it reads "
+                    + workbay.bus(link.id()).orElseThrow().filter().at(0));
+                return;
+            }
+            helper.assertTrue(reached.allows(new ItemStack(Items.GOLD_INGOT)),
+                "a row on #c:ingots has to carry a gold ingot, which is the whole point of it");
+            helper.assertFalse(reached.allows(new ItemStack(Items.COBBLESTONE)),
+                "a row on #c:ingots must not carry cobblestone");
+            helper.succeed();
+        });
+    }
+
+    /**
+     * OPEN_ISSUES #15, which rode along unverified for the whole project.
+     *
+     * <p>SPEC.md §10's step 2 is {@code BlockItem.updateCustomBlockEntityTag}, and that method
+     * loads nothing at all when the block entity says {@code onlyOpCanSetNbt} and the placer is not
+     * a game master. A spawner carrying its settings would have been racked as a fresh one, with no
+     * message and no way to notice until the mob that came out was the wrong mob.
+     *
+     * <p>Both halves are asserted, because a refusal that also refuses a plain spawner would be a
+     * different bug wearing this one's fix: an ordinary spawner item carries no data and still
+     * racks.
+     */
+    @GameTest
+    @TestHolder(description = "A block whose settings only an operator may place is refused, not stripped.")
+    public static void aStackWhoseDataWouldBeStrippedIsRefused(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            WorkbayBlockEntity workbay = placeWorkbay(helper, helper.absolutePos(new BlockPos(0, 1, 0)), player);
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = helper.getLevel().getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            WorkbayTickets.force(backshop, record.id(), record.bayColumn());
+            WorkbayMenu menu = menuFor(workbay, player);
+            BlockPos hosted = BayGeometry.machinePos(record.bayColumn(), 0);
+
+            // A spawner out of the creative menu carries nothing, so nothing can be lost.
+            player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Blocks.SPAWNER));
+            menu.act(WorkbayAction.SELECT_BAY, 0, Optional.empty());
+            menu.act(WorkbayAction.RACK, 0, Optional.empty());
+            helper.assertTrue(backshop.getBlockState(hosted).is(Blocks.SPAWNER),
+                "a plain spawner carries no settings and must rack as it always did");
+            menu.act(WorkbayAction.EJECT, 0, Optional.empty());
+            player.getInventory().clearContent();
+
+            // The same block carrying settings. Written the way `saveToItem` writes them, which is
+            // the way an ejected machine comes back to the player.
+            ItemStack configured = new ItemStack(Blocks.SPAWNER);
+            net.minecraft.nbt.CompoundTag tag = new net.minecraft.nbt.CompoundTag();
+            tag.putString("id", "minecraft:mob_spawner");
+            tag.putShort("RequiredPlayerRange", (short) 3);
+            configured.set(net.minecraft.core.component.DataComponents.BLOCK_ENTITY_DATA,
+                net.minecraft.world.item.component.CustomData.of(tag));
+            player.setItemInHand(InteractionHand.MAIN_HAND, configured);
+            menu.act(WorkbayAction.RACK, 0, Optional.empty());
+            helper.assertTrue(backshop.getBlockState(hosted).isAir(),
+                "a spawner carrying settings a survival player may not place was racked anyway, "
+                    + "which racks an empty one and says nothing");
+            helper.assertValueEqual(record.bay(0).hosted(), Optional.empty(),
+                "the bay after a refused rack");
+            player.getInventory().clearContent();
+            helper.succeed();
+        });
+    }
+
+    /**
+     * The reading that withdrew the whole screen. SPEC.md §5, OPEN_ISSUES #35.
+     *
+     * <p>A furnace holding 64 iron and 64 coal answered every simulated insert with "no" — because
+     * a full slot has no room, not because it is an output — and Bay View labelled both of them
+     * "Output slot". The assertion is deliberately the whole list rather than one slot: getting
+     * the input right by breaking the fuel slot would be a fix that moved the fault along one.
+     *
+     * <p>It is checked twice, empty and full, so it cannot pass by the roles happening not to
+     * depend on the contents at all.
+     */
+    @GameTest
+    @TestHolder(description = "A full input slot still reads as an input slot.")
+    public static void aFullInputSlotIsStillAnInputSlot(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            WorkbayBlockEntity workbay = placeWorkbay(helper, helper.absolutePos(new BlockPos(0, 1, 0)), player);
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = helper.getLevel().getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            WorkbayTickets.force(backshop, record.id(), record.bayColumn());
+            WorkbayMenu menu = menuFor(workbay, player);
+
+            player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Blocks.FURNACE));
+            menu.act(WorkbayAction.SELECT_BAY, 0, Optional.empty());
+            menu.act(WorkbayAction.RACK, 0, Optional.empty());
+
+            java.util.List<com.neryos.workbay.menu.BayViewMenu.SlotRole> expected = java.util.List.of(
+                com.neryos.workbay.menu.BayViewMenu.SlotRole.IN,
+                com.neryos.workbay.menu.BayViewMenu.SlotRole.FUEL,
+                com.neryos.workbay.menu.BayViewMenu.SlotRole.OUT);
+
+            var empty = com.neryos.workbay.menu.BayViewMenu.opening(player, record, 0);
+            if (empty == null) {
+                helper.fail("Bay View would not open on a racked furnace");
+                return;
+            }
+            helper.assertValueEqual(empty.roles(), expected, "an empty furnace's slot roles");
+
+            // The state the screen was withdrawn over: both left-hand slots at their limit.
+            BlockPos hosted = BayGeometry.machinePos(record.bayColumn(), 0);
+            if (!(backshop.getBlockEntity(hosted) instanceof Container furnace)) {
+                helper.fail("no furnace was racked at " + hosted);
+                return;
+            }
+            furnace.setItem(0, new ItemStack(Items.IRON_INGOT, 64));
+            furnace.setItem(1, new ItemStack(Items.COAL, 64));
+
+            var full = com.neryos.workbay.menu.BayViewMenu.opening(player, record, 0);
+            if (full == null) {
+                helper.fail("Bay View would not open on a full furnace");
+                return;
+            }
+            helper.assertValueEqual(full.roles(), expected,
+                "a furnace holding 64 iron and 64 coal reads its slots the same way it did empty");
+            helper.succeed();
+        });
+    }
+
+    /**
      * Breadth, not depth: the same reading across every machine this runtime can reach, asserting
      * the one thing that has to hold for each — a furnace and a Mekanism machine separate into
      * groups, and a container does not, because twenty-seven input slots and no output would draw
@@ -850,7 +1033,7 @@ public class MenuTests {
             menu.act(WorkbayAction.SET_FILTER,
                 net.minecraft.core.registries.BuiltInRegistries.ITEM.getId(Items.REDSTONE) + 1L,
                 Optional.of(link.id()));
-            helper.assertValueEqual(workbay.bus(link.id()).orElseThrow().filter().entries(),
+            helper.assertValueEqual(workbay.bus(link.id()).orElseThrow().filter().ids(),
                 java.util.List.of(net.minecraft.core.registries.BuiltInRegistries.ITEM
                     .getKey(Items.REDSTONE)),
                 "the filter after dropping redstone on the slot");
@@ -868,7 +1051,7 @@ public class MenuTests {
                 "the filter did not turn into a deny list");
 
             menu.act(WorkbayAction.SET_FILTER, 0, Optional.of(link.id()));
-            helper.assertValueEqual(workbay.bus(link.id()).orElseThrow().filter().entries(),
+            helper.assertValueEqual(workbay.bus(link.id()).orElseThrow().filter().ids(),
                 java.util.List.of(net.minecraft.core.registries.BuiltInRegistries.ITEM
                     .getKey(Items.COAL)),
                 "the filter after clicking slot 0 to clear it");

@@ -112,6 +112,13 @@ public class BayViewMenu extends AbstractContainerMenu {
      * when it would take a potion bottle. A full slot dodges that by being asked about its own
      * contents; an empty filtered one does not. Widen the probes if a machine reads wrong.
      *
+     * <p><b>A full slot refuses for want of room, and that refusal says nothing about what it is
+     * for.</b> This is what withdrew the screen: a furnace holding 64 iron and 64 coal answered
+     * every probe with "no" and both slots were labelled {@link #OUT}. So a slot that is at its
+     * limit is asked {@code isItemValid} instead — but only on a handler that has proved it can be
+     * written to at all, because on one that refuses everything (Mekanism's read-only null side)
+     * {@code isItemValid} is a confident yes with nothing behind it. See {@link #writable}.
+     *
      * <p>{@code isItemValid} was tried here and reverted: Mekanism's read-only null side answers it
      * truthfully, but an output slot can hold the item too, so it says yes to every slot and turns
      * "no signal" into a confident wrong answer. `theSlotReadingHoldsAcrossMachines` catches it.
@@ -718,13 +725,43 @@ public class BayViewMenu extends AbstractContainerMenu {
         if (handler == null) {
             return List.of();
         }
+        boolean writable = writable(handler);
         List<SlotInfo> read = new ArrayList<>();
         for (int slot = 0; slot < Math.min(handler.getSlots(), MAX_SLOTS); slot++) {
-            read.add(new SlotInfo(role(handler, slot), canWrite(handler, slot),
+            read.add(new SlotInfo(role(handler, slot, writable), canWrite(handler, slot),
                 takes(handler, slot, new ItemStack(Items.BUCKET))
                     || takes(handler, slot, new ItemStack(Items.WATER_BUCKET))));
         }
         return List.copyOf(read);
+    }
+
+    /**
+     * Whether this handler moves items at all, asked once for the whole machine.
+     *
+     * <p>It exists so a <em>full</em> slot can be given the benefit of the doubt on a handler that
+     * works, and refused it on one that does not. A handler every slot of which is full offers no
+     * insert to succeed, so the second half is the one that answers: a simulated extract out of a
+     * slot that has something in it. Mekanism's null side is read-only in both directions and says
+     * no to both; a vanilla container says yes to the extract whatever its slots are holding.
+     */
+    private static boolean writable(IItemHandler handler) {
+        for (int slot = 0; slot < Math.min(handler.getSlots(), MAX_SLOTS); slot++) {
+            if (canWrite(handler, slot)) {
+                return true;
+            }
+            if (!handler.getStackInSlot(slot).isEmpty()
+                && !handler.extractItem(slot, 1, true).isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** True when nothing more will fit in this slot, whoever is offering it. */
+    private static boolean full(IItemHandler handler, int slot) {
+        ItemStack held = handler.getStackInSlot(slot);
+        return !held.isEmpty()
+            && held.getCount() >= Math.min(handler.getSlotLimit(slot), held.getMaxStackSize());
     }
 
     /**
@@ -755,11 +792,25 @@ public class BayViewMenu extends AbstractContainerMenu {
      *
      * <p>An empty slot has nothing to ask about, so it falls back to the probe items, and the
      * probes are also what tell a fuel slot from an input.
+     *
+     * <p><b>Unless it is full</b>, in which case its own contents will not go back in either and
+     * the probe has stopped meaning anything. The same ladder is then walked with
+     * {@code isItemValid}, which is a claim rather than a reading and is trusted only here, only
+     * on a handler {@link #writable} has already proved moves items, and only because the
+     * alternative is the wrong answer every time rather than sometimes.
      */
-    private static SlotRole role(IItemHandler handler, int slot) {
+    private static SlotRole role(IItemHandler handler, int slot, boolean writable) {
         ItemStack held = handler.getStackInSlot(slot);
+        if (!held.isEmpty() && takes(handler, slot, held.copyWithCount(1))) {
+            return SlotRole.IN;
+        }
+        if (writable && full(handler, slot)) {
+            return claims(handler, slot, Items.IRON_INGOT, Items.COBBLESTONE, Items.REDSTONE)
+                ? SlotRole.IN
+                : claims(handler, slot, Items.COAL) ? SlotRole.FUEL : SlotRole.OUT;
+        }
         if (!held.isEmpty()) {
-            return takes(handler, slot, held.copyWithCount(1)) ? SlotRole.IN : SlotRole.OUT;
+            return SlotRole.OUT;
         }
         if (takes(handler, slot, new ItemStack(Items.IRON_INGOT))
             || takes(handler, slot, new ItemStack(Items.COBBLESTONE))
@@ -767,6 +818,17 @@ public class BayViewMenu extends AbstractContainerMenu {
             return SlotRole.IN;
         }
         return takes(handler, slot, new ItemStack(Items.COAL)) ? SlotRole.FUEL : SlotRole.OUT;
+    }
+
+    /** The same ladder as {@link #takes}, asked of a slot with no room left to prove it with. */
+    private static boolean claims(IItemHandler handler, int slot,
+        net.minecraft.world.item.Item... probes) {
+        for (net.minecraft.world.item.Item probe : probes) {
+            if (handler.isItemValid(slot, new ItemStack(probe))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean takes(IItemHandler handler, int slot, ItemStack one) {

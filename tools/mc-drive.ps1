@@ -235,6 +235,18 @@ function Sync-Shot {
   Write-Output "screenshot $($script:ShotW)x$($script:ShotH), window $((FB).W)x$((FB).H)"
 }
 
+# Shift and a LEFT click, which is a different gesture from SneakClick's shift-right: on our
+# screens it is "the other question about this control" -- stepping a filter row onto a tag.
+function ShiftClick([int]$gx, [int]$gy) {
+  Assert-MC | Out-Null
+  [W]::keybd_event(0xA0, 0, 0, [IntPtr]::Zero)     # LSHIFT down
+  Start-Sleep -Milliseconds 250
+  Click $gx $gy
+  Start-Sleep -Milliseconds 250
+  [W]::keybd_event(0xA0, 0, $KEYEVENTF_KEYUP, [IntPtr]::Zero)
+  Start-Sleep -Milliseconds 200
+}
+
 # Placing a block against a container needs sneak, or the container swallows the right-click.
 function SneakClick([int]$gx, [int]$gy) {
   Assert-MC | Out-Null

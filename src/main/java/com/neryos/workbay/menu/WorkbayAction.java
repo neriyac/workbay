@@ -34,8 +34,29 @@ public enum WorkbayAction {
      * {@link com.neryos.workbay.bus.BusFilter} reads its entries.
      */
     SET_FILTER,
+    /**
+     * Steps one filter row through the tags its resource belongs to, and round to the resource
+     * itself. {@code arg} is the slot.
+     *
+     * <p>Server-side because the tag list is the server's: a client knows the tags it was synced,
+     * which is every tag, but the order has to be the same one the next click steps from, and a
+     * ring computed on two machines from two orderings is a ring that goes backwards. Shift-click
+     * is the gesture, which is what every mod in the genre uses for "the other question about this
+     * slot". OPEN_ISSUES #33.
+     */
+    CYCLE_FILTER_TAG,
     /** Whitelist or blacklist, for the link {@code link} names. */
     TOGGLE_FILTER_DENY,
+    /**
+     * Lists whatever is standing in a chemical link's target tanks right now, and clears the list
+     * again when it already holds them.
+     *
+     * <p>The three other resources fill a filter by dragging a picture of the thing into a ghost
+     * slot. A chemical has no item and no bucket to drag, so the only handle a player has on one is
+     * the tank it is in — which means the <em>server</em> reads it, because the client was never
+     * told what a Connector's target is holding. OPEN_ISSUES #41.
+     */
+    FILTER_FROM_TANK,
     /**
      * Bay to bay, no Connector. {@code arg} is the bay to point at; an arg that names the source
      * bay itself, or a bay this Workbay does not have, falls back to the next other bay.

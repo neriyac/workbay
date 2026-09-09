@@ -4,6 +4,7 @@ import com.neryos.workbay.bus.BusConfig;
 import com.neryos.workbay.bus.BusRunner;
 import com.neryos.workbay.init.WBBlockEntities;
 import com.neryos.workbay.init.WBDataComponents;
+import com.neryos.workbay.world.RoomAnchors;
 import com.neryos.workbay.world.RoomRegistry;
 import com.neryos.workbay.world.WorkbayDimensions;
 import com.neryos.workbay.world.WorkbayRecord;
@@ -82,6 +83,29 @@ public class WorkbayBlockEntity extends BlockEntity {
      */
     private final java.util.Set<net.minecraft.world.level.ChunkPos> mirrored =
         new java.util.HashSet<>();
+
+    /**
+     * Whether this Workbay is currently holding its <em>own</em> chunk loaded. SPEC.md §12's other
+     * half of the Anchor, and it was never built: mirroring keeps the bay column loaded exactly
+     * while this block ticks, so the moment the player walks away the block stops ticking and the
+     * links stop with it. Measured, not reasoned: a six-stage chain 68 s away with every room
+     * anchored moved nothing. OPEN_ISSUES #52.
+     */
+    private boolean holdingOwnChunk;
+
+    /**
+     * Who a chunk ticket is registered under. <b>The block, not the network.</b>
+     *
+     * <p>Keyed on {@code record.id()} it was the same owner for every Workbay standing on one
+     * record, so releasing A's tickets released the chunks B still believed it held — and B's
+     * {@link #mirrored} set was unchanged, so its next tick saw no difference and never put them
+     * back. Derived rather than stored because it has to be the same value after a reload and
+     * there is nothing to migrate: a position in a dimension already is a stable name for a block.
+     * OPEN_ISSUES #53.
+     */
+    private static UUID ticketOwner(net.minecraft.world.level.Level level, BlockPos pos) {
+        return WorkbayTickets.owner(level.dimension(), pos);
+    }
 
     /** Ticks of {@link WorkbayState#RUNNING} left to show since the last move. Not saved: a Workbay
      * that just loaded has moved nothing yet, and one tick of {@code idle} is the truth. */
@@ -303,12 +327,19 @@ public class WorkbayBlockEntity extends BlockEntity {
         // Before the links, and whether or not there are any: a hosted machine has to tick even
         // with nothing pointed at it.
         profiler.push("mirror");
+        workbay.anchor(server);
         workbay.mirror(server);
         // Every tick, not only on a wheel step: a rising edge between two steps still has to be
         // seen, or a fast clock on PULSE would be silently ignored.
         profiler.popPush("buses");
         workbay.runner.power(server.hasNeighborSignal(pos));
         workbay.record().ifPresent(record -> {
+            // Before the election, and whether or not this block wins it: a link status is a
+            // property of the network, and every Workbay on the record is a front door to the same
+            // one. Held per network so the blocks that lose the turn report what the runner that
+            // took it found, instead of reading Idle for ever. OPEN_ISSUES #39.
+            workbay.runner.shareStatuses(
+                RoomRegistry.get(server.getServer()).busStatuses(record.id()));
             if (record.buses().isEmpty()) {
                 return;
             }
@@ -484,6 +515,35 @@ public class WorkbayBlockEntity extends BlockEntity {
      * <p>On the tick rather than in {@code onLoad}: forcing sync-loads a chunk in another
      * dimension, which is not something to do from inside a chunk load.
      */
+    /**
+     * SPEC.md §12's Anchor, the half about the block itself: <b>the bay column stays loaded with
+     * nobody around.</b>
+     *
+     * <p>Mirroring alone cannot do it. It holds the Backshop column exactly while <em>this</em>
+     * block ticks, and this block stops ticking the moment its own chunk unloads — so an anchored
+     * room full of barrels sat there with nothing pushing into it, because the thing that runs the
+     * links is the Workbay and its chunk was forced by nothing. One ticket on this block's own
+     * chunk answers all of it: the block ticks, mirroring runs, the column and the rooms follow.
+     *
+     * <p>Gated on {@code maxAnchoredWorkbaysPerPlayer}, which is the switch this asked for and was
+     * until now read by nothing. Zero means a host who bought the Anchor for rooms does not also
+     * get a permanently ticking overworld chunk with it.
+     */
+    private void anchor(ServerLevel server) {
+        boolean wanted = record().map(RoomAnchors::anchorsOwnChunk).orElse(false);
+        if (wanted == holdingOwnChunk) {
+            return;
+        }
+        net.minecraft.world.level.ChunkPos here =
+            new net.minecraft.world.level.ChunkPos(worldPosition);
+        if (wanted) {
+            WorkbayTickets.force(server, ticketOwner(server, worldPosition), here);
+        } else {
+            WorkbayTickets.release(server, ticketOwner(server, worldPosition), here);
+        }
+        holdingOwnChunk = wanted;
+    }
+
     private void mirror(ServerLevel server) {
         ServerLevel backshop = server.getServer().getLevel(WorkbayDimensions.BACKSHOP);
         WorkbayRecord record = record().orElse(null);
@@ -521,14 +581,14 @@ public class WorkbayBlockEntity extends BlockEntity {
         }
         for (net.minecraft.world.level.ChunkPos chunk : wanted) {
             if (mirrored.add(chunk)) {
-                WorkbayTickets.force(backshop, record.id(), chunk);
+                WorkbayTickets.force(backshop, ticketOwner(server, worldPosition), chunk);
             }
         }
         mirrored.removeIf(chunk -> {
             if (wanted.contains(chunk)) {
                 return false;
             }
-            WorkbayTickets.release(backshop, record.id(), chunk);
+            WorkbayTickets.release(backshop, ticketOwner(server, worldPosition), chunk);
             return true;
         });
     }
@@ -541,15 +601,20 @@ public class WorkbayBlockEntity extends BlockEntity {
     @Override
     public void setRemoved() {
         super.setRemoved();
-        if (!mirrored.isEmpty() && level instanceof ServerLevel server) {
+        if (level instanceof ServerLevel server) {
             ServerLevel backshop = server.getServer().getLevel(WorkbayDimensions.BACKSHOP);
-            record().ifPresent(record -> {
-                if (backshop != null) {
-                    mirrored.forEach(chunk ->
-                        WorkbayTickets.release(backshop, record.id(), chunk));
-                }
-            });
+            if (backshop != null) {
+                mirrored.forEach(chunk ->
+                    WorkbayTickets.release(backshop, ticketOwner(server, worldPosition), chunk));
+            }
             mirrored.clear();
+            // The Anchor's hold on this block's own chunk. Released on break, which is the only
+            // way this runs now: a chunk holding its own ticket does not unload.
+            if (holdingOwnChunk) {
+                WorkbayTickets.release(server, ticketOwner(server, worldPosition),
+                    new net.minecraft.world.level.ChunkPos(worldPosition));
+                holdingOwnChunk = false;
+            }
         }
         // Every endpoint cache holds a ServerLevel reference. Dropping them here is what stops a
         // removed Workbay keeping another dimension's level object alive.

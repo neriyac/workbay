@@ -44,6 +44,20 @@ public final class WorkbayTickets {
     }
 
     /**
+     * Who a ticket belongs to when the owner is a <em>block</em> rather than a room.
+     *
+     * <p>Mirroring used to register under the network's id, which is one owner for every Workbay
+     * standing on one record: releasing the first block's tickets released the chunks the second
+     * still believed it held. A position in a dimension already is a stable name for a block, so
+     * there is nothing to store and nothing to migrate. OPEN_ISSUES #53.
+     */
+    public static UUID owner(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension,
+        net.minecraft.core.BlockPos pos) {
+        return UUID.nameUUIDFromBytes((dimension.location() + "@" + pos.asLong())
+            .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    /**
      * Loads the chunk and registers a ticking ticket for it, in that order — the sync load first
      * so the caller can touch the chunk on the same tick, then the ticket so it stays.
      */

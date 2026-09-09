@@ -198,6 +198,22 @@ public static final String[] ENTER = {
         "............",
     };
 
+    /** Opens Bay View. A window, deliberately not a machine. */
+    public static final String[] SCREEN = {
+        "............",
+        ".##########.",
+        ".##########.",
+        ".#........#.",
+        ".#.######.#.",
+        ".#.######.#.",
+        ".#.######.#.",
+        ".#........#.",
+        ".##########.",
+        "............",
+        "............",
+        "............",
+    };
+
     public static final String[] EJECT = {
         "............",
         ".....##.....",

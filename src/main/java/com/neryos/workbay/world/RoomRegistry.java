@@ -72,6 +72,10 @@ public class RoomRegistry extends SavedData {
      */
     private final Map<UUID, Long> busTurn = new HashMap<>();
 
+    /** What each network's links last reported, shared by every Workbay on it (#39). */
+    private final Map<UUID, Map<UUID, com.neryos.workbay.bus.BusRunner.BusStatus>>
+        busStatuses = new HashMap<>();
+
     private int nextBayColumn = 0;
 
     /**
@@ -94,6 +98,19 @@ public class RoomRegistry extends SavedData {
      * moment its chunk unloads. Block entities tick in a stable order, so the same Workbay wins
      * every tick while it is loaded and another takes over on its own when it is not.
      */
+    /**
+     * One link-status map per network, shared by every Workbay standing on it.
+     *
+     * <p>Buses are run by one elected Workbay per tick, so the blocks that lose the turn used to
+     * hold no statuses at all and read <em>Idle</em> for ever — a second front door that always
+     * said nothing was wrong. §7's question is asked of the network, so the answer lives with the
+     * network. Transient: it is derived from a tick and rebuilt on the next one. OPEN_ISSUES #39.
+     */
+    public java.util.Map<UUID, com.neryos.workbay.bus.BusRunner.BusStatus> busStatuses(
+        UUID network) {
+        return busStatuses.computeIfAbsent(network, key -> new java.util.HashMap<>());
+    }
+
     public boolean takeBusTurn(UUID network, long gameTime) {
         Long ranOn = busTurn.put(network, gameTime);
         return ranOn == null || ranOn != gameTime;

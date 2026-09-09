@@ -6,10 +6,11 @@ import net.minecraft.util.StringRepresentable;
 /**
  * How much of somebody else's room a guest gets. SPEC.md §8.
  *
- * <p>Two levels, because two is what the room is actually for: somebody you are showing the place
- * to, and somebody helping you run it. A third — <em>may use what is here but may not change
- * it</em> — is the one that keeps suggesting itself and is deliberately not here; see
- * {@code OPEN_ISSUES}, because the case for it is real and it is a decision, not an omission.
+ * <p>Three levels. Two were shipped first — somebody you are showing the place to, and somebody
+ * helping you run it — and the middle one kept suggesting itself until it was built: a factory
+ * has people meant to <em>work</em> it and not rebuild it, and with two levels the only way to let
+ * somebody take an ingot out of a barrel was to let them break the barrel. The ring is ordered by
+ * how much it gives away, so a click steps one rung up and round to the safe end.
  *
  * <p>The owner is not a level. An owner is the network that owns the room, and there is exactly
  * one; putting them on this ring would make "owner" a thing you could be invited to.
@@ -21,6 +22,13 @@ public enum RoomGuest implements StringRepresentable {
      * that means "I am showing you the place".
      */
     LOOK("look"),
+    /**
+     * May use what is here and change none of it: open a chest, take from a barrel, click a
+     * machine, use whatever is standing in the room. No block broken, no block placed, nothing
+     * attacked. The line is <em>the room's shape</em>, not the room's contents — a stage in a
+     * chain is meant to be worked, and this is the level that says so.
+     */
+    USE("use"),
     /** May do anything in the room the owner may. The walls are still not breakable by anyone. */
     BUILD("build");
 
@@ -37,8 +45,13 @@ public enum RoomGuest implements StringRepresentable {
         return name;
     }
 
-    /** One step round the ring, which with two of them is the other one. */
+    /** One step round the ring, in the order the enum is written: LOOK, USE, BUILD, LOOK. */
     public RoomGuest step() {
-        return this == LOOK ? BUILD : LOOK;
+        return values()[(ordinal() + 1) % values().length];
+    }
+
+    /** May open, click and take: {@link #USE} and up. */
+    public boolean mayUse() {
+        return this != LOOK;
     }
 }
