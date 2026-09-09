@@ -1259,7 +1259,6 @@ class BaysPage extends WorkbayPage {
      * about is a modifier nobody uses.
      */
     private void throughput(GuiGraphics g, int mouseX, int mouseY, BusConfig config, int py) {
-        int max = 64;
         int rate = config.rate();
         int speed = config.speed();
         int index = 0;
@@ -1272,8 +1271,11 @@ class BaysPage extends WorkbayPage {
         int left = x(LIST_X + 10);
         text(g, WorkbayScreen.gui("links.rate").getString(), left, py + 3, 34, Draw.TEXT_DIM);
         stepper(g, mouseX, mouseY, left + 36, py, String.valueOf(rate),
+            // No ceiling here on purpose. The ceiling is linkMaxRate, which is a *server* config
+            // this client cannot read, so a hardcoded 64 would stop the + button dead in a pack
+            // that raised it. The server clamps, and the value that comes back is the truth.
             step -> screen.send(WorkbayAction.SET_LINK_RATE,
-                Math.clamp((long) rate + step, 1, max), config.id()),
+                Math.max(1, (long) rate + step), config.id()),
             WorkbayScreen.gui("links.rate"), WorkbayScreen.gui("links.rate.tip"));
 
         int right = x(LIST_X + LIST_W / 2 + 16);
