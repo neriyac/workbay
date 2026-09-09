@@ -276,6 +276,31 @@ public final class RoomVisit {
     }
 
     /**
+     * And the same for whatever is <em>standing</em> in the room, not only what is built into it.
+     *
+     * <p>Blocks were the obvious half and the only half at first, which left a look-only guest
+     * free to smash an item frame off the wall, empty a chest minecart or kill the cow somebody was
+     * keeping — every one of them a change to what is in the room, made by somebody invited to look
+     * at it. The two events are the entity mirror of break and right-click; the position asked
+     * about is the entity's own.
+     */
+    @SubscribeEvent
+    public static void onAttackEntity(
+        net.neoforged.neoforge.event.entity.player.AttackEntityEvent event) {
+        if (refused(event.getEntity(), event.getTarget().blockPosition())) {
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onEntityInteract(
+        net.neoforged.neoforge.event.entity.player.PlayerInteractEvent.EntityInteract event) {
+        if (refused(event.getEntity(), event.getTarget().blockPosition())) {
+            event.setCanceled(true);
+        }
+    }
+
+    /**
      * Keeps an occupant honest, and nothing else: a room has no screen to watch and no timeout.
      *
      * <p>The one thing checked is that they are still inside the room they were sent to. Outside

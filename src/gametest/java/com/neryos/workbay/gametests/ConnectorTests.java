@@ -70,6 +70,72 @@ public class ConnectorTests {
      * The player's own sequence, in order: right-click the Workbay with a Connector, place the
      * Connector on a chest, and the LINKS list has a row pointing at that chest.
      */
+    /**
+     * <b>A Connector placed the way a player places one: the item, against a container's face.</b>
+     *
+     * <p>Every other test in this file reaches for {@code setPlacedBy} directly, which skips
+     * {@code BlockItem#useOn} — so it skips {@code getStateForPlacement}, {@code canSurvive}, and
+     * the whole question of whether the container swallows the right-click first. Driving a client
+     * by hand, a sneak-right-click that put a Connector on a room's floor would not put one on a
+     * barrel beside it, and nothing in the suite could say whether that was the mod or the driving.
+     *
+     * <p>All six faces, and a chest as well as a barrel, because the two differ in exactly the way
+     * that would matter: a chest has a lid and refuses to open with a block above it.
+     */
+    @GameTest
+    @TestHolder(description = "A Connector item places on every face of a barrel and a chest, the way a player places one.")
+    public static void aConnectorItemPlacesOnEveryFaceOfAContainer(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(9, 5, 9));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            net.minecraft.world.level.block.Block[] containers = {
+                net.minecraft.world.level.block.Blocks.BARREL,
+                net.minecraft.world.level.block.Blocks.CHEST,
+            };
+            int at = 0;
+            for (net.minecraft.world.level.block.Block container : containers) {
+                for (net.minecraft.core.Direction face : net.minecraft.core.Direction.values()) {
+                    BlockPos box = helper.absolutePos(new BlockPos(1 + (at % 4) * 2, 1,
+                        1 + (at / 4) * 2));
+                    at++;
+                    level.setBlock(box, container.defaultBlockState(),
+                        net.minecraft.world.level.block.Block.UPDATE_ALL);
+                    BlockPos plate = box.relative(face);
+                    if (!level.getBlockState(plate).isAir()) {
+                        continue;
+                    }
+
+                    ItemStack held = new ItemStack(WBBlocks.CONNECTOR.get());
+                    player.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, held);
+                    // Sneaking, which is what a player does to place against a container -- and
+                    // the hit is on the face the plate is going onto, exactly as a crosshair
+                    // reports it.
+                    player.setShiftKeyDown(true);
+                    held.useOn(new net.minecraft.world.item.context.UseOnContext(player,
+                        net.minecraft.world.InteractionHand.MAIN_HAND,
+                        new net.minecraft.world.phys.BlockHitResult(
+                            net.minecraft.world.phys.Vec3.atCenterOf(box)
+                                .add(face.getStepX() * 0.5, face.getStepY() * 0.5,
+                                    face.getStepZ() * 0.5),
+                            face, box, false)));
+                    player.setShiftKeyDown(false);
+
+                    helper.assertTrue(level.getBlockState(plate).is(WBBlocks.CONNECTOR.get()),
+                        "a Connector would not go on the " + face.getName() + " face of a "
+                            + container.getName().getString() + ": " + plate + " holds "
+                            + level.getBlockState(plate));
+                    helper.assertValueEqual(level.getBlockState(plate)
+                            .getValue(com.neryos.workbay.content.connector.ConnectorBlock.FACING),
+                        face.getOpposite(),
+                        "the plate on the " + face.getName() + " face pointing back at the block");
+                }
+            }
+            helper.succeed();
+        });
+    }
+
     @GameTest
     @TestHolder(description = "Pairing a Connector and placing it creates a link on the Workbay.")
     public static void placingAPairedConnectorMakesALink(final DynamicTest test) {

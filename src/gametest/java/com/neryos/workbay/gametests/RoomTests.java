@@ -559,6 +559,21 @@ public class RoomTests {
             helper.assertTrue(site.backshop().getBlockState(chest).is(Blocks.CHEST),
                 "a look-only guest broke a block in somebody else's room");
 
+            // And whatever is standing in the room, not only what is built into it: an item frame
+            // smashed off a wall is a change to what is in the room made by somebody invited to
+            // look at it. The entity mirror of the two block guards.
+            net.minecraft.world.entity.decoration.ItemFrame frame =
+                new net.minecraft.world.entity.decoration.ItemFrame(site.backshop(),
+                    chest.above(), net.minecraft.core.Direction.NORTH);
+            site.backshop().addFreshEntity(frame);
+            guest.attack(frame);
+            helper.assertTrue(frame.isAlive(),
+                "a look-only guest destroyed an item frame in somebody else's room");
+            site.player().attack(frame);
+            helper.assertFalse(frame.isAlive(),
+                "the owner cannot break an item frame in their own room, so that guard refuses "
+                    + "everybody too");
+
             site.player().gameMode.destroyBlock(chest);
             helper.assertFalse(site.backshop().getBlockState(chest).is(Blocks.CHEST),
                 "the owner cannot break a block in their own room, so the guard refuses everybody");
