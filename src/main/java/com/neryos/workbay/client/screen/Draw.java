@@ -790,8 +790,16 @@ public final class Draw {
         return (value / 100_000 / 10.0) + "M";
     }
 
-    /** The full figure, grouped. For tooltips, where there is room and the player asked. */
+    /**
+     * The full figure, grouped. For tooltips, where there is room and the player asked.
+     *
+     * <p><b>{@code Locale.ROOT}, not the default one.</b> {@code String.format("%,d", n)} groups
+     * with whatever the JVM's locale says, so the same buffer reads {@code 1,600,000} here and
+     * {@code 1.600.000} on a German client and {@code 1 600 000} on a French one — three different
+     * numbers on one screenshot, and one of those separators is a narrow no-break space the mod's
+     * font has no glyph for. Nothing else in this mod is locale-sensitive and this should not be.
+     */
     public static String exact(int value) {
-        return String.format("%,d", value);
+        return String.format(java.util.Locale.ROOT, "%,d", value);
     }
 }
