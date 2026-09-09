@@ -316,6 +316,16 @@ public class RoomTests {
                 .filter(link -> link.config().connector().pos().equals(outside))
                 .findFirst().orElseThrow().targetRoom().isPresent(),
                 "a link out in the world was given a room, so every row would claim to be in one");
+
+            // And it is NOT internal, however Backshop its target is. Those two were the same
+            // thing right up until a Connector could stand in a room -- the flow map read "target
+            // is in the Backshop" as "bay to bay", looked up a bay node that does not exist and
+            // dropped the link off the map entirely. Found by drawing the map with one in it.
+            helper.assertFalse(snapshot.links().stream()
+                .filter(link -> link.config().connector().pos().equals(inSecond))
+                .findFirst().orElseThrow().config().internal(),
+                "a link into a room calls itself internal, which is what makes it vanish from the "
+                    + "flow map");
             helper.succeed();
         });
     }

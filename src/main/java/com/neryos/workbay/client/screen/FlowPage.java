@@ -486,12 +486,17 @@ class FlowPage extends WorkbayPage {
     }
 
     /**
-     * A link is internal when its target is in the Backshop — which in v1 can only be another bay
-     * of this Workbay.
+     * A link is internal when it says so, and <b>not</b> when its target happens to be in the
+     * Backshop.
+     *
+     * <p>Those were the same thing right up until a Connector could stand in a room, and then they
+     * were not: a room link's target is a Backshop position, so this called it internal, looked up
+     * a bay node for it, found none and {@code continue}d — and the link <em>vanished from the
+     * map</em>. Found by drawing the map with one in it. {@code BusConfig#internal} is the field
+     * that exists to answer this and it is the only thing that should.
      */
     private static boolean isInternal(WorkbaySnapshot snap, WorkbaySnapshot.Link link) {
-        return link.config().target().dimension().equals(
-            com.neryos.workbay.world.WorkbayDimensions.BACKSHOP);
+        return link.config().internal();
     }
 
     private static int colourFor(BusRunner.BusStatus status) {

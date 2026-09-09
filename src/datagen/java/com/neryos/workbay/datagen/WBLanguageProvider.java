@@ -469,7 +469,7 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("upgrade.resonator"), "Resonator");
         add(WorkbayLang.guiKey("upgrade.resonator.desc"), "Any dimension");
         add(WorkbayLang.guiKey("upgrade.multichannel"), "Multichannel");
-        add(WorkbayLang.guiKey("upgrade.multichannel.desc"), "One per type");
+        add(WorkbayLang.guiKey("upgrade.multichannel.desc"), "All types at once");
         // The Impeller shipped with no name at all: its row on the upgrades screen drew
         // "gui.workbay.upgr..." and "gui.workbay.u...", in red boxes, because the screen builds
         // this key from the enum and nobody added the row when the enum grew. Found by opening

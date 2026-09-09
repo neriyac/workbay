@@ -314,7 +314,7 @@
   "gui.workbay.upgrade.impeller": "Impeller",
   "gui.workbay.upgrade.impeller.desc": "Faster links",
   "gui.workbay.upgrade.multichannel": "Multichannel",
-  "gui.workbay.upgrade.multichannel.desc": "One per type",
+  "gui.workbay.upgrade.multichannel.desc": "All types at once",
   "gui.workbay.upgrade.resonator": "Resonator",
   "gui.workbay.upgrade.resonator.desc": "Any dimension",
   "gui.workbay.upgrade.room_frame": "Room Frame",
