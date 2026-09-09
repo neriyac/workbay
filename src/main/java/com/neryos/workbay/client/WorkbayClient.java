@@ -47,6 +47,46 @@ public final class WorkbayClient {
     }
 
     /**
+     * <b>A room is not the bottom of a cave, and the fog said it was.</b>
+     *
+     * <p>Minecraft darkens everything distant towards black as the camera approaches the bottom of
+     * the world: {@code FogRenderer} scales the fog colour by {@code (y - minBuildHeight) * 0.03125}
+     * and then squares it. A room's floor <em>is</em> {@code minBuildHeight} — {@code FLOOR_Y} is 0
+     * and the Backshop's {@code min_y} is 0, and both are one-way doors — so a player standing in
+     * one is at the very bottom of the world and every fogged thing renders black.
+     *
+     * <p>Which is invisible in a sealed room and unmissable in an open one: the sky an
+     * {@link com.neryos.workbay.content.room.RoomColour#OVERWORLD} room shows is drawn <b>past</b>
+     * the fog for the clouds and not for the sky dome, so a blue midday sky came with a handful of
+     * <b>black clouds</b> hanging in it. Found by standing in the room and looking up, which is the
+     * only place it can be found. The scale is vanilla's and reads the overworld's own
+     * {@code isFlat}, so there is nothing to configure our way out of.
+     *
+     * <p>The fog becomes the sky's colour instead, which is what the overworld's fog is at that
+     * distance anyway. Whole dimension rather than only an open room: nothing sealed can tell, and
+     * a check per frame for which room the camera is in would cost more than the effect is worth.
+     */
+    @EventBusSubscriber(modid = Workbay.MOD_ID, bus = EventBusSubscriber.Bus.GAME, value = Dist.CLIENT)
+    public static final class Sky {
+        private Sky() {}
+
+        @SubscribeEvent
+        static void fogColour(net.neoforged.neoforge.client.event.ViewportEvent.ComputeFogColor event) {
+            var camera = event.getCamera();
+            var level = net.minecraft.client.Minecraft.getInstance().level;
+            if (level == null
+                || !level.dimension().equals(com.neryos.workbay.world.WorkbayDimensions.BACKSHOP)) {
+                return;
+            }
+            net.minecraft.world.phys.Vec3 sky =
+                level.getSkyColor(camera.getPosition(), (float) event.getPartialTick());
+            event.setRed((float) sky.x);
+            event.setGreen((float) sky.y);
+            event.setBlue((float) sky.z);
+        }
+    }
+
+    /**
      * OPEN_ISSUES #38. Every refusal in the mod is an action bar message, and the HUD draws the
      * action bar <b>before</b> the screen — so a rejection raised by a click on the Workbay screen
      * is painted and then covered by the panel that caused it. What the player sees is a button

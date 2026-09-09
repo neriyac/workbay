@@ -29,7 +29,16 @@ public record WorkbayBinding(
     boolean locked,
     WorkbayRecord.Upgrades upgrades,
     int hosted,
-    int buses) {
+    int buses,
+    /**
+     * What was in the block's buffer when it was broken. <b>Everything else a Workbay holds
+     * survives being picked up</b> — the bays, the links, the upgrades, the Levy — because they
+     * live on the record and the record outlives the block. The buffer does not: it is the one
+     * number that lives in the block entity, and the block entity is what the pickaxe destroys.
+     * A player who fed a generator into a Workbay and then moved it lost every FE of it, silently,
+     * which is the same loss the load path used to make and the same reason it matters.
+     */
+    int energy) {
 
     public static final Codec<WorkbayBinding> CODEC = RecordCodecBuilder.create(i -> i.group(
         UUIDUtil.CODEC.fieldOf("Id").forGetter(WorkbayBinding::id),
@@ -40,14 +49,15 @@ public record WorkbayBinding(
         WorkbayRecord.Upgrades.CODEC.optionalFieldOf("Upgrades", WorkbayRecord.Upgrades.NONE)
             .forGetter(WorkbayBinding::upgrades),
         Codec.INT.optionalFieldOf("Hosted", 0).forGetter(WorkbayBinding::hosted),
-        Codec.INT.optionalFieldOf("Buses", 0).forGetter(WorkbayBinding::buses)
+        Codec.INT.optionalFieldOf("Buses", 0).forGetter(WorkbayBinding::buses),
+        Codec.INT.optionalFieldOf("Energy", 0).forGetter(WorkbayBinding::energy)
     ).apply(i, WorkbayBinding::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, WorkbayBinding> STREAM_CODEC =
         ByteBufCodecs.fromCodecWithRegistries(CODEC);
 
-    public static WorkbayBinding of(WorkbayRecord record, int hosted, int buses) {
+    public static WorkbayBinding of(WorkbayRecord record, int hosted, int buses, int energy) {
         return new WorkbayBinding(record.id(), record.code(), record.owner(), record.ownerName(),
-            record.locked(), record.upgrades(), hosted, buses);
+            record.locked(), record.upgrades(), hosted, buses, energy);
     }
 }

@@ -136,7 +136,12 @@ public class RoomRegistryTests {
                     com.neryos.workbay.bus.BusConfig.Mode.INSERT,
                     GlobalPos.of(WorkbayDimensions.BACKSHOP, new BlockPos(1, 2, 3)),
                     GlobalPos.of(WorkbayDimensions.BACKSHOP, new BlockPos(4, 5, 6)))))
-                .withDeployedCount(1);
+                .withDeployedCount(1)
+                // The Assay was the one thing this test never set, so every field of it round
+                // tripped vacuously: a codec that dropped Levy passed, and Levy is the balance a
+                // player spends. All four, none of them the default, and `since` non-zero because
+                // a batch half converted at the moment of a save is exactly when it matters.
+                .withAssay(new WorkbayRecord.Assay(17, 42, 25, 12345L));
 
             // A room is a place somebody built in, so it has to come back byte for byte: its
             // region (where their chests are), the tier standing in the world, the biome and the
@@ -145,6 +150,11 @@ public class RoomRegistryTests {
                 .withBuiltTier(2)
                 .withName(Optional.of("Greenhouse"))
                 .withAnchored(true)
+                // Colour and the guest list ride the same trip for the same reason: both are
+                // optional fields with a default, and an optional field nobody sets is a field
+                // nobody tests.
+                .withColour(com.neryos.workbay.content.room.RoomColour.TEAL)
+                .withGuest(BOB, "Bob", com.neryos.workbay.world.RoomGuest.BUILD)
                 .withBiome(net.minecraft.world.level.biome.Biomes.SNOWY_PLAINS);
             before.putRoom(room);
             alice = alice.withRooms(List.of(room.id()));

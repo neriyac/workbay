@@ -83,13 +83,6 @@ public class WorkbayBlockEntity extends BlockEntity {
     private final java.util.Set<net.minecraft.world.level.ChunkPos> mirrored =
         new java.util.HashSet<>();
 
-    /**
-     * How long the Assay has been working on the Levy it is currently making. Only counts while
-     * there is a full batch to convert, so the 200 ticks are 200 ticks of work rather than a delay
-     * that starts before the goods arrive.
-     */
-    private int assayTicks;
-
     /** Ticks of {@link WorkbayState#RUNNING} left to show since the last move. Not saved: a Workbay
      * that just loaded has moved nothing yet, and one tick of {@code idle} is the truth. */
     private int runningHold;
@@ -428,6 +421,14 @@ public class WorkbayBlockEntity extends BlockEntity {
      * <p>Here rather than in the runner because this is a write to the record, and the runner is
      * mid-iteration over a list that record owns. One write per tick, and only when something
      * actually changed — a Workbay with the dial at zero never touches the registry.
+     *
+     * <p>The conversion timer is a <b>start time on the record</b>, not a counter on this block.
+     * As a counter it was thrown away by every chunk unload, and every Workbay standing on the
+     * record ran one of its own over the same banked goods — so a network with three front doors
+     * made three Levy per batch and the batch bar promised one. A start time is read the same way
+     * by all of them, so the second and third Workbay find the batch already under way and add
+     * nothing, and it survives the reload it used to be lost by. Two registry writes per Levy
+     * rather than two hundred, because only the two edges are a change.
      */
     private void settleAssay(ServerLevel server) {
         int skimmed = runner.takeSkim();
@@ -439,18 +440,26 @@ public class WorkbayBlockEntity extends BlockEntity {
         int held = assay.skimmed() + skimmed;
         int levy = assay.levy();
         int batch = com.neryos.workbay.content.assay.AssayBlock.itemsPerLevy();
-        if (held >= batch
-            && com.neryos.workbay.content.assay.AssayBlock.rackedIn(record)
-            && ++assayTicks >= com.neryos.workbay.content.assay.AssayBlock.convertTicks()) {
-            assayTicks = 0;
+        long now = server.getServer().overworld().getGameTime();
+        long since = assay.since();
+        if (held < batch || !com.neryos.workbay.content.assay.AssayBlock.rackedIn(record)) {
+            // Nothing to work on. The batch that starts next is a fresh 200 ticks of work, which
+            // is what "ticks of work rather than a delay" meant when this was a counter.
+            since = 0;
+        } else if (since <= 0 || since > now) {
+            // A world restored from a backup has a game time behind what was saved, which would
+            // otherwise be a batch that never finishes.
+            since = now;
+        } else if (now - since >= com.neryos.workbay.content.assay.AssayBlock.convertTicks()) {
+            since = 0;
             held -= batch;
             levy++;
         }
-        if (held == assay.skimmed() && levy == assay.levy()) {
+        if (held == assay.skimmed() && levy == assay.levy() && since == assay.since()) {
             return;
         }
         RoomRegistry.get(server.getServer())
-            .put(record.withAssay(assay.withSkimmed(held).withLevy(levy)));
+            .put(record.withAssay(assay.withSkimmed(held).withLevy(levy).withSince(since)));
         setChanged();
     }
 
@@ -549,6 +558,20 @@ public class WorkbayBlockEntity extends BlockEntity {
 
     // ------------------------------------------------------------ persistence
 
+    /**
+     * Puts a stored figure back into the buffer, and the <b>only</b> way anything but a cable does.
+     *
+     * <p>Never {@code receiveEnergy}: {@link EnergyStorage}'s ceiling is per call, so a Workbay
+     * holding a full hundred thousand came back with ten and the screen printed the loss as the
+     * truth. Measured: stored 100,000, saved 100,000, reloaded 10,000. Both restores go through
+     * here — off the disk and off the item somebody broke it into — because it is the same
+     * mistake either way and one of them was made twice. The provider argument NeoForge's
+     * {@code deserializeNBT} takes is unused by it, and there is nothing here to look up.
+     */
+    private void restoreEnergy(int stored) {
+        energy.deserializeNBT(null, net.minecraft.nbt.IntTag.valueOf(stored));
+    }
+
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
@@ -592,12 +615,8 @@ public class WorkbayBlockEntity extends BlockEntity {
         workbayId = tag.contains(ID_KEY)
             ? UUIDUtil.CODEC.parse(NbtOps.INSTANCE, tag.get(ID_KEY)).result().orElse(null)
             : null;
-        // Not receiveEnergy: that is clamped to MAX_FE_PER_TICK, so a Workbay holding a full
-        // hundred thousand came back off disk with ten and the screen printed the loss as the
-        // truth. Measured: stored 100000, saved 100000, reloaded 10000. Same IntTag on disk either
-        // way, so nothing already saved has to be migrated.
         if (tag.contains(ENERGY_KEY)) {
-            energy.deserializeNBT(registries, tag.get(ENERGY_KEY));
+            restoreEnergy(tag.getInt(ENERGY_KEY));
         }
         // Absent on disk, present on the update tag. getByteArray answers with an empty array for
         // a key that is not there, which is exactly "no links to show".
@@ -614,7 +633,7 @@ public class WorkbayBlockEntity extends BlockEntity {
     protected void collectImplicitComponents(DataComponentMap.Builder components) {
         super.collectImplicitComponents(components);
         record().ifPresent(r -> components.set(WBDataComponents.BINDING.get(),
-            WorkbayBinding.of(r, occupiedBays(), r.buses().size())));
+            WorkbayBinding.of(r, occupiedBays(), r.buses().size(), energy.getEnergyStored())));
     }
 
     @Override
@@ -623,6 +642,7 @@ public class WorkbayBlockEntity extends BlockEntity {
         WorkbayBinding binding = input.get(WBDataComponents.BINDING.get());
         if (binding != null) {
             workbayId = binding.id();
+            restoreEnergy(binding.energy());
         }
     }
 

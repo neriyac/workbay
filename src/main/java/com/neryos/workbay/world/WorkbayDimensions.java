@@ -45,7 +45,12 @@ public final class WorkbayDimensions {
 
     public static void bootstrapType(BootstrapContext<DimensionType> context) {
         context.register(BACKSHOP_TYPE, new DimensionType(
-            OptionalLong.of(6000L),         // fixed_time — mods reading getDayTime() see something deterministic
+            // No fixed_time. It pinned the sun at noon for the *renderer* and nothing else: a mod
+            // reading getDayTime() in here already saw the overworld's clock, because a non-
+            // overworld level's DerivedLevelData reads the overworld's, so the reason written
+            // beside it was never true. What it did do was stop an Overworld room ever having a
+            // night, and RoomWallBlock#openToTheSky is what makes that visible.
+            OptionalLong.empty(),           // fixed_time — the Backshop keeps the overworld's hours
             false,                          // has_skylight — also stops solar panels running forever in a sealed bay
             false,                          // has_ceiling
             false,                          // ultrawarm
@@ -57,7 +62,12 @@ public final class WorkbayDimensions {
             HEIGHT,
             HEIGHT,                         // logical_height
             BlockTags.INFINIBURN_OVERWORLD,
-            BuiltinDimensionTypes.END_EFFECTS, // no sun, no moon, no clouds — the closest vanilla look to a void
+            // The overworld's own sky, sun, moon, stars and clouds. It was the End's — no sun, no
+            // moon, no clouds, the closest vanilla look to a void — which was right while nothing
+            // in the Backshop could see out of the box it was in. An Overworld room can, so this
+            // is what it sees, and it is the whole feature: the game already ships this renderer.
+            // Every other room and every bay is sealed, so none of them can tell the difference.
+            BuiltinDimensionTypes.OVERWORLD_EFFECTS,
             1.0F,                           // ambient_light
             new DimensionType.MonsterSettings(false, false, ConstantInt.of(0), 0)));
     }

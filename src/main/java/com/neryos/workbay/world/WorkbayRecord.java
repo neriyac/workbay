@@ -120,26 +120,42 @@ public record WorkbayRecord(
      * nothing physical to hand a Levy item to. It is a balance, and the upgrades screen is where it
      * is read and spent. That also means it survives exactly as well as bays and upgrades do:
      * breaking the Workbay does not spend somebody's Levy.
+     *
+     * <p>{@code since} is the game time the batch now converting started, or zero for none, and it
+     * is here for the same reason the balance is. It was a counter on the <b>block entity</b>: not
+     * saved, so every chunk unload threw the 200 ticks away, and one per <em>block</em>, so a
+     * second Workbay on the same network ran a second timer over the same banked goods and the
+     * network made two Levy where the screen promised one. A start time on the record is both
+     * halves at once -- it survives the reload, and every Workbay reading it computes the same
+     * answer, so no election is needed to keep them from double-counting.
      */
-    public record Assay(int levy, int skimmed, int rate) {
-        public static final Assay NONE = new Assay(0, 0, 0);
+    public record Assay(int levy, int skimmed, int rate, long since) {
+        public static final Assay NONE = new Assay(0, 0, 0, 0);
 
         public static final Codec<Assay> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.INT.optionalFieldOf("Levy", 0).forGetter(Assay::levy),
             Codec.INT.optionalFieldOf("Skimmed", 0).forGetter(Assay::skimmed),
-            Codec.INT.optionalFieldOf("Rate", 0).forGetter(Assay::rate)
+            Codec.INT.optionalFieldOf("Rate", 0).forGetter(Assay::rate),
+            // Absent on every record written before the timer moved here, which reads back as
+            // "not converting" -- and a batch already banked simply starts its 200 ticks again,
+            // which is what used to happen on every chunk unload anyway.
+            Codec.LONG.optionalFieldOf("Since", 0L).forGetter(Assay::since)
         ).apply(i, Assay::new));
 
         public Assay withLevy(int nowLevy) {
-            return new Assay(Math.max(0, nowLevy), skimmed, rate);
+            return new Assay(Math.max(0, nowLevy), skimmed, rate, since);
         }
 
         public Assay withSkimmed(int nowSkimmed) {
-            return new Assay(levy, Math.max(0, nowSkimmed), rate);
+            return new Assay(levy, Math.max(0, nowSkimmed), rate, since);
         }
 
         public Assay withRate(int nowRate) {
-            return new Assay(levy, skimmed, nowRate);
+            return new Assay(levy, skimmed, nowRate, since);
+        }
+
+        public Assay withSince(long nowSince) {
+            return new Assay(levy, skimmed, rate, nowSince);
         }
     }
 

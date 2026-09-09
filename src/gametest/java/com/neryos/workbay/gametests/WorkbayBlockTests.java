@@ -43,6 +43,13 @@ public class WorkbayBlockTests {
         BlockState state = workbay.defaultBlockState();
         level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
         level.setBlock(pos, state, Block.UPDATE_ALL);
+        // What BlockItem#place does before setPlacedBy, and what this helper used to skip. Without
+        // it nothing here ever ran applyImplicitComponents, so anything the dropped item carries
+        // that setPlacedBy does not read by hand -- the buffer -- was tested against a placement
+        // no player can make.
+        if (level.getBlockEntity(pos) instanceof net.minecraft.world.level.block.entity.BlockEntity be) {
+            be.applyComponentsFromItemStack(stack);
+        }
         workbay.setPlacedBy(level, pos, state, player, stack);
         return pos;
     }
@@ -59,10 +66,17 @@ public class WorkbayBlockTests {
      * of one and the screen printed the loss as the truth: measured, 100,000 stored, 100,000
      * saved, 10,000 reloaded. Neither fault is reachable from a screenshot, and both are what a
      * printed number is for.
+     *
+     * <p><b>And it has to survive the pickaxe.</b> Everything else a Workbay holds does — the bays,
+     * the links, the upgrades, the Levy — because they live on the record and the record outlives
+     * the block. The buffer is the one thing that lives in the block entity, and the loot table
+     * copied {@code workbay:binding} and nothing else, so a player who fed a generator into a
+     * Workbay and then moved it lost every FE of it without being told. The same loss as the load
+     * path's, through the door nothing was watching, which is why it is the same test.
      */
     @GameTest
     @TestHolder(description = "The Workbay's buffer takes its printed rate once a tick and comes "
-        + "back off disk with everything it had.")
+        + "back with everything it had, off disk and off the item it was broken into.")
     public static void theBufferKeepsItsPrintedRateAndItsContents(final DynamicTest test) {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
 
@@ -97,6 +111,21 @@ public class WorkbayBlockTests {
                     reloaded.loadWithComponents(tag, level.registryAccess());
                     helper.assertValueEqual(reloaded.energy().getEnergyStored(), stored,
                         "the buffer after a save and load");
+
+                    // Broken through the real loot table, because that is what decides which
+                    // components the dropped item carries -- writing the component by hand here
+                    // would test the codec and leave the table saying whatever it liked.
+                    ItemStack dropped = dropOf(helper, level, pos, player);
+                    level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+                    WorkbayBinding binding = dropped.get(WBDataComponents.BINDING.get());
+                    helper.assertNotNull(binding, "a binding on the dropped Workbay");
+                    helper.assertValueEqual(binding.energy(), stored,
+                        "FE on the item a full Workbay was broken into");
+
+                    place(helper, level, pos, player, dropped);
+                    WorkbayBlockEntity back = (WorkbayBlockEntity) level.getBlockEntity(pos);
+                    helper.assertValueEqual(back.energy().getEnergyStored(), stored,
+                        "the buffer after the Workbay was broken and placed again");
                 })
                 .thenSucceed();
         });

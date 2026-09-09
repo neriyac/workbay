@@ -3,10 +3,12 @@ package com.neryos.workbay.gametests;
 import com.neryos.workbay.bus.BusConfig;
 import com.neryos.workbay.content.assay.AssayBlock;
 import com.neryos.workbay.content.connector.ConnectorBlock;
+import com.neryos.workbay.content.workbay.WorkbayBinding;
 import com.neryos.workbay.content.workbay.WorkbayBlock;
 import com.neryos.workbay.content.workbay.WorkbayBlockEntity;
 import com.neryos.workbay.content.workbay.WorkbayUpgrade;
 import com.neryos.workbay.init.WBBlocks;
+import com.neryos.workbay.init.WBDataComponents;
 import com.neryos.workbay.init.WBItems;
 import com.neryos.workbay.menu.WorkbayAction;
 import com.neryos.workbay.menu.WorkbayMenu;
@@ -449,6 +451,163 @@ public class AssayTests {
                         "goods skimmed from a link carrying nothing refined");
                 })
                 .thenExecute(() -> level.setBlock(workbayPos, Blocks.AIR.defaultBlockState(),
+                    Block.UPDATE_ALL))
+                .thenSucceed();
+        });
+    }
+
+    /**
+     * <b>Two Workbays on one network must make one Levy per batch, not two.</b>
+     *
+     * <p>The same fault as OPEN_ISSUES #40 and #54, in the one thing the per-network bus election
+     * does not cover: the conversion timer was a counter on the <em>block entity</em>, so every
+     * Workbay standing on the record ran one of its own over the same banked goods. Three front
+     * doors on one factory made three Levy every two hundred ticks while the batch bar promised
+     * one — value created out of the number of blocks the player happened to have placed.
+     *
+     * <p>No links and no skim: the skim is what banks goods and it is already elected. The goods
+     * are banked directly and the two blocks are left to convert them, which is the narrowest rig
+     * that can tell one timer from two.
+     *
+     * <p><b>Two batches, not one</b>, and that is the whole design of the test. One banked batch
+     * makes one Levy however many timers are running, because the first conversion empties it —
+     * written that way first, it passed against the broken build. The fault is a <em>rate</em>, so
+     * the rig has to be able to see a rate: two batches banked convert in one window if there are
+     * two timers and in two windows if there is one.
+     */
+    @GameTest(timeoutTicks = 900)
+    @TestHolder(description = "Two Workbays on one network convert one batch into one Levy, not two.")
+    public static void twoWorkbaysOnOneNetworkMakeOneLevyPerBatch(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos firstPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos secondPos = helper.absolutePos(new BlockPos(4, 1, 4));
+
+            WorkbayBlockEntity first = placeWorkbay(helper, firstPos, player);
+            WorkbayMenu menu = menuFor(first, player);
+            int batch = AssayBlock.itemsPerLevy();
+
+            helper.startSequence()
+                .thenIdle(3)
+                .thenExecute(() -> {
+                    rack(menu, player, 0, new ItemStack(WBBlocks.ASSAY.get()));
+                    // The second block, bound to the first's record the way a re-placed item is.
+                    // This is what the deployed cap refuses for a new placement and says nothing
+                    // about for the ones already down, which is why it is reachable at all.
+                    ItemStack bound = new ItemStack(WBBlocks.WORKBAY.get());
+                    bound.set(WBDataComponents.BINDING.get(), WorkbayBinding.of(
+                        first.record().orElseThrow(), 1, 0, 0));
+                    level.setBlock(secondPos, WBBlocks.WORKBAY.get().defaultBlockState(),
+                        Block.UPDATE_ALL);
+                    WBBlocks.WORKBAY.get().setPlacedBy(level, secondPos,
+                        level.getBlockState(secondPos), player, bound);
+                    WorkbayBlockEntity second =
+                        (WorkbayBlockEntity) level.getBlockEntity(secondPos);
+                    helper.assertValueEqual(second.record().orElseThrow().id(),
+                        first.record().orElseThrow().id(),
+                        "the second Workbay's network; both must stand on one record or this "
+                            + "test cannot tell one timer from two");
+
+                    // Two batches banked, and nothing feeding more in.
+                    WorkbayRecord record = first.record().orElseThrow();
+                    RoomRegistry.get(level.getServer()).put(record.withAssay(
+                        record.assay().withSkimmed(batch * 2)));
+                })
+                .thenWaitUntil(() -> {
+                    if (first.record().orElseThrow().assay().levy() < 1) {
+                        throw new GameTestAssertException("the first batch has not converted yet");
+                    }
+                })
+                .thenExecute(() -> {
+                    // The tick the first Levy lands. A second timer running beside the first
+                    // converts the second batch on this same tick, which is the two hundred ticks
+                    // the batch bar promised being spent twice.
+                    WorkbayRecord.Assay assay = first.record().orElseThrow().assay();
+                    helper.assertValueEqual(assay.levy(), 1,
+                        "Levy on the tick the first batch converted, with two Workbays standing "
+                            + "on the network and two batches banked");
+                    helper.assertValueEqual(assay.skimmed(), batch, "goods still banked");
+                })
+                // The second batch's own window, so the test also says the queue keeps moving
+                // rather than that it stopped.
+                .thenIdle(AssayBlock.convertTicks() + 40)
+                .thenExecute(() -> {
+                    WorkbayRecord.Assay assay = first.record().orElseThrow().assay();
+                    helper.assertValueEqual(assay.levy(), 2, "Levy after the second window");
+                    helper.assertValueEqual(assay.skimmed(), 0, "goods left over both batches");
+                })
+                .thenExecute(() -> {
+                    level.setBlock(firstPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+                    level.setBlock(secondPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+                })
+                .thenSucceed();
+        });
+    }
+
+    /**
+     * <b>A batch half converted survives the Workbay going away.</b>
+     *
+     * <p>The timer was a field on the block entity and {@code saveAdditional} never wrote it, so
+     * every chunk unload threw away up to two hundred ticks of the Assay's work and started the
+     * batch again — invisible, because nothing on any screen counts those ticks. Breaking the
+     * block and putting an identically bound one back is the same event this rig can stage: the
+     * block entity is destroyed and a new one binds to the same record.
+     *
+     * <p>The claim is about <em>time</em>, so it is measured rather than read: the batch is
+     * started, the block is replaced three quarters of the way through, and the Levy must arrive
+     * inside what is left of the original window. A timer that starts again misses it.
+     */
+    @GameTest(timeoutTicks = 900)
+    @TestHolder(description = "A batch half converted keeps its progress when the Workbay goes away.")
+    public static void aHalfConvertedBatchSurvivesTheWorkbayGoingAway(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos pos = helper.absolutePos(new BlockPos(0, 1, 0));
+            WorkbayBlockEntity first = placeWorkbay(helper, pos, player);
+            WorkbayMenu menu = menuFor(first, player);
+            int batch = AssayBlock.itemsPerLevy();
+            int convert = AssayBlock.convertTicks();
+            java.util.UUID[] network = new java.util.UUID[1];
+
+            helper.startSequence()
+                .thenIdle(3)
+                .thenExecute(() -> {
+                    rack(menu, player, 0, new ItemStack(WBBlocks.ASSAY.get()));
+                    WorkbayRecord record = first.record().orElseThrow();
+                    network[0] = record.id();
+                    RoomRegistry.get(level.getServer()).put(record.withAssay(
+                        record.assay().withSkimmed(batch)));
+                })
+                .thenIdle(convert * 3 / 4)
+                .thenExecute(() -> {
+                    RoomRegistry registry = RoomRegistry.get(level.getServer());
+                    helper.assertValueEqual(registry.byId(network[0]).orElseThrow().assay().levy(),
+                        0, "Levy before the Workbay was taken away");
+                    ItemStack bound = new ItemStack(WBBlocks.WORKBAY.get());
+                    bound.set(WBDataComponents.BINDING.get(), WorkbayBinding.of(
+                        registry.byId(network[0]).orElseThrow(), 1, 0, 0));
+                    level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+                    level.setBlock(pos, WBBlocks.WORKBAY.get().defaultBlockState(),
+                        Block.UPDATE_ALL);
+                    WBBlocks.WORKBAY.get().setPlacedBy(level, pos, level.getBlockState(pos),
+                        player, bound);
+                })
+                // What is left of the original window, plus the wheel's slack.
+                .thenIdle(convert / 4 + 20)
+                .thenExecute(() -> {
+                    WorkbayRecord.Assay assay =
+                        RoomRegistry.get(level.getServer()).byId(network[0]).orElseThrow().assay();
+                    helper.assertValueEqual(assay.levy(), 1,
+                        "Levy " + (convert + 20) + " ticks after the batch started, with the "
+                            + "Workbay replaced three quarters of the way through");
+                })
+                .thenExecute(() -> level.setBlock(pos, Blocks.AIR.defaultBlockState(),
                     Block.UPDATE_ALL))
                 .thenSucceed();
         });

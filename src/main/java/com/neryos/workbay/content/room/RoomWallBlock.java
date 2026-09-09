@@ -55,6 +55,38 @@ public class RoomWallBlock extends Block {
         builder.add(COLOUR, PART);
     }
 
+    /**
+     * <b>An Overworld room has no ceiling to look at.</b> SPEC.md §8's last room piece: the walls
+     * and floor already take a sky blue and a grass green, and what was left was the lid.
+     *
+     * <p>The ceiling layer — the coffers and the lamps set into them — is not drawn under
+     * {@link RoomColour#OVERWORLD}, so what is overhead is the sky the client was going to draw
+     * anyway: sun, moon, stars and clouds, on the overworld's own clock. No renderer and no
+     * panorama, which is what this was expected to cost; the game already draws a sky and the only
+     * thing between the player and it was one opaque block.
+     *
+     * <p><b>The block is still there.</b> {@code INVISIBLE} is what the renderer is told, not what
+     * the world is: it is solid, it collides, it occludes, it refuses to be broken, and the
+     * Backshop has {@code has_skylight: false} whatever is drawn over it — so nothing gains a
+     * single tick of daylight, a solar panel racked under it least of all.
+     *
+     * <p>The lamps go with it. A fixture hanging in the sky is the one thing that would say the
+     * sky is a picture, and the room does not go dark without them: the dimension's ambient light
+     * is 1.0 and the shell emits block light on its own.
+     */
+    private static boolean openToTheSky(BlockState state) {
+        RoomPart part = state.getValue(PART);
+        return state.getValue(COLOUR) == RoomColour.OVERWORLD
+            && (part == RoomPart.CEILING || part == RoomPart.LIGHT);
+    }
+
+    @Override
+    protected net.minecraft.world.level.block.RenderShape getRenderShape(BlockState state) {
+        return openToTheSky(state)
+            ? net.minecraft.world.level.block.RenderShape.INVISIBLE
+            : net.minecraft.world.level.block.RenderShape.MODEL;
+    }
+
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
         Player player, BlockHitResult hit) {
