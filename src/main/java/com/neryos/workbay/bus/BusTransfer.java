@@ -102,44 +102,6 @@ public final class BusTransfer {
         return 0;
     }
 
-    /**
-     * Takes up to {@code budget} matching items out of a handler and <b>destroys them</b>. The
-     * Assay's skim (SPEC.md §3): the goods do not go anywhere, they become Levy, and there is no
-     * buffer for them to sit in because the Assay has no faces for one to be reachable through.
-     *
-     * <p>Taken from the <em>source</em> before the move rather than deducted from what arrives, so
-     * a partly-refused insert can never leave the tax having been charged twice.
-     *
-     * @return how many items were actually taken
-     */
-    /**
-     * What one skim took: how many items left the source, and what they were worth.
-     *
-     * <p>Two numbers because they answer different questions and stopped being the same one. The
-     * <b>count</b> is what the fractional carry is settled against — the dial is a percentage of
-     * the goods a link carries, and goods are counted in items. The <b>value</b> is what the Assay
-     * banks, and OPEN_ISSUES #34 is that it used to be the count: a Levy was sixty-four of
-     * anything, diamonds included.
-     */
-    public record Taken(int count, int value) {
-        public static final Taken NOTHING = new Taken(0, 0);
-    }
-
-    public static Taken take(IItemHandler from, int budget,
-        java.util.function.Predicate<ItemStack> allowed) {
-        int taken = 0;
-        int worth = 0;
-        for (int slot = 0; slot < from.getSlots() && taken < budget; slot++) {
-            ItemStack sample = from.extractItem(slot, budget - taken, true);
-            if (sample.isEmpty() || !allowed.test(sample)) {
-                continue;
-            }
-            ItemStack got = from.extractItem(slot, sample.getCount(), false);
-            taken += got.getCount();
-            worth += com.neryos.workbay.init.WBDataMaps.levyValue(got);
-        }
-        return new Taken(taken, worth);
-    }
 
     /**
      * Moves up to {@code budget} millibuckets. Same shape as the item path, for the same reason:

@@ -32,7 +32,7 @@ public record WorkbayBinding(
     int buses,
     /**
      * What was in the block's buffer when it was broken. <b>Everything else a Workbay holds
-     * survives being picked up</b> — the bays, the links, the upgrades, the Levy — because they
+     * survives being picked up</b> — the bays, the links, the upgrades — because they
      * live on the record and the record outlives the block. The buffer does not: it is the one
      * number that lives in the block entity, and the block entity is what the pickaxe destroys.
      * A player who fed a generator into a Workbay and then moved it lost every FE of it, silently,

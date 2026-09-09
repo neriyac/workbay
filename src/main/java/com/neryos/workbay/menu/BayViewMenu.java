@@ -448,7 +448,7 @@ public class BayViewMenu extends AbstractContainerMenu {
      *
      * <p><b>Whatever this reserves, the line must fit in.</b> It was once twenty pixels for a
      * sentence that wraps to four lines, and it ran straight through the Inventory label and the
-     * player's own top row — seen in {@code runClient}, the same class of fault as the skim chip
+     * player's own top row — seen in {@code runClient}, the same class of fault
      * that overran the link name. The sentence now lives in a tooltip and one line is drawn.
      */
     public static int inventoryY(int machineHeight, int gauges, boolean tanks) {

@@ -345,9 +345,9 @@ public class WorkbayBlockEntity extends BlockEntity {
             }
             // One runner per network per tick. Links live on the record, not on the block, so every
             // Workbay standing on a record used to run every link on it -- two blocks moved a
-            // rate-1 link twice a second and the Assay skimmed twice, which is a number the panel
-            // prints being wrong by however many Workbays happen to be loaded. OPEN_ISSUES #40 and
-            // #54, and the reason a printed rate can be a promise at all.
+            // rate-1 link twice a second, which is the panel's printed rate being wrong by however
+            // many Workbays happen to be loaded. OPEN_ISSUES #40, and the reason a printed rate can
+            // be a promise at all.
             if (!com.neryos.workbay.world.RoomRegistry.get(server.getServer())
                 .takeBusTurn(record.id(), server.getGameTime())) {
                 return;
@@ -356,8 +356,6 @@ public class WorkbayBlockEntity extends BlockEntity {
                 Math.floorMod(pos.hashCode(), BusRunner.WHEEL));
         });
 
-        profiler.popPush("assay");
-        workbay.settleAssay(server);
         profiler.popPush("state");
         workbay.refreshLitState(server, pos, state);
         // After the lit state, not before: refreshLitState may have replaced the block, and a
@@ -465,53 +463,6 @@ public class WorkbayBlockEntity extends BlockEntity {
         };
     }
 
-    /**
-     * Banks what the skim took and turns full batches into Levy. SPEC.md §3.
-     *
-     * <p>Here rather than in the runner because this is a write to the record, and the runner is
-     * mid-iteration over a list that record owns. One write per tick, and only when something
-     * actually changed — a Workbay with the dial at zero never touches the registry.
-     *
-     * <p>The conversion timer is a <b>start time on the record</b>, not a counter on this block.
-     * As a counter it was thrown away by every chunk unload, and every Workbay standing on the
-     * record ran one of its own over the same banked goods — so a network with three front doors
-     * made three Levy per batch and the batch bar promised one. A start time is read the same way
-     * by all of them, so the second and third Workbay find the batch already under way and add
-     * nothing, and it survives the reload it used to be lost by. Two registry writes per Levy
-     * rather than two hundred, because only the two edges are a change.
-     */
-    private void settleAssay(ServerLevel server) {
-        int skimmed = runner.takeSkim();
-        WorkbayRecord record = record().orElse(null);
-        if (record == null) {
-            return;
-        }
-        WorkbayRecord.Assay assay = record.assay();
-        int held = assay.skimmed() + skimmed;
-        int levy = assay.levy();
-        int batch = com.neryos.workbay.content.assay.AssayBlock.itemsPerLevy();
-        long now = server.getServer().overworld().getGameTime();
-        long since = assay.since();
-        if (held < batch || !com.neryos.workbay.content.assay.AssayBlock.rackedIn(record)) {
-            // Nothing to work on. The batch that starts next is a fresh 200 ticks of work, which
-            // is what "ticks of work rather than a delay" meant when this was a counter.
-            since = 0;
-        } else if (since <= 0 || since > now) {
-            // A world restored from a backup has a game time behind what was saved, which would
-            // otherwise be a batch that never finishes.
-            since = now;
-        } else if (now - since >= com.neryos.workbay.content.assay.AssayBlock.convertTicks()) {
-            since = 0;
-            held -= batch;
-            levy++;
-        }
-        if (held == assay.skimmed() && levy == assay.levy() && since == assay.since()) {
-            return;
-        }
-        RoomRegistry.get(server.getServer())
-            .put(record.withAssay(assay.withSkimmed(held).withLevy(levy).withSince(since)));
-        setChanged();
-    }
 
     /**
      * SPEC.md §12's mirroring: <b>the bay column is loaded exactly while the Workbay's own chunk

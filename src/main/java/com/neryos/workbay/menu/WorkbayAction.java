@@ -79,8 +79,13 @@ public enum WorkbayAction {
     SET_LINK_NAME,
     /** Cycles the selected bay's {@link com.neryos.workbay.world.RedstoneMode}. */
     CYCLE_REDSTONE,
-    /** Steps the Assay's skim rate up by five, or down by five on a right-click. SPEC.md §3. */
-    SET_SKIM,
+    /**
+     * <b>Dead, and kept.</b> It stepped the Assay's skim rate; the Assay and the Levy it banked
+     * are gone. An action travels as its <em>ordinal</em>, so removing this one would silently
+     * rename every action after it on the wire -- the same reason every new action is appended at
+     * the end of this enum. The slot stays and the server does nothing with it.
+     */
+    UNUSED_WAS_SET_SKIM,
     /**
      * Opens Bay View on the selected bay (SPEC.md §5). A second menu rather than a page of this
      * one: it is the only screen in the mod with real slots, and this menu deliberately has none.
@@ -107,7 +112,7 @@ public enum WorkbayAction {
      */
     CYCLE_ROOM_BIOME,
     /**
-     * Repaints room {@code arg}'s shell. A right-click steps backwards, the way {@link #SET_SKIM}
+     * Repaints room {@code arg}'s shell. A right-click steps backwards, the way every stepped
      * does: ten colours is five clicks either way instead of nine one way.
      */
     CYCLE_ROOM_COLOUR,

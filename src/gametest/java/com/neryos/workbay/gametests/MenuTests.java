@@ -867,26 +867,12 @@ public class MenuTests {
             helper.assertValueEqual(workbay.record().orElseThrow().upgrades().multichannel(), 0,
                 "Multichannel installed before anything is clicked");
 
-            // Holding the item is not enough: an upgrade costs Levy, and the cost rises. A Workbay
-            // that has never run an Assay cannot install anything.
-            menu.act(WorkbayAction.INSTALL_UPGRADE, WorkbayUpgrade.MULTICHANNEL.ordinal(), Optional.empty());
-            helper.assertValueEqual(workbay.record().orElseThrow().upgrades().multichannel(), 0,
-                "Multichannel installed with no Levy banked");
-            helper.assertValueEqual(player.getInventory().countItem(WBItems.MULTICHANNEL.get()), 2,
-                "Multichannel Upgrades left after an install refused for want of Levy");
-
-            int cost = WorkbayUpgrade.MULTICHANNEL.levyCost(0);
-            RoomRegistry registry = RoomRegistry.get(level.getServer());
-            registry.put(workbay.record().orElseThrow()
-                .withAssay(WorkbayRecord.Assay.NONE.withLevy(cost + 3)));
-
+            // One gate per rung: holding the item is the whole of it now. The Levy that used to be
+            // the second gate is gone -- neither its author nor a player could say in a sentence
+            // what it was for -- so an install succeeds the moment the item is in the inventory.
             menu.act(WorkbayAction.INSTALL_UPGRADE, WorkbayUpgrade.MULTICHANNEL.ordinal(), Optional.empty());
             helper.assertValueEqual(workbay.record().orElseThrow().upgrades().multichannel(), 1,
-                "Multichannel installed after one click");
-            helper.assertValueEqual(player.getInventory().countItem(WBItems.MULTICHANNEL.get()), 1,
-                "Multichannel Upgrades left in the inventory");
-            helper.assertValueEqual(workbay.record().orElseThrow().assay().levy(), 3,
-                "Levy left after paying for one Multichannel");
+                "Multichannel installed off the item alone");
 
             // Max is one. A second click must refuse rather than eat the item.
             menu.act(WorkbayAction.INSTALL_UPGRADE, WorkbayUpgrade.MULTICHANNEL.ordinal(), Optional.empty());
@@ -900,7 +886,6 @@ public class MenuTests {
             helper.assertValueEqual(snapshot.upgrades().multichannel(), 1, "the snapshot's count");
             helper.assertValueEqual(snapshot.bayCapacity(), WorkbayRecord.BASE_BAYS,
                 "the snapshot's bay capacity");
-            helper.assertValueEqual(snapshot.levy(), 3, "the snapshot's Levy balance");
 
             level.setBlock(workbayPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
             helper.succeed();

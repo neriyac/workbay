@@ -28,7 +28,7 @@ public class WBRecipeProvider extends RecipeProvider {
     protected void buildRecipes(RecipeOutput output) {
         // Two vanilla materials, no ender pearl, two out per craft. SPEC.md §3: the entry is
         // priced to be walked past, not saved up for - the ladder above it is where the cost is,
-        // and that cost is Levy, which only exists once the player is already running the mod.
+        // and the ladder above it is what the upgrades cost.
         // The old recipe was a third of an ender pearl per Shopsteel and the first Workbay wanted
         // twenty-three of them, which is twenty minutes of killing endermen before the dial the
         // mod is actually about.
@@ -74,19 +74,8 @@ public class WBRecipeProvider extends RecipeProvider {
             .save(output);
 
         // The mod's only machine, and the first thing a player wants after the Workbay itself -
-        // nothing earns a single Levy until it is racked. So it is priced like the Workbay, not
-        // like an upgrade: five Shopsteel and the diamond, no Housing.
-        ShapedRecipeBuilder.shaped(RecipeCategory.MISC, WBBlocks.ASSAY.get())
-            .pattern("SDS")
-            .pattern("SSS")
-            .define('S', WBItems.SHOPSTEEL.get())
-            .define('D', Items.DIAMOND)
-            .unlockedBy("has_shopsteel", has(WBItems.SHOPSTEEL.get()))
-            .save(output);
-
-        // The upgrade ladder. Materials here, Levy at install: SPEC.md §1 says the Levy cost
+        // The upgrade ladder.
         // *rises* along each line, and a recipe costs the same the tenth time as the first. So the
-        // recipe is what the plate is made of and WorkbayUpgrade#levyCost is what it costs to fit.
         upgrade(output, WBItems.EXPANSION_PLATE.get(), Items.IRON_INGOT);
         upgrade(output, WBItems.RESONATOR.get(), Items.ENDER_EYE);
         upgrade(output, WBItems.MULTICHANNEL.get(), Items.AMETHYST_SHARD);

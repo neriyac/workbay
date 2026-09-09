@@ -19,14 +19,17 @@ import java.util.Set;
  * looks like, and it has to keep working exactly as it did before anyone opened the screen —
  * a machine that stops moving items because the player looked at it is the worst outcome here.
  */
-public record FaceConfig(int items, int fluids, int energy) {
+public record FaceConfig(int items, int fluids, int energy, int chemicals) {
 
-    public static final FaceConfig NONE = new FaceConfig(0, 0, 0);
+    public static final FaceConfig NONE = new FaceConfig(0, 0, 0, 0);
 
     public static final Codec<FaceConfig> CODEC = RecordCodecBuilder.create(i -> i.group(
         Codec.INT.optionalFieldOf("Items", 0).forGetter(FaceConfig::items),
         Codec.INT.optionalFieldOf("Fluids", 0).forGetter(FaceConfig::fluids),
-        Codec.INT.optionalFieldOf("Energy", 0).forGetter(FaceConfig::energy)
+        Codec.INT.optionalFieldOf("Energy", 0).forGetter(FaceConfig::energy),
+        // Optional and defaulting to zero, which is "any face" -- so a bay saved before chemicals
+        // had a row reads back as one that was never configured, which is what it was.
+        Codec.INT.optionalFieldOf("Chemicals", 0).forGetter(FaceConfig::chemicals)
     ).apply(i, FaceConfig::new));
 
     /** What one face does for one resource. Grey, green, blue on the cube, in this order. */
@@ -48,12 +51,10 @@ public record FaceConfig(int items, int fluids, int energy) {
         int updated = (packed(resource) & ~(0b11 << shift))
             | (role(resource, face).step(back).ordinal() << shift);
         return switch (resource) {
-            case ITEM -> new FaceConfig(updated, fluids, energy);
-            case FLUID -> new FaceConfig(items, updated, energy);
-            case ENERGY -> new FaceConfig(items, fluids, updated);
-            // Nothing to cycle: chemicals have no face row on the cube, so this is unreachable
-            // from the screen and returns the config it was given rather than inventing a field.
-            case CHEMICAL -> this;
+            case ITEM -> new FaceConfig(updated, fluids, energy, chemicals);
+            case FLUID -> new FaceConfig(items, updated, energy, chemicals);
+            case ENERGY -> new FaceConfig(items, fluids, updated, chemicals);
+            case CHEMICAL -> new FaceConfig(items, fluids, energy, updated);
         };
     }
 
@@ -80,16 +81,20 @@ public record FaceConfig(int items, int fluids, int energy) {
     }
 
     /**
-     * The whole config in 36 bits — twelve per resource, two per face. Lets copy-and-paste ride the
+     * The whole config in 48 bits — twelve per resource, two per face. Lets copy-and-paste ride the
      * one action packet every other button uses instead of earning a payload type of its own.
+     *
+     * <p>Thirty-six until chemicals got a row of their own. A long has sixty-four, so the fourth
+     * resource cost nothing and a fifth would still fit.
      */
     public long bits() {
-        return (items & 0xFFFL) | ((fluids & 0xFFFL) << 12) | ((energy & 0xFFFL) << 24);
+        return (items & 0xFFFL) | ((fluids & 0xFFFL) << 12) | ((energy & 0xFFFL) << 24)
+            | ((chemicals & 0xFFFL) << 36);
     }
 
     public static FaceConfig fromBits(long bits) {
         return new FaceConfig((int) (bits & 0xFFF), (int) ((bits >> 12) & 0xFFF),
-            (int) ((bits >> 24) & 0xFFF));
+            (int) ((bits >> 24) & 0xFFF), (int) ((bits >> 36) & 0xFFF));
     }
 
     private int packed(BusConfig.Resource resource) {
@@ -99,7 +104,12 @@ public record FaceConfig(int items, int fluids, int energy) {
             case ENERGY -> energy;
             // No face config for chemicals, and deliberately none: zero is "any face", and which
             // face a Mekanism machine offers gas on is its own side config's answer, not ours.
-            case CHEMICAL -> 0;
+            // <b>A row of its own now.</b> It was zero -- "any face" -- on the argument that which
+            // face a Mekanism machine offers gas on is its own side config's answer and not ours.
+            // The same is true of its items and its fluids, and those have had a row since the
+            // cube existed: the row is not us second-guessing the machine, it is the player saying
+            // which of the faces it offers this link may use. Found by Neriya, on the cube.
+            case CHEMICAL -> chemicals;
         };
     }
 }

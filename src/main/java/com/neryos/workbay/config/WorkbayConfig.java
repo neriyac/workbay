@@ -10,7 +10,7 @@ import org.apache.commons.lang3.tuple.Pair;
  *
  * <p>Two audiences. A <b>datapack</b> is what a modpack ships: versioned with the pack, loaded per
  * world, and the place for anything with <em>entries</em> — what a Workbay costs
- * ({@code data/workbay/recipe/}), what feeds the Levy ({@code #workbay:levy_input}), and what may
+ * ({@code data/workbay/recipe/}), and what may
  * be hosted (SPEC.md §11's tags). All three already exist and are already the only place those
  * answers live, so a pack carrying a mod we have never seen fixes a bad interaction there without
  * waiting for us. <b>Config</b> is what one host tunes for one server: switches, caps, and the
@@ -22,24 +22,6 @@ import org.apache.commons.lang3.tuple.Pair;
  * already give it, while costing a reload listener, a sync packet, and a second place the same
  * ladder can be written down and disagree with itself. SPEC.md §0 settled "everything else is a
  * tag or a recipe" against <em>a config section per subsystem</em>; the ladder is the one case
- * §3 and {@link com.neryos.workbay.content.workbay.WorkbayUpgrade#levyCost} had already recorded
- * that a recipe cannot express, because a recipe costs the same the tenth time as the first.
- *
- * <p>The one number that <em>would</em> genuinely be data is what a single item is worth to the
- * Levy — iron one, diamond eight — rather than sixty-four of anything. Nobody has asked for it,
- * so it is written down (OPEN_ISSUES) rather than built.
- *
- * <p><b>The mixin switch stays in its own file</b> and is deliberately not absorbed here:
- * {@link com.neryos.workbay.remote.RemoteConfig} is read before class transformation, which is
- * earlier than any {@code ModConfigSpec} exists. Moving it here would turn "this mod does not
- * patch {@code Level}" into "this mod patches it and returns early", which is a weaker promise.
- *
- * <p>All of the gameplay ones are {@code SERVER}: the only type synced to clients and the only one
- * overridable per-world under {@code saves/<world>/serverconfig}. Synced matters — the upgrades
- * screen prices the ladder on the client through
- * {@link com.neryos.workbay.content.workbay.WorkbayUpgrade#levyCost}. Never {@code STARTUP}: the
- * Anchor is always registered and only its <em>behaviour</em> is gated, because gating
- * registration desyncs registries between a server and its clients.
  */
 public class WorkbayConfig {
 
@@ -74,25 +56,7 @@ public class WorkbayConfig {
         public final ModConfigSpec.IntValue impellerStep;
         public final ModConfigSpec.IntValue maxImpellers;
 
-        public final ModConfigSpec.IntValue itemsPerLevy;
-        public final ModConfigSpec.IntValue levyConvertTicks;
-        public final ModConfigSpec.IntValue maxSkimPercent;
-        public final ModConfigSpec.IntValue skimStepPercent;
 
-        public final ModConfigSpec.IntValue expansionPlateCost;
-        public final ModConfigSpec.IntValue expansionPlateCostStep;
-        public final ModConfigSpec.IntValue resonatorCost;
-        public final ModConfigSpec.IntValue resonatorCostStep;
-        public final ModConfigSpec.IntValue multichannelCost;
-        public final ModConfigSpec.IntValue multichannelCostStep;
-        public final ModConfigSpec.IntValue impellerCost;
-        public final ModConfigSpec.IntValue impellerCostStep;
-        public final ModConfigSpec.IntValue roomFrameCost;
-        public final ModConfigSpec.IntValue wideRoomFrameCost;
-        public final ModConfigSpec.IntValue vastRoomFrameCost;
-        public final ModConfigSpec.IntValue annexPlateCost;
-        public final ModConfigSpec.IntValue annexPlateCostStep;
-        public final ModConfigSpec.IntValue anchorCost;
 
         Server(ModConfigSpec.Builder builder) {
             allowAnchors = builder
@@ -186,83 +150,6 @@ public class WorkbayConfig {
 
             builder.pop();
 
-            // ------------------------------------------------------------------ the Levy
-            builder.push("levy");
-
-            itemsPerLevy = builder
-                .comment("How many skimmed items make one Levy. Every item counts the same; what",
-                    "goes into the pot at all is #workbay:levy_input, which is a tag and belongs",
-                    "to your datapack rather than to this file.")
-                .defineInRange("itemsPerLevy", 64, 1, 4096);
-
-            levyConvertTicks = builder
-                .comment("How long a racked Assay takes to turn one full batch into one Levy.")
-                .defineInRange("levyConvertTicks", 200, 1, 24000);
-
-            maxSkimPercent = builder
-                .comment("The top of the skim dial. The mod's whole income is behind this number",
-                    "and what it costs is throughput the player gave up, so it is the first thing",
-                    "to move when the upgrade ladder feels too long or too short.")
-                .defineInRange("maxSkimPercent", 25, 0, 100);
-
-            skimStepPercent = builder
-                .comment("How far one click of the skim dial moves it.")
-                .defineInRange("skimStepPercent", 5, 1, 100);
-
-            builder.pop();
-
-            // ------------------------------------------------------------- the upgrade ladder
-            //
-            // Two numbers per upgrade, because SPEC.md section 1 asks for a *rising* cost and a
-            // recipe cannot express one. Written out one by one rather than looped over
-            // WorkbayUpgrade.values(): this class is built in a static initialiser and that enum
-            // reads this class back, so iterating it here is a class-init cycle waiting for
-            // whoever reorders two lines.
-            builder.comment("What installing the Nth of an upgrade costs in Levy: cost + step * N.",
-                    "The crafting half of the same ladder is in your datapack",
-                    "(data/workbay/recipe); this is the half a recipe cannot say, because a recipe",
-                    "costs the same the tenth time as the first.")
-                .push("upgradeCosts");
-
-            // The whole ladder, in the order a player can first afford a rung:
-            //   2 -> 40 -> 60 -> 80 -> 100 -> 150 -> 200 -> 200 -> 400 -> 900
-            // The first Expansion Plate stays at 2 on purpose and is the one cheap thing in the
-            // mod: SPEC.md 1 says the base Workbay's two bays are a near-deadlock, because the
-            // Assay occupies one and exposes no faces, so bay three is what makes the loop run at
-            // all. Everything above it is a decision, and the step is what makes the seventh bay
-            // one -- 2, 12, 22, 32, 42, 52, 62, which is 224 for the full rack.
-            expansionPlateCost = builder.defineInRange("expansionPlateCost", 2, 0, 100_000);
-            expansionPlateCostStep = builder.defineInRange("expansionPlateCostStep", 10, 0, 100_000);
-            // Cross-dimension reach. Priced above Multichannel because it is the bigger capability
-            // and, until this session, the only one that did nothing at all when installed.
-            resonatorCost = builder.defineInRange("resonatorCost", 80, 0, 100_000);
-            resonatorCostStep = builder.defineInRange("resonatorCostStep", 0, 0, 100_000);
-            multichannelCost = builder.defineInRange("multichannelCost", 60, 0, 100_000);
-            multichannelCostStep = builder.defineInRange("multichannelCostStep", 0, 0, 100_000);
-            // Throughput is the strongest thing on the ladder -- two of them is sixteen times what
-            // a link is born with -- and at 12 and 24 it was also the cheapest after a bay. 40 and
-            // 100 puts the second one level with a room.
-            impellerCost = builder.defineInRange("impellerCost", 40, 0, 100_000);
-            impellerCostStep = builder.defineInRange("impellerCostStep", 60, 0, 100_000);
-            // No step on the Frames: only one is ever installed, the highest wins, and a step on a
-            // one-off is a knob that can never be read. The steepness is in the gap between them.
-            // A room is a private dimension, and it is priced like one. At 40 the first Frame was
-            // the cheapest thing on the whole ladder -- less than an Impeller -- which made the
-            // headline feature of the mod the first thing a player bought and the last thing they
-            // had to work for. 150 is between an Expansion Plate and the Anchor: a real project,
-            // and still the rung everything else on this page is built on.
-            roomFrameCost = builder.defineInRange("roomFrameCost", 150, 0, 100_000);
-            wideRoomFrameCost = builder.defineInRange("wideRoomFrameCost", 400, 0, 100_000);
-            vastRoomFrameCost = builder.defineInRange("vastRoomFrameCost", 900, 0, 100_000);
-            // And a second room is not a discount on the first: 200, 350, 500, every one of them
-            // dearer than the Frame that granted the first. The Annex is the rung whose gate is
-            // the Levy and not the material -- its core stays a copper ingot precisely because it
-            // is craftable again and again, and what makes the fourth room hard is the price.
-            annexPlateCost = builder.defineInRange("annexPlateCost", 200, 0, 100_000);
-            annexPlateCostStep = builder.defineInRange("annexPlateCostStep", 150, 0, 100_000);
-            anchorCost = builder.defineInRange("anchorCost", 200, 0, 100_000);
-
-            builder.pop();
         }
     }
 

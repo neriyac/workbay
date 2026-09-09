@@ -36,7 +36,6 @@ public class WBItemModelProvider extends ItemModelProvider {
         // box -- in the inventory, in JEI and on the Pair button. Its own 16x16 sprite fills the
         // icon and fixes all three; make-art.py's connector_item draws it.
         flatItem(WBBlocks.CONNECTOR.getId().getPath());
-        blockItem(WBBlocks.ASSAY.getId().getPath());
     }
 
     private void blockItem(String name) {

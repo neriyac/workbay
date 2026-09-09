@@ -33,7 +33,6 @@ public class WBLootTableProvider extends BlockLootSubProvider {
                 .apply(CopyComponentsFunction.copyComponents(CopyComponentsFunction.Source.BLOCK_ENTITY)
                     .include(WBDataComponents.BINDING.get()))))));
 
-        dropSelf(WBBlocks.ASSAY.get());
 
         // A Connector keeps its pairing when broken, so re-placing it restores the link rather
         // than leaving the player to re-pair a block they never unpaired.

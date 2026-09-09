@@ -38,8 +38,8 @@ import java.util.UUID;
  *
  * <p><b>What happens to work in progress: it pauses, and loses nothing.</b> Nothing this mod moves
  * is ever in flight between ticks — {@link com.neryos.workbay.bus.BusRunner} takes from the source
- * and gives to the sink inside one tick, the skim it took is banked in the same tick by
- * {@code settleAssay}, and the Workbay's FE buffer is saved. So a released chunk is a chain
+ * and gives to the sink inside one tick, and the Workbay's FE buffer is saved. So a released
+ * chunk is a chain
  * standing still, not a chain dropping a batch: every hosted machine keeps its own progress the way
  * any unloaded block entity does, and the counts on both ends of every link are the counts that
  * were there at logout.

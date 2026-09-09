@@ -217,24 +217,18 @@ class RoomsPage extends WorkbayPage {
             int py = y(LADDER_Y + i * ROW_PITCH);
             int installed = snap.upgrades().installed(upgrade);
             boolean maxed = installed >= upgrade.max();
-            int cost = upgrade.levyCost(installed);
-            boolean affordable = snap.levy() >= cost;
-            boolean canInstall = !maxed && affordable;
+            boolean canInstall = !maxed;
 
             Draw.well(g, px, py, ROW_W, ROW_H);
             g.renderItem(new ItemStack(upgrade.item()), px + 2, py + 1);
 
             String key = "upgrade." + upgrade.getSerializedName();
-            // A name is never faint -- see UpgradesPage. What you can afford is the price's job.
+            // A name is never faint -- see UpgradesPage.
             text(g, WorkbayScreen.gui(key), px + NAME_X, py + TEXT_Y, NAME_W, Draw.TEXT);
             text(g, WorkbayScreen.gui(key + ".desc"), px + DESC_X, py + TEXT_Y, DESC_W,
                 Draw.TEXT_FAINT);
             textRight(g, installed + " / " + upgrade.max(), px + COUNT_RIGHT, py + TEXT_Y, COUNT_W,
                 maxed ? Draw.GREEN : Draw.TEXT_DIM);
-            // The price is on the row and never only in a tooltip: it is the thing being decided.
-            textRight(g, maxed ? "" : WorkbayScreen.gui("upgrades.levy", cost).getString(),
-                px + PRICE_RIGHT, py + TEXT_Y, PRICE_W,
-                maxed ? Draw.TEXT_FAINT : affordable ? Draw.GREEN : Draw.RED);
 
             int addX = px + ADD_X;
             boolean hover = canInstall && screen.hovered(addX, py, BTN, BTN, mouseX, mouseY);
@@ -242,19 +236,13 @@ class RoomsPage extends WorkbayPage {
             WBIcons.draw(g, WBIcons.PLUS, addX + 3, py + 3,
                 canInstall ? Draw.TEXT : Draw.TEXT_FAINT);
             int ordinal = upgrade.ordinal();
-            // The same three tooltip shapes UPGRADES uses, for the same reason: a maxed row has
-            // nothing to price and an unaffordable one should not say the price twice.
             screen.hit(addX, py, BTN, BTN,
                 canInstall ? () -> screen.send(WorkbayAction.INSTALL_UPGRADE, ordinal) : () -> { },
                 maxed ? new Component[] {
                     WorkbayScreen.gui(key), WorkbayScreen.gui("upgrades.maxed") }
-                    : affordable ? new Component[] {
-                        WorkbayScreen.gui(key),
-                        WorkbayScreen.gui("upgrades.add", WorkbayScreen.gui(key)),
-                        WorkbayScreen.gui("upgrades.cost", cost) }
                     : new Component[] {
-                        WorkbayScreen.gui(key),
-                        WorkbayScreen.gui("upgrades.unaffordable", snap.levy(), cost) });
+                        WorkbayScreen.gui(key), WorkbayScreen.gui(key + ".desc"),
+                        WorkbayScreen.gui("upgrades.add", WorkbayScreen.gui(key)) });
         }
     }
 

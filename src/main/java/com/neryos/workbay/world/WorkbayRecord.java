@@ -37,8 +37,7 @@ public record WorkbayRecord(
     List<Bay> bays,
     List<UUID> rooms,
     List<com.neryos.workbay.bus.BusConfig> buses,
-    int deployedCount,
-    Assay assay) {
+    int deployedCount) {
 
     public static final Codec<WorkbayRecord> CODEC = RecordCodecBuilder.create(i -> i.group(
         UUIDUtil.CODEC.fieldOf("Id").forGetter(WorkbayRecord::id),
@@ -57,42 +56,37 @@ public record WorkbayRecord(
             .forGetter(WorkbayRecord::buses),
         // How many live Workbay blocks are currently bound to this record. Read by placement to
         // decide whether an unbound item may reuse this network or must be refused (SPEC.md §14).
-        Codec.INT.optionalFieldOf("DeployedCount", 0).forGetter(WorkbayRecord::deployedCount),
-        // Nested rather than three more fields on the root: the codec group caps at sixteen and
-        // these three only ever mean anything together. Absent in a record written before the
-        // Assay existed, which reads back as no Levy, nothing skimmed and a rate of zero -- which
-        // is exactly what that Workbay had.
-        Assay.CODEC.optionalFieldOf("Assay", Assay.NONE).forGetter(WorkbayRecord::assay)
+        Codec.INT.optionalFieldOf("DeployedCount", 0).forGetter(WorkbayRecord::deployedCount)
     ).apply(i, WorkbayRecord::new));
 
     public WorkbayRecord withUpgrades(Upgrades newUpgrades) {
         return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, newUpgrades,
-            lastKnownPos, bays, rooms, buses, deployedCount, assay);
+            lastKnownPos, bays, rooms, buses, deployedCount);
     }
 
     public WorkbayRecord withLastKnownPos(GlobalPos pos) {
         return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
-            Optional.of(pos), bays, rooms, buses, deployedCount, assay);
+            Optional.of(pos), bays, rooms, buses, deployedCount);
     }
 
     public WorkbayRecord withLocked(boolean nowLocked) {
         return new WorkbayRecord(id, code, owner, ownerName, nowLocked, bayColumn, upgrades,
-            lastKnownPos, bays, rooms, buses, deployedCount, assay);
+            lastKnownPos, bays, rooms, buses, deployedCount);
     }
 
     public WorkbayRecord withBays(List<Bay> newBays) {
         return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
-            lastKnownPos, List.copyOf(newBays), rooms, buses, deployedCount, assay);
+            lastKnownPos, List.copyOf(newBays), rooms, buses, deployedCount);
     }
 
     public WorkbayRecord withRooms(List<UUID> newRooms) {
         return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
-            lastKnownPos, bays, List.copyOf(newRooms), buses, deployedCount, assay);
+            lastKnownPos, bays, List.copyOf(newRooms), buses, deployedCount);
     }
 
     public WorkbayRecord withBuses(List<com.neryos.workbay.bus.BusConfig> newBuses) {
         return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
-            lastKnownPos, bays, rooms, List.copyOf(newBuses), deployedCount, assay);
+            lastKnownPos, bays, rooms, List.copyOf(newBuses), deployedCount);
     }
 
     /**
@@ -104,76 +98,25 @@ public record WorkbayRecord(
      */
     public WorkbayRecord withDeployedCount(int nowDeployedCount) {
         return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
-            lastKnownPos, bays, rooms, buses, Math.max(0, nowDeployedCount), assay);
+            lastKnownPos, bays, rooms, buses, Math.max(0, nowDeployedCount));
     }
 
-    public WorkbayRecord withAssay(Assay nowAssay) {
-        return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
-            lastKnownPos, bays, rooms, buses, deployedCount, nowAssay);
-    }
 
-    /**
-     * Everything the Assay is holding for this network: Levy banked, tagged items skimmed and not
-     * yet converted, and the rate the player set. SPEC.md §3.
-     *
-     * <p>On the record and not in a block entity, because the Assay has no faces and therefore
-     * nothing physical to hand a Levy item to. It is a balance, and the upgrades screen is where it
-     * is read and spent. That also means it survives exactly as well as bays and upgrades do:
-     * breaking the Workbay does not spend somebody's Levy.
-     *
-     * <p>{@code since} is the game time the batch now converting started, or zero for none, and it
-     * is here for the same reason the balance is. It was a counter on the <b>block entity</b>: not
-     * saved, so every chunk unload threw the 200 ticks away, and one per <em>block</em>, so a
-     * second Workbay on the same network ran a second timer over the same banked goods and the
-     * network made two Levy where the screen promised one. A start time on the record is both
-     * halves at once -- it survives the reload, and every Workbay reading it computes the same
-     * answer, so no election is needed to keep them from double-counting.
-     */
-    public record Assay(int levy, int skimmed, int rate, long since) {
-        public static final Assay NONE = new Assay(0, 0, 0, 0);
-
-        public static final Codec<Assay> CODEC = RecordCodecBuilder.create(i -> i.group(
-            Codec.INT.optionalFieldOf("Levy", 0).forGetter(Assay::levy),
-            Codec.INT.optionalFieldOf("Skimmed", 0).forGetter(Assay::skimmed),
-            Codec.INT.optionalFieldOf("Rate", 0).forGetter(Assay::rate),
-            // Absent on every record written before the timer moved here, which reads back as
-            // "not converting" -- and a batch already banked simply starts its 200 ticks again,
-            // which is what used to happen on every chunk unload anyway.
-            Codec.LONG.optionalFieldOf("Since", 0L).forGetter(Assay::since)
-        ).apply(i, Assay::new));
-
-        public Assay withLevy(int nowLevy) {
-            return new Assay(Math.max(0, nowLevy), skimmed, rate, since);
-        }
-
-        public Assay withSkimmed(int nowSkimmed) {
-            return new Assay(levy, Math.max(0, nowSkimmed), rate, since);
-        }
-
-        public Assay withRate(int nowRate) {
-            return new Assay(levy, skimmed, nowRate, since);
-        }
-
-        public Assay withSince(long nowSince) {
-            return new Assay(levy, skimmed, rate, nowSince);
-        }
-    }
 
     /**
      * The base Workbay's bays, before any Expansion Plate. <b>Two, not one.</b>
      *
-     * <p>One is a deadlock. The Assay occupies a bay (SPEC.md §3) and exposes no faces, so a link on
-     * its own bay reaches nothing; Levy is only made by skimming goods moving through a link, so
-     * making any Levy at all needs a second bay with traffic in it. Under the per-block model the
-     * player crafted a second Workbay for that; SPEC.md §14's one-deployed-Workbay-per-network
-     * closed that door and turned a soft ceiling into a hard stop with no way out.
+     * <p>It was two because the Assay ate one of them and a network with a single bay could never
+     * earn the Levy to buy a second. The Assay is gone and the argument with it, and two is still
+     * right for a plainer reason: one bay is a machine in a box, and the mod's whole claim is that
+     * a rack replaces a floor. Two is the smallest number that is a rack.
      */
     public static final int BASE_BAYS = 2;
 
     /**
      * How many bays this Workbay may use: {@link #BASE_BAYS}, plus one per Expansion Plate, capped
-     * by the server's {@code maxBaysPerWorkbay}. The cap is applied here rather than at install time
-     * so lowering it never destroys an Expansion Plate somebody already paid Levy for.
+     * by the server's {@code maxBaysPerWorkbay}. The cap is applied here rather than at install
+     * time so lowering it never destroys an Expansion Plate somebody already spent.
      */
     /**
      * Rooms this network is entitled to: the Room Frame grants the first, each Annex Plate one

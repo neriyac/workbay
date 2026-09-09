@@ -40,7 +40,6 @@ public final class WorkbayGuide {
         return List.of(
             page(WBBlocks.WORKBAY, "workbay", 6),
             page(WBBlocks.CONNECTOR, "connector", 3),
-            page(WBBlocks.ASSAY, "assay", 2),
             page(WBItems.EXPANSION_PLATE, "expansion_plate", 1),
             page(WBItems.ROOM_FRAME, "room_frame", 3),
             page(WBItems.WIDE_ROOM_FRAME, "room_frame", 3),

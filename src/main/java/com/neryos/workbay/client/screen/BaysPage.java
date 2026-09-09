@@ -65,7 +65,7 @@ class BaysPage extends WorkbayPage {
      * "Off-worl..." and "No targe...". The clipped ones still carry the full string in a tooltip,
      * which is why it survived a release: the fault only shows on the row itself.
      *
-     * <p>The arithmetic, the same way "No Assay racked is 76 pixels" was got: every glyph's
+     * <p>The arithmetic: every glyph's
      * advance is its width plus one, so N6 o6 space4 m6 a6 c6 h6 i2 n6 e6. Nothing here is a
      * guess, and the guess is what shipped. Found by Neriya, reading a row. OPEN_ISSUES #58.
      */
@@ -92,8 +92,6 @@ class BaysPage extends WorkbayPage {
     private static final int WELL_Y = 76;
     private static final int WELL_H = 62;
     /** Three type buttons, filling the column exactly: 3 x 24 on a 28 pitch is the well's width. */
-    private static final int TYPE_W = 24;
-    private static final int TYPE_PITCH = 28;
     private static final int CUBE_CX = WELL_X + WELL_W / 2;
     private static final int CUBE_CY = 106;
     private static final int CUBE_SIZE = 30;
@@ -102,8 +100,6 @@ class BaysPage extends WorkbayPage {
     private static final int POWER_X = 246;
     private static final int POWER_W = 58;
 
-    /** The skim readout, between the sort button and the Add button. */
-    private static final int SKIM_W = LIST_W - 46 - 40 - 124;
 
     /** Client-side view state: the list's filter, sort, scroll and which row's gear is open. */
     private enum Filter { THIS_BAY, ALL_BAYS, PROBLEMS }
@@ -206,7 +202,6 @@ class BaysPage extends WorkbayPage {
         columns(g);
         rack(g, mouseX, mouseY);
         machine(g, mouseX, mouseY);
-        levy(g);
         faces(g, mouseX, mouseY);
         links(g, mouseX, mouseY);
     }
@@ -308,7 +303,7 @@ class BaysPage extends WorkbayPage {
         rule(g, x(FACES_X - 8), topY, bottomY);
         // The rack, in a recess of its own, so eight slots read as one thing rather than as eight.
         Draw.well(g, x(RACK_X - 3), y(RACK_Y - 4), slot + 10, 8 * rackPitch + 6);
-        // And the line under the bay's own details, which the Levy readout sat straight on top of.
+        // And the line under the bay's own details.
         g.fill(x(50), y(118), x(FACES_X - 12), y(119), 0x18FFFFFF);
     }
 
@@ -339,6 +334,10 @@ class BaysPage extends WorkbayPage {
             if (!icon.isEmpty()) {
                 // The hosted machine's own item, so a bay is identified at a glance (SPEC.md §4).
                 g.renderItem(icon, px + 4, py + 4);
+            } else if (!locked) {
+                // The same dashes as the big slot, for the same reason: a bay you may fill and a
+                // bay you may not looked identical on a fresh Workbay.
+                Draw.dashed(g, px + 3, py + 3, slot - 6, slot - 6, Draw.TEXT_FAINT);
             }
             if (locked) {
                 // The shared wash, not a bespoke 60% black: at 0x99 the five bays a new network
@@ -418,6 +417,12 @@ class BaysPage extends WorkbayPage {
         }
         boolean empty = bay.hosted().isEmpty();
         if (empty && bay.state() != WorkbaySnapshot.State.LOCKED) {
+            // <b>A dashed rim and a plus.</b> The slot was a plain recess, which everywhere else on
+            // this screen means "a thing lives here" -- so the one square you are meant to click
+            // looked exactly like the eight you are not. Dashes say "a thing goes here" and the
+            // plus says how, which is what the sentence beside it is spelling out.
+            Draw.dashed(g, slotX + 3, slotY + 3, 34, 34, Draw.TEXT_DIM);
+            WBIcons.draw(g, WBIcons.PLUS, slotX + 14, slotY + 14, Draw.TEXT_DIM);
             // The whole insert flow, in the one place it happens.
             screen.hit(slotX, slotY, 40, 40, () -> screen.send(WorkbayAction.RACK),
                 WorkbayScreen.gui("bay.empty"), WorkbayScreen.gui("bay.rack.tip"));
@@ -546,46 +551,6 @@ class BaysPage extends WorkbayPage {
             WorkbayScreen.gui(here ? "button.open.tip" : "button.enter.tip"));
     }
 
-    /**
-     * The Levy readout, in the strip the machine block and the LINKS list leave empty.
-     *
-     * <p>It is on <b>this</b> screen because the alternative is a player changing screens to find
-     * out whether the dial they turned is doing anything, and a player who has to go and look does
-     * not look. The banked total alone cannot answer that - it moves once every 200 ticks - so the
-     * line under it is the batch filling up, which moves while they watch. With nothing coming it
-     * says which nothing it is: no Assay racked, or the dial still at zero.
-     */
-    private void levy(GuiGraphics g) {
-        WorkbaySnapshot snap = snapshot();
-        boolean assay = hasAssay(snap);
-        boolean earning = skimming(snap);
-        int left = x(50);
-        int right = x(FACES_X - 12);
-        int perLevy = com.neryos.workbay.content.assay.AssayBlock.itemsPerLevy();
-
-        text(g, WorkbayScreen.gui("levy", snap.levy()).getString(), left, y(124), 90,
-            earning ? Draw.AMBER : Draw.TEXT_DIM);
-
-        // <b>The second line is whichever of the two is worth having.</b> Earning, it is the batch
-        // as a bar — the banked total moves once every two hundred ticks, so the only thing that
-        // can show a player their dial is doing something *now* is a thing that fills. Not
-        // earning, a bar can never fill, and a trough that is permanently empty is a dead control
-        // sitting where the answer should be; so the line carries the reason instead, at the full
-        // width of the column rather than squeezed to the right of the total.
-        if (earning) {
-            textRight(g, WorkbayScreen.gui("levy.batch", snap.skimmed(), perLevy).getString(),
-                right, y(124), right - left - 96, Draw.TEXT_DIM);
-            Draw.bar(g, left, y(138), right - left, 7, snap.skimmed(), perLevy, Draw.AMBER);
-        } else {
-            text(g, assay ? WorkbayScreen.gui("levy.dial_off")
-                : WorkbayScreen.gui("levy.no_assay"), left, y(138), right - left,
-                Draw.TEXT_FAINT);
-        }
-
-        screen.hit(left - 2, y(120), right - left + 4, 28, () -> { },
-            WorkbayScreen.gui("levy.name", snap.levy()),
-            WorkbayScreen.gui(earning ? "levy.tip" : assay ? "levy.dial_off.tip" : "levy.no_assay.tip"));
-    }
 
     /**
      * Three real sprites, shrunk and stacked, and nothing about them is tinted or redrawn.
@@ -691,17 +656,28 @@ class BaysPage extends WorkbayPage {
         WorkbaySnapshot snap = snapshot();
         WorkbaySnapshot.Bay bay = snap.bay(snap.selectedBay());
 
-        // Three 20x18 type buttons. The block shows one resource type at a time, which is why a
-        // face can take items in and send energy out without the picture contradicting itself.
-        for (int i = 0; i < 3; i++) {
-            BusConfig.Resource resource = BusConfig.Resource.values()[i];
-            int px = x(WELL_X + i * TYPE_PITCH);
+        // One button per resource this install actually has. The block shows one type at a time,
+        // which is why a face can take items in and send energy out without the picture
+        // contradicting itself.
+        //
+        // <b>Three without Mekanism, four with it.</b> It was hardcoded to three, so a chemical
+        // link was the one kind the cube could not be set for -- and the row was there in the
+        // packing all along. The width comes off the column rather than the count coming off the
+        // truth: a fourth button that cannot be reached is worse than a narrower one.
+        java.util.List<BusConfig.Resource> types =
+            java.util.Arrays.stream(BusConfig.Resource.values())
+                .filter(BusConfig.Resource::available).toList();
+        int pitch = WELL_W / types.size();
+        int typeW = pitch - 4;
+        for (int i = 0; i < types.size(); i++) {
+            BusConfig.Resource resource = types.get(i);
+            int px = x(WELL_X + i * pitch);
             int py = y(52);
             boolean active = faceType == resource;
-            boolean hover = screen.hovered(px, py, TYPE_W, 18, mouseX, mouseY);
-            Draw.button(g, px, py, TYPE_W, 18, hover, active);
-            resourceIcon(g, resource, px + (TYPE_W - 12) / 2, py + 3);
-            screen.hit(px, py, TYPE_W, 18, () -> faceType = resource,
+            boolean hover = screen.hovered(px, py, typeW, 18, mouseX, mouseY);
+            Draw.button(g, px, py, typeW, 18, hover, active);
+            resourceIcon(g, resource, px + (typeW - 12) / 2, py + 3);
+            screen.hit(px, py, typeW, 18, () -> faceType = resource,
                 WorkbayScreen.gui("faces." + resource.getSerializedName()),
                 WorkbayScreen.gui("faces.tip"));
         }
@@ -885,36 +861,6 @@ class BaysPage extends WorkbayPage {
             WorkbayScreen.gui("links.sort." + sort.name().toLowerCase(java.util.Locale.ROOT)),
             WorkbayScreen.gui("links.sort.tip"));
 
-        // The skim, directly above the rows it takes from. SPEC.md §3: goods going missing must be
-        // explained where the loss is noticed, and the loss is noticed on these rows.
-        //
-        // <b>And it turns here too.</b> It was read-only, on the argument that the dial belongs
-        // beside the Levy it buys -- but it kept the dial's tooltip, so it promised "Click +5,
-        // right-click -5" and did nothing at all. Two answers to that: a second string saying
-        // where the real dial is, or one line making this the real dial as well. The second is
-        // smaller, needs no wording to keep in sync with the first, and is what the comment above
-        // was already arguing for: the number is read where the goods go missing, so that is
-        // where a player reaches for it. Found by Neriya, clicking it. OPEN_ISSUES #57.
-        boolean assay = hasAssay(snap);
-        // The short form on the line, the sentence in the tooltip: "No Assay racked" is 76 pixels
-        // in a slot 62 wide however the header is packed, so it arrived as "No Ass...".
-        String rate = assay || snap.skimRate() == 0
-            ? WorkbayScreen.gui("skim", snap.skimRate()).getString()
-            : WorkbayScreen.gui("skim.no_assay.short").getString();
-        // Right-aligned against the Add button rather than parked at LIST_X+120. On its fixed x
-        // it sat in the middle of the header with a gap on both sides, belonging to neither the
-        // heading and its two icons on the left nor Add and Pair on the right -- one string
-        // floating in the one row of this screen that is otherwise two tidy groups.
-        int rateW = Math.min(SKIM_W, Draw.width(font, rate));
-        textRight(g, rate, addX - 8, y(linksY + 5), rateW,
-            skimming(snap) ? Draw.AMBER : Draw.TEXT_FAINT);
-        screen.hit(addX - 10 - rateW, y(linksY + 2), rateW + 4, 14,
-            () -> screen.send(WorkbayAction.SET_SKIM),
-            assay || snap.skimRate() == 0
-                ? WorkbayScreen.gui("skim.name", snap.skimRate())
-                : WorkbayScreen.gui("skim.no_assay"),
-            assay || snap.skimRate() == 0
-                ? WorkbayScreen.gui("skim.tip") : WorkbayScreen.gui("skim.no_assay.tip"));
 
         boolean pairHover = screen.hovered(pairX, y(linksY), 46, 18, mouseX, mouseY);
         Draw.button(g, pairX, y(linksY), 46, 18, pairHover, false);
@@ -1067,19 +1013,6 @@ class BaysPage extends WorkbayPage {
         // whole list unreadable at a glance.
         String label = labelOf(link);
 
-        // And what this row is losing, on this row. A tax the player only finds by opening another
-        // screen is the best bug-report generator in the mod (SPEC.md §3). Only item links: fluids
-        // and energy are never skimmed.
-        //
-        // Just the number. "25% skimmed" is sixty pixels on a row that has thirty to spare: drawn
-        // right-aligned it ran back over the bay badge and squeezed the link's own name out
-        // entirely, so the row read "B225% skimmed Chest". Found in play, on the first row the
-        // feature ever drew. The sentence lives in the tooltip, which is where this mod's text
-        // budget is spent anyway (SPEC.md §4).
-        boolean taxed = skimming(snapshot()) && config.resource() == BusConfig.Resource.ITEM;
-        String cut = taxed
-            ? WorkbayScreen.gui("skim.row", snapshot().skimRate()).getString() : "";
-        int cutW = taxed ? Math.min(Draw.width(font, cut), 22) : 0;
         int nameW;
         // What the link is pointed at, as the block itself. A name answers "which one" only if you
         // read it; a chest reads as a chest before you have finished the row. It sits in front of
@@ -1108,15 +1041,8 @@ class BaysPage extends WorkbayPage {
         // <b>The name gets everything that is left, measured rather than written down.</b> It was
         // a fixed fifty-six, so "Connector" -- the name of one of this mod's own two blocks, and
         // the name half these rows carry -- arrived as "Connec...". The status column beside it
-        // was sixty wide for a longest word of "No machine", which measures forty-five.
+        // was cut for a longest word of "No machine" measured wrong.
         int nameRight = px + STATUS_X - 4;
-        if (taxed) {
-            textRight(g, cut, nameRight, py + 5, cutW, Draw.AMBER);
-            screen.hit(nameRight - cutW, py + 3, cutW, 12, () -> { },
-                WorkbayScreen.gui("skim.name", snapshot().skimRate()),
-                WorkbayScreen.gui("skim.row.tip"));
-            nameRight -= cutW + 4;
-        }
         nameW = nameRight - nameX;
         if (!screen.renaming()) {
             text(g, label, nameX, py + 5, nameW, on ? Draw.TEXT : Draw.TEXT_FAINT);
@@ -1822,20 +1748,6 @@ class BaysPage extends WorkbayPage {
         return WorkbayScreen.gui("status." + status.name().toLowerCase(java.util.Locale.ROOT) + ".tip");
     }
 
-    /**
-     * Whether an Assay is racked anywhere in this network. Read off the bay list rather than sent
-     * as a flag: the snapshot already carries what is in every bay, and a second field saying the
-     * same thing is a second field that can disagree with the first.
-     */
-    private static boolean hasAssay(WorkbaySnapshot snap) {
-        return snap.bays().stream().anyMatch(bay ->
-            bay.hosted().filter(com.neryos.workbay.init.WBBlocks.ASSAY.getId()::equals).isPresent());
-    }
-
-    /** A rate with no Assay behind it takes nothing, so no row may claim it is losing anything. */
-    private static boolean skimming(WorkbaySnapshot snap) {
-        return snap.skimRate() > 0 && hasAssay(snap);
-    }
 
     private static ItemStack iconFor(Optional<ResourceLocation> id) {
         return id.map(BuiltInRegistries.ITEM::get).map(ItemStack::new).orElse(ItemStack.EMPTY);

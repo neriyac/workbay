@@ -1,7 +1,6 @@
 package com.neryos.workbay.gametests;
 
 import com.neryos.workbay.bus.BusConfig;
-import com.neryos.workbay.content.assay.AssayBlock;
 import com.neryos.workbay.content.connector.ConnectorBlock;
 import com.neryos.workbay.content.workbay.WorkbayBlock;
 import com.neryos.workbay.content.workbay.WorkbayBlockEntity;
@@ -1095,73 +1094,6 @@ public class DuplicationTests {
         });
     }
 
-    /**
-     * The skim's own conservation law, which is the one piece of this mod that <b>destroys</b>
-     * items on purpose (SPEC.md §3: they become a balance, and the Assay has no faces for a buffer
-     * to be reachable through). So the sum that must hold is not "nothing went missing" but
-     * <b>what left equals what arrived plus what the Assay is holding or has already banked</b>.
-     * Without this test the skim is indistinguishable from a leak.
-     */
-    @GameTest(timeoutTicks = 800)
-    @TestHolder(description = "Every item the skim takes is banked: what left equals what arrived plus what the Assay holds.")
-    public static void theSkimBanksEverythingItTakes(final DynamicTest test) {
-        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
-
-        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
-            ServerLevel level = helper.getLevel();
-            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
-            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
-            BlockPos targetPos = helper.absolutePos(new BlockPos(4, 1, 4));
-            level.setBlock(targetPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
-
-            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
-            WorkbayRecord record = workbay.record().orElseThrow();
-            ServerLevel backshop = backshop(helper);
-            WorkbayTickets.force(backshop, record.id(), record.bayColumn());
-
-            player.getInventory().clearContent();
-            WorkbayMenu menu = menuFor(workbay, player);
-            rack(menu, player, 0, new ItemStack(WBBlocks.ASSAY.get()));
-            rack(menu, player, 1, new ItemStack(Blocks.CHEST, 1));
-            BlockPos sourcePos = BayGeometry.machinePos(record.bayColumn(), 1);
-            put(backshop, sourcePos, 0, new ItemStack(Items.IRON_INGOT, 64));
-            put(backshop, sourcePos, 1, new ItemStack(Items.IRON_INGOT, 64));
-            connect(helper, workbay, 1, targetPos.above(), player);
-            for (int step = 0; step < AssayBlock.maxRate() / AssayBlock.rateStep(); step++) {
-                menu.act(WorkbayAction.SET_SKIM, 0, Optional.empty());
-            }
-
-            helper.startSequence()
-                .thenWaitUntil(() -> {
-                    if (inContainer(backshop, sourcePos, Items.IRON_INGOT) > 0) {
-                        throw new GameTestAssertException("the bay still holds "
-                            + inContainer(backshop, sourcePos, Items.IRON_INGOT) + " ingots");
-                    }
-                })
-                .thenIdle(20)
-                .thenExecute(() -> {
-                    WorkbayRecord now = workbay.record().orElseThrow();
-                    int arrived = inContainer(level, targetPos, Items.IRON_INGOT);
-                    int held = now.assay().skimmed();
-                    int banked = now.assay().levy() * AssayBlock.itemsPerLevy();
-                    if (held + banked <= 0) {
-                        helper.fail("the skim was at " + AssayBlock.maxRate() + "% and the Assay has "
-                            + "nothing to show for it, so nothing was actually taken");
-                    }
-                    // What the Assay holds is a value, not a count (OPEN_ISSUES #34). Conservation
-                    // is still the question — nothing the skim took may go missing — and it is
-                    // still asked in ingots, which means dividing the value back down by what one
-                    // ingot is worth. The division is exact or the skim took a fraction of an item.
-                    int perItem = com.neryos.workbay.init.WBDataMaps.levyValue(
-                        new ItemStack(Items.IRON_INGOT));
-                    helper.assertValueEqual((held + banked) % perItem, 0,
-                        "the value the Assay holds, as a remainder of one ingot's worth");
-                    helper.assertValueEqual(arrived + (held + banked) / perItem, 128,
-                        "ingots that arrived plus ingots the Assay is holding or has banked");
-                })
-                .thenSucceed();
-        });
-    }
 
     /**
      * The energy half, end to end, with a real Mekanism machine at both ends: a charged Basic

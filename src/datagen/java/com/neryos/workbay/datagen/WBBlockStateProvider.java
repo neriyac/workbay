@@ -76,24 +76,6 @@ public class WBBlockStateProvider extends BlockStateProvider {
                 .build();
         });
 
-        // SPEC.md §7's flat cartridge, not a cube: the point of the Assay's look is that it has no
-        // ports on any face and plainly goes *into* something. The two big faces take the label,
-        // the four rims take blank steel, and AssayBlock#getShape is the same box so the collision
-        // matches what is drawn. Explicit UVs because the auto-derived ones would crop the label to
-        // the element's own bounds and cut the top off the window.
-        ModelFile cartridge = models().withExistingParent("assay", mcBlock("block"))
-            .texture("particle", blockTexture("assay_edge"))
-            .texture("face", blockTexture("assay_face"))
-            .texture("edge", blockTexture("assay_edge"))
-            .element().from(2, 0, 5).to(14, 14, 11)
-            .face(Direction.NORTH).uvs(0, 0, 16, 16).texture("#face").end()
-            .face(Direction.SOUTH).uvs(0, 0, 16, 16).texture("#face").end()
-            .face(Direction.EAST).uvs(0, 0, 16, 16).texture("#edge").end()
-            .face(Direction.WEST).uvs(0, 0, 16, 16).texture("#edge").end()
-            .face(Direction.UP).uvs(0, 0, 16, 16).texture("#edge").end()
-            .face(Direction.DOWN).uvs(0, 0, 16, 16).texture("#edge").end()
-            .end();
-        simpleBlock(WBBlocks.ASSAY.get(), cartridge);
 
         // A Port is only ever seen by a player standing in a room, which cannot happen in v1 — but
         // six of them seal one hosted machine, so the face has to read as a door from the inside.

@@ -68,7 +68,7 @@ public class WorkbayBlockTests {
      * printed number is for.
      *
      * <p><b>And it has to survive the pickaxe.</b> Everything else a Workbay holds does — the bays,
-     * the links, the upgrades, the Levy — because they live on the record and the record outlives
+     * the links, the upgrades — because they live on the record and the record outlives
      * the block. The buffer is the one thing that lives in the block entity, and the loot table
      * copied {@code workbay:binding} and nothing else, so a player who fed a generator into a
      * Workbay and then moved it lost every FE of it without being told. The same loss as the load

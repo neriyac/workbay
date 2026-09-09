@@ -27,7 +27,6 @@ public class WBLanguageProvider extends LanguageProvider {
         addItem(WBItems.SHOPSTEEL, "Shopsteel");
         addItem(WBItems.HOUSING, "Housing");
         addBlock(WBBlocks.CONNECTOR, "Connector");
-        addBlock(WBBlocks.ASSAY, "Assay");
         addItem(WBItems.EXPANSION_PLATE, "Expansion Plate");
         addItem(WBItems.ROOM_FRAME, "Room Frame");
         addItem(WBItems.WIDE_ROOM_FRAME, "Wide Room Frame");
@@ -93,8 +92,6 @@ public class WBLanguageProvider extends LanguageProvider {
             + "click the bay.");
         add(WorkbayLang.messageKey("reject.rack_failed"), "%s wouldn't stand up in a bay, so nothing "
             + "was placed. You still have it.");
-        add(WorkbayLang.messageKey("reject.assay_needs_bay"), "The Assay only works racked in a bay. "
-            + "It has no faces to connect to out here.");
 
         // The Connector, which is where every link comes from. SPEC.md §0.
         add(WorkbayLang.messageKey("connector_paired"), "Connector paired to bay %s. Place it against "
@@ -390,14 +387,9 @@ public class WBLanguageProvider extends LanguageProvider {
         // nothing re-checks it. OPEN_ISSUES #49 -- the screen names it rather than hiding it.
         add(WorkbayLang.guiKey("upgrades.deployed.over"), "%s more than this server allows. They "
             + "were placed before the cap was lowered; break one to get back under it.");
-        add(WorkbayLang.guiKey("upgrades.levy"), "Levy: %s");
-        add(WorkbayLang.guiKey("upgrades.cost"), "Costs %s Levy, taken from this Workbay's balance "
-            + "when you install it. The next one costs more.");
-        add(WorkbayLang.guiKey("upgrades.unaffordable"), "You have %s Levy and this one costs %s. "
-            + "Raise the skim, or move more goods through your links.");
         add(WorkbayLang.guiKey("upgrades.add"), "Install one %s");
         add(WorkbayLang.guiKey("upgrades.maxed"), "You have as many of these as a Workbay takes.");
-        // The three descriptions have 74 pixels each, beside a price that reaches "Levy: 102".
+        // The three descriptions have 74 pixels each.
         // Anything longer is cut, and a cut description is worse than a short one - it reads as a
         // rendering fault and tells the player nothing. The sentence lives in the Add button's
         // tooltip, which is where this mod's text budget goes.
@@ -512,12 +504,6 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("upgrade.impeller"), "Impeller");
         add(WorkbayLang.guiKey("upgrade.impeller.desc"), "Faster links");
 
-        // The skim. SPEC.md §3: goods going missing must be explained exactly where the loss is
-        // noticed, so the rate is on the dial, on the bays screen and on every row it applies to.
-        // The bays screen's Levy readout. On that screen and not only the upgrades one because a
-        // player who has to change screens to find out whether they are earning does not change
-        // screens - they conclude the dial does nothing.
-        // Bay View. SPEC.md §5: our own screen, and a permanent line saying what it cannot reach.
         add(WorkbayLang.guiKey("bayview.title"), "Bay View · Bay %s");
         add(WorkbayLang.guiKey("bayview.limits"), "Recipe modes, side configuration and upgrade "
             + "slots stay on the machine. Eject it to change those.");
@@ -569,23 +555,7 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.messageKey("bay_no_screen"), "%s has no screen of its own.");
         add(WorkbayLang.messageKey("bay_load_timeout"),
             "The bay did not reach your client in time. Try again.");
-        add(WorkbayLang.guiKey("levy"), "Levy %s");
-        add(WorkbayLang.guiKey("levy.name"), "Levy banked: %s");
-        add(WorkbayLang.guiKey("levy.batch"), "%s / %s to the next");
-        add(WorkbayLang.guiKey("levy.tip"), "Every batch of skimmed goods becomes one Levy, and Levy installs upgrades.");
-        add(WorkbayLang.guiKey("levy.no_assay"), "No Assay racked");
-        add(WorkbayLang.guiKey("levy.no_assay.tip"), "Rack an Assay in a bay, then turn the skim dial up.");
-        add(WorkbayLang.guiKey("levy.dial_off"), "Skim at 0%");
-        add(WorkbayLang.guiKey("levy.dial_off.tip"), "The Assay is racked but the skim dial is at zero.");
-        add(WorkbayLang.guiKey("skim"), "Skim %s%%");
-        add(WorkbayLang.guiKey("skim.name"), "Skim: %s%% of the goods your links carry");
-        add(WorkbayLang.guiKey("skim.tip"), "The share of refined goods your links hand the Assay. Click +5, right-click -5.");
         // The number alone. The row has about thirty pixels for this and the sentence is sixty.
-        add(WorkbayLang.guiKey("skim.row"), "%s%%");
-        add(WorkbayLang.guiKey("skim.row.tip"), "This link hands the Assay its share, so less arrives than left.");
-        add(WorkbayLang.guiKey("skim.no_assay"), "No Assay racked");
-        add(WorkbayLang.guiKey("skim.no_assay.short"), "No Assay");
-        add(WorkbayLang.guiKey("skim.no_assay.tip"), "Nothing is skimmed until an Assay is racked in a bay.");
 
         add(WorkbayLang.messageKey("pair_needs_connector"), "Hold a Connector \u2014 main hand or off "
             + "hand \u2014 to pair one to this bay.");
@@ -594,8 +564,6 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.messageKey("annex_needs_frame"), "An Annex Plate adds a room to a network "
             + "that already has one. Install a Room Frame first.");
         add(WorkbayLang.messageKey("upgrade_missing"), "You don't have one of those to install.");
-        add(WorkbayLang.messageKey("upgrade_needs_levy"), "That costs %s Levy and this Workbay has "
-            + "%s. Raise the skim, or move more goods through your links.");
 
         // Tooltips. SPEC.md §6: at most four lines unshifted.
         add(WorkbayLang.tooltipKey("hosting"), "Hosting: %s / %s machines");
@@ -623,9 +591,9 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.infoKey("workbay.5"), "3. Set that row's direction and what it carries. "
             + "Insert pushes into the block the Connector is stuck to; Extract pulls out of it. "
             + "The Workbay glows while goods are moving and goes amber when a link needs you.");
-        add(WorkbayLang.infoKey("workbay.6"), "Everything past that costs Levy. Rack an Assay, "
-            + "raise its dial, and a share of everything your links move is banked as Levy to "
-            + "spend on the Upgrades tab \u2014 more bays, faster links, and rooms out the back.");
+        add(WorkbayLang.infoKey("workbay.6"), "Everything past that is an upgrade you craft and "
+            + "fit on the Upgrades tab — more bays, faster links, and rooms out the back. "
+            + "Each one is consumed when it goes in, and there is no taking it out again.");
 
         add(WorkbayLang.infoKey("connector.1"), "One end of a link, as a block you can point at. "
             + "Right-click a Workbay with it to pair the two; its tooltip then names which Workbay "
@@ -639,15 +607,9 @@ public class WBLanguageProvider extends LanguageProvider {
             + "needs a Resonator. Anything inside that dimension, and anything in the Backshop, "
             + "does not.");
 
-        add(WorkbayLang.infoKey("assay.1"), "The only machine this mod ships, and the only source "
-            + "of Levy. Rack it in a bay: it has no faces and does nothing standing on the floor.");
-        add(WorkbayLang.infoKey("assay.2"), "The Skim dial on the Bays screen says what share of "
-            + "everything your links move is taken and converted. That share is the price of every "
-            + "upgrade in the mod. Levy is a balance on your network rather than an item \u2014 "
-            + "there is nothing to pipe, store or lose.");
 
         add(WorkbayLang.infoKey("expansion_plate.1"), "One more bay, consumed on install. Each one "
-            + "costs more Levy than the last, up to the eight the rack holds.");
+            + "One more bay, up to the eight the rack holds.");
         add(WorkbayLang.infoKey("annex_plate.1"), "One more room, consumed on install. It needs a "
             + "Room Frame first \u2014 with no rooms to add to it would install and do nothing, so "
             + "it refuses instead.");

@@ -1,6 +1,5 @@
 package com.neryos.workbay.bus;
 
-import com.neryos.workbay.content.assay.AssayBlock;
 import com.neryos.workbay.init.WBBlocks;
 import com.neryos.workbay.world.BayGeometry;
 import com.neryos.workbay.world.RedstoneMode;
@@ -97,16 +96,6 @@ public class BusRunner {
 
     private int delay = WHEEL;
 
-    /**
-     * The skim's fractional remainder, in hundredths of an item, and what it has taken since the
-     * block entity last collected. A rate of 15% on a budget of 8 is 1.2 items a step; without a
-     * carry that is either one item (a 12.5% tax) or two (25%), and the dial would mean something
-     * different at every rate. Transient on purpose: it is worth less than one item and rebuilding
-     * it after a restart costs nothing.
-     */
-    private int skimCarry;
-    private int pendingSkim;
-
     /** SPEC.md §4's redstone gate. Edge detection lives here so the block entity stays a handle. */
     private boolean powered;
     private boolean pulseArmed;
@@ -177,7 +166,7 @@ public class BusRunner {
 
     /**
      * SPEC.md §1's Resonator, enforced. <b>It was priced, drawn, saved and read by nothing</b> —
-     * a player spent an ender eye and 24 Levy on "Links may target other dimensions" for a
+     * a player spent an ender eye on "Links may target other dimensions" for a
      * capability they already had, which is the worst kind of rung on a ladder.
      *
      * <p>The comparison is the Connector's dimension against the <b>Workbay's own</b>, because
@@ -225,16 +214,6 @@ public class BusRunner {
         return statuses.containsValue(BusStatus.RUNNING);
     }
 
-    /**
-     * Items the skim has taken since this was last called, handed to the block entity to bank on
-     * the record. Collected rather than written here: the runner must not rewrite the record it is
-     * being ticked with, and one write a tick beats one write per link.
-     */
-    public int takeSkim() {
-        int skimmed = pendingSkim;
-        pendingSkim = 0;
-        return skimmed;
-    }
 
     /** Forgets one link's caches and status, so a removed link stops holding a level reference. */
     public void forget(UUID busId) {
@@ -324,22 +303,47 @@ public class BusRunner {
         boolean insert = bus.mode() == BusConfig.Mode.INSERT;
         ServerLevel sourceLevel = insert ? backshop : targetLevel;
         BlockPos sourcePos = insert ? machinePos : targetPos;
-        Direction sourceFace = (insert ? bus.machineFace() : bus.targetFace()).orElse(null);
         ServerLevel sinkLevel = insert ? targetLevel : backshop;
         BlockPos sinkPos = insert ? targetPos : machinePos;
-        Direction sinkFace = (insert ? bus.targetFace() : bus.machineFace()).orElse(null);
+        Direction targetFace = bus.targetFace().orElse(null);
+
+        // <b>The bay's cube decides which of the machine's faces this link may use</b>, exactly as
+        // it does for items, fluids and energy. It used to read the link's pinned machine face and
+        // nothing else -- a field the screen never set -- so a chemical link took whichever face
+        // Mekanism answered on first, which on a machine with a gas input and a gas output is the
+        // wrong one about half the time. FaceConfig#usable answers "every face" for a bay nobody
+        // has configured, so nothing changes for one.
+        java.util.Set<Direction> machineFaces = record.bay(bus.bay()).faces()
+            .usable(BusConfig.Resource.CHEMICAL, insert);
+        if (machineFaces.isEmpty()) {
+            return BusStatus.MACHINE_NO_FACE;
+        }
 
         // Chemicals are measured in mB like fluids, so they take the fluid scale. A separate
         // constant would be a second number meaning the same thing.
         long budget = Math.max(1, (long) rate(record, bus) * MB_PER_RATE);
-        return switch (com.neryos.workbay.compat.MekanismChemicals.move(sourceLevel, sourcePos,
-            sourceFace, sinkLevel, sinkPos, sinkFace, budget, bus.filter()::allowsId)) {
-            case MOVED -> BusStatus.RUNNING;
-            case NOTHING_TO_MOVE -> BusStatus.IDLE;
-            case NOT_LOADED -> BusStatus.TARGET_NOT_LOADED;
-            case NO_SOURCE_PORT -> insert ? BusStatus.MACHINE_NO_PORT : BusStatus.TARGET_NO_PORT;
-            case NO_SINK_PORT -> insert ? BusStatus.TARGET_NO_PORT : BusStatus.MACHINE_NO_PORT;
-        };
+        // Each allowed face in turn, keeping the most informative answer. A face a machine does
+        // not answer on is not a fault while another one might; only "none of them answered" is.
+        BusStatus best = null;
+        for (Direction machineFace : machineFaces) {
+            BusStatus status = switch (com.neryos.workbay.compat.MekanismChemicals.move(
+                sourceLevel, sourcePos, insert ? machineFace : targetFace,
+                sinkLevel, sinkPos, insert ? targetFace : machineFace,
+                budget, bus.filter()::allowsId)) {
+                case MOVED -> BusStatus.RUNNING;
+                case NOTHING_TO_MOVE -> BusStatus.IDLE;
+                case NOT_LOADED -> BusStatus.TARGET_NOT_LOADED;
+                case NO_SOURCE_PORT -> insert ? BusStatus.MACHINE_NO_PORT : BusStatus.TARGET_NO_PORT;
+                case NO_SINK_PORT -> insert ? BusStatus.TARGET_NO_PORT : BusStatus.MACHINE_NO_PORT;
+            };
+            if (status == BusStatus.RUNNING) {
+                return status;
+            }
+            if (best == null || best.isProblem()) {
+                best = status;
+            }
+        }
+        return best;
     }
 
     private BusStatus runItems(WorkbayRecord record, BusConfig bus, ServerLevel targetLevel,
@@ -392,47 +396,10 @@ public class BusRunner {
             return anyHandler ? BusStatus.IDLE
                 : insert ? BusStatus.TARGET_NO_PORT : BusStatus.MACHINE_NO_PORT;
         }
-        // The Assay's cut comes out of the source and out of this step's budget, so the link moves
-        // less rather than the destination being short-changed after the fact. SPEC.md §3.
-        int taxed = skim(record, from, bus, allowed);
-        int moved = BusTransfer.moveItems(from, to, budget - taxed, allowed);
-        return moved + taxed > 0 ? BusStatus.RUNNING : BusStatus.IDLE;
+        int moved = BusTransfer.moveItems(from, to, budget, allowed);
+        return moved > 0 ? BusStatus.RUNNING : BusStatus.IDLE;
     }
 
-    /**
-     * Diverts the Assay's share of what this link is about to move. SPEC.md §3.
-     *
-     * <p>Gated on an Assay actually being racked, because a tax with nothing to convert the goods
-     * into is not a tax, it is items disappearing. Items only: fluids and energy are never skimmed.
-     */
-    private int skim(WorkbayRecord record, IItemHandler from, BusConfig bus,
-        java.util.function.Predicate<net.minecraft.world.item.ItemStack> allowed) {
-        int rate = record.assay().rate();
-        if (rate <= 0 || !AssayBlock.rackedIn(record)) {
-            return 0;
-        }
-        // The budget this step is actually moving, Impellers and the server ceiling included --
-        // not the raw dial. They were different numbers: the dial says "% of the goods your links
-        // carry", and with one Impeller the link carried twice its rate while the skim accrued on
-        // the rate alone, so a dial set to 25 took 12. Measured, 32 items of 256 that left.
-        skimCarry += rate(record, bus) * rate;
-        int cut = skimCarry / 100;
-        if (cut <= 0) {
-            return 0;
-        }
-        BusTransfer.Taken taken = BusTransfer.take(from, cut,
-            allowed.and(stack -> stack.is(AssayBlock.LEVY_INPUT)));
-        // Whatever the source could not supply is dropped rather than owed: keeping it would grow
-        // without bound on a link that never carries a taggable item, and then tax a stack of iron
-        // at a hundred percent the moment one arrived.
-        skimCarry = taken.count() < cut ? skimCarry % 100 : skimCarry - taken.count() * 100;
-        // The bank takes the <em>value</em> and the budget takes the <em>count</em>. They were one
-        // number, which is what made a diamond worth a copper ingot (OPEN_ISSUES #34); they part
-        // company here and nowhere else, because everything above this line is about how much of
-        // the link's step the tax spends and everything below is about the Assay.
-        pendingSkim += taken.value();
-        return taken.count();
-    }
 
     /**
      * The link's filter, as a predicate over items. Applied to what the <em>source</em> is
@@ -506,7 +473,7 @@ public class BusRunner {
      * perfectly and then swallows the fill — and there is nothing to simulate a fill <em>of</em>
      * until the source has been asked.
      *
-     * <p>No skim: the Assay converts goods, and a fluid is not one. The filter is honoured, and
+     * <p>The filter is honoured, and
      * for the same reason the item path honours it — on what the source offers, before the commit.
      */
     private BusStatus runFluid(WorkbayRecord record, BusConfig bus, ServerLevel targetLevel, BlockPos targetPos,

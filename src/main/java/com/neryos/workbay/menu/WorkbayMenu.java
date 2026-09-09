@@ -3,7 +3,6 @@ package com.neryos.workbay.menu;
 import com.neryos.workbay.WorkbaySounds;
 import com.neryos.workbay.bus.BusConfig;
 import com.neryos.workbay.bus.BusRunner;
-import com.neryos.workbay.content.assay.AssayBlock;
 import com.neryos.workbay.content.workbay.WorkbayBlock;
 import com.neryos.workbay.content.workbay.WorkbayBlockEntity;
 import com.neryos.workbay.content.workbay.WorkbayUpgrade;
@@ -212,7 +211,6 @@ public class WorkbayMenu extends AbstractContainerMenu {
                 link -> link.withName(text.orElse("").strip()));
             case CYCLE_REDSTONE -> editBay(serverPlayer, record,
                 bay -> bay.withRedstone(bay.redstone().step(back)));
-            case SET_SKIM -> setSkim(serverPlayer, record, back);
             case OPEN_BAY_VIEW -> {
                 if (!BayViewMenu.open(serverPlayer, workbay, record, selectedBay)) {
                     WorkbaySounds.refuse(serverPlayer,
@@ -665,28 +663,10 @@ public class WorkbayMenu extends AbstractContainerMenu {
         return current;
     }
 
-    /**
-     * The skim dial. One step of five per click, right-click stepping back the way every other
-     * cycling control in this mod does — and clamped rather than wrapped, because a dial that goes
-     * from 25% straight back to 0% on one more click is a dial that empties somebody's tax by
-     * accident. Default zero: the mod never takes a cut the player did not ask for.
-     */
-    private void setSkim(ServerPlayer serverPlayer, WorkbayRecord record, boolean back) {
-        int step = back ? -AssayBlock.rateStep() : AssayBlock.rateStep();
-        int rate = Math.clamp(record.assay().rate() + step, 0, AssayBlock.maxRate());
-        if (rate == record.assay().rate()) {
-            return;
-        }
-        RoomRegistry.get(serverPlayer.server).put(record.withAssay(record.assay().withRate(rate)));
-    }
 
     /**
      * Upgrades are consumed on install and there is no removal path (SPEC.md §1), so this takes the
      * item and never gives it back. Refusing at the cap rather than silently eating it matters.
-     *
-     * <p>It also spends Levy, and the cost <b>rises</b> with how many are already installed
-     * (SPEC.md §1). That is why the cost is here and not in the recipe: a recipe costs the same the
-     * tenth time as the first. The item is the materials and the Levy is the ladder.
      */
     private void install(ServerPlayer serverPlayer, WorkbayRecord record, int ordinal) {
         if (ordinal < 0 || ordinal >= WorkbayUpgrade.values().length) {
@@ -711,13 +691,6 @@ public class WorkbayMenu extends AbstractContainerMenu {
                 com.neryos.workbay.WorkbayLang.message("upgrade_maxed"));
             return;
         }
-        int cost = upgrade.levyCost(installed);
-        if (record.assay().levy() < cost) {
-            WorkbaySounds.refuse(serverPlayer,
-                com.neryos.workbay.WorkbayLang.message("upgrade_needs_levy", cost,
-                    record.assay().levy()));
-            return;
-        }
         int slot = serverPlayer.getInventory().findSlotMatchingItem(new ItemStack(upgrade.item()));
         if (slot < 0) {
             WorkbaySounds.refuse(serverPlayer,
@@ -725,9 +698,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
             return;
         }
         serverPlayer.getInventory().removeItem(slot, 1);
-        RoomRegistry.get(serverPlayer.server).put(record
-            .withUpgrades(record.upgrades().plus(upgrade))
-            .withAssay(record.assay().withLevy(record.assay().levy() - cost)));
+        RoomRegistry.get(serverPlayer.server).put(record.withUpgrades(record.upgrades().plus(upgrade)));
         WorkbaySounds.upgraded(workbay.getLevel(), workbay.getBlockPos());
     }
 
@@ -1024,8 +995,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
 
         return new WorkbaySnapshot(record.code(), record.locked(), record.bayCapacity(), selected,
             workbay.energy().getEnergyStored(), workbay.energy().getMaxEnergyStored(),
-            bays, links, record.upgrades(), record.assay().levy(), record.assay().rate(),
-            record.assay().skimmed(), record.deployedCount(),
+            bays, links, record.upgrades(), record.deployedCount(),
             com.neryos.workbay.config.WorkbayConfig.SERVER.maxDeployedWorkbaysPerNetwork.get(),
             com.neryos.workbay.remote.RemoteConfig.remoteScreensEnabled(),
             readRooms(player, record));
@@ -1070,14 +1040,6 @@ public class WorkbayMenu extends AbstractContainerMenu {
         if (bay.hosted().isEmpty()) {
             return new WorkbaySnapshot.Bay(index, Optional.empty(), 0, 0,
                 WorkbaySnapshot.State.EMPTY, bay.faces(), bay.name(), bay.redstone());
-        }
-        // The Assay answers on no face by design, which is exactly the shape of INERT — "racked and
-        // nothing can reach it". Amber on the one bay that is working correctly is the worst pip on
-        // the screen, so it is read from the Levy the network is actually making instead.
-        if (bay.hosted().filter(WBBlocks.ASSAY.getId()::equals).isPresent()) {
-            return new WorkbaySnapshot.Bay(index, bay.hosted(), 0, 0,
-                record.assay().rate() > 0 ? WorkbaySnapshot.State.RUNNING : WorkbaySnapshot.State.IDLE,
-                bay.faces(), bay.name(), bay.redstone());
         }
         int energy = 0;
         int capacity = 0;

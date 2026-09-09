@@ -236,6 +236,26 @@ public final class Draw {
      * One slot. Sunken, mid-grey, with an inner shadow along the top and left — vanilla's
      * treatment of every inventory cell, and the reason an empty one still reads as a slot.
      */
+    /**
+     * A dashed rectangle, two pixels on and two off.
+     *
+     * <p>What an empty slot looks like everywhere else software has one: a solid rim is a thing
+     * that is there and empty, a dashed rim is a place where a thing goes. A bay's slot had the
+     * solid one, so a fresh Workbay's rack read as eight recesses rather than as eight invitations.
+     */
+    public static void dashed(GuiGraphics g, int x, int y, int w, int h, int argb) {
+        for (int i = 0; i < w; i += 4) {
+            int end = Math.min(i + 2, w);
+            g.fill(x + i, y, x + end, y + 1, argb);
+            g.fill(x + i, y + h - 1, x + end, y + h, argb);
+        }
+        for (int i = 0; i < h; i += 4) {
+            int end = Math.min(i + 2, h);
+            g.fill(x, y + i, x + 1, y + end, argb);
+            g.fill(x + w - 1, y + i, x + w, y + end, argb);
+        }
+    }
+
     public static void slot(GuiGraphics g, int x, int y, int w, int h) {
         int r = Math.min(3, Math.min(w, h) / 4);
         round(g, x, y, w, h, r, mix(SLOT, 0xFF000000, 0.25F), SLOT);

@@ -1178,7 +1178,7 @@ public class RoomTests {
                     registry.put(new WorkbayRecord(was.id(), was.code(), back.getUUID(),
                         back.getGameProfile().getName(), was.locked(), was.bayColumn(),
                         was.upgrades(), was.lastKnownPos(), was.bays(), was.rooms(), was.buses(),
-                        was.deployedCount(), was.assay()));
+                        was.deployedCount()));
                     com.neryos.workbay.world.AnchorPresence.resume(
                         helper.getLevel().getServer(), back.getUUID());
                 })

@@ -65,7 +65,7 @@ public class RoomRegistry extends SavedData {
      * current tick and nothing more.
      *
      * <p>Every Workbay on a record ticks <em>every</em> bus on it, so two blocks standing on one
-     * network moved every link twice and the Assay skimmed twice — a link the panel printed as one
+     * network moved every link twice — a link the panel printed as one
      * item every twenty ticks delivered two a second, measured in a live world (OPEN_ISSUES #54,
      * and #40 is the fault). The rate and the wheel were both right; the link was simply stepped by
      * two runners. One entry per network, replaced every tick.
@@ -199,7 +199,7 @@ public class RoomRegistry extends SavedData {
         ChunkPos column = allocateBayColumn();
         WorkbayRecord record = new WorkbayRecord(id, mintCode(random), owner, ownerName, false,
             column, WorkbayRecord.Upgrades.NONE, Optional.empty(), List.of(), List.of(), List.of(),
-            0, WorkbayRecord.Assay.NONE);
+            0);
         byId.put(id, record);
         byCode.put(normalise(record.code()), id);
         setDirty();

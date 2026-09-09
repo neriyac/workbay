@@ -556,7 +556,7 @@ public class BusTests {
     /**
      * <b>The Resonator, which for the whole project bought nothing.</b> SPEC.md §1 sells it as
      * "links may target other dimensions" and it was priced, crafted, installed, saved, drawn on
-     * the upgrades page — and read by no code anywhere, so a player spent an ender eye and 24 Levy
+     * the upgrades page — and read by no code anywhere, so a player spent an ender eye
      * on a capability they already had. Found by reading the ladder for what each rung is worth.
      *
      * <p>Both halves, because a gate that refuses everything is not a gate. The same link is
@@ -1892,6 +1892,137 @@ public class BusTests {
                 .thenExecute(() -> tearDown(helper, workbayPos))
                 .thenSucceed();
         });
+    }
+
+    /**
+     * <b>Multichannel, proved by moving two things at once through one Connector.</b>
+     *
+     * <p>{@code multichannelRaisesTheOneTypeCap} proves a Connector <em>grows rows</em>; it does
+     * not prove any of them carries anything, and an upgrade whose only effect is more rows is an
+     * upgrade nobody should buy. Neriya asked for exactly this test.
+     *
+     * <p>A Mekanism fluid tank is the target because it is one block with two handlers a link can
+     * use — its tank and its bucket slots — so the two links genuinely share one Connector, one
+     * position and one face rather than being two Connectors in a trenchcoat.
+     */
+    @GameTest
+    @TestHolder(description = "One Multichannel Connector moves a fluid and an item in the same run.")
+    public static void multichannelCarriesTwoResourcesThroughOneConnector(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos targetPos = helper.absolutePos(new BlockPos(4, 1, 4));
+
+            Block tank = BuiltInRegistries.BLOCK
+                .get(ResourceLocation.parse("mekanism:basic_fluid_tank"));
+            if (tank == Blocks.AIR) {
+                helper.fail("mekanism:basic_fluid_tank is not registered; a missing partner mod is "
+                    + "a failure here, never a skip.");
+            }
+            BlockState state = tank.defaultBlockState();
+            level.setBlock(targetPos, state, Block.UPDATE_ALL);
+            tank.setPlacedBy(level, targetPos, state, player, new ItemStack(tank));
+            level.invalidateCapabilities(targetPos);
+
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(tank));
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+
+            // The upgrade under test. Without it the second row cannot exist at all.
+            RoomRegistry.get(level.getServer()).put(record.withUpgrades(record.upgrades()
+                .plus(com.neryos.workbay.content.workbay.WorkbayUpgrade.MULTICHANNEL)));
+
+            var water = net.minecraft.world.level.material.Fluids.WATER;
+            int filled = fill(backshop, machinePos, new FluidStack(water, 8_000));
+            if (filled <= 0) {
+                helper.fail("could not fill the hosted tank, so the fluid link has nothing to carry");
+            }
+            int seededItems = putItem(backshop, machinePos, new ItemStack(Items.BUCKET, 4));
+            if (seededItems <= 0) {
+                helper.fail("could not put a bucket into the hosted tank's slots, so the item link "
+                    + "has nothing to carry");
+            }
+
+            // <b>One Connector, two rows.</b> Placing it makes the item row; the fluid row is the
+            // second type the upgrade allows, on the same block and the same face.
+            BusConfig items = connect(helper, workbay, targetPos.above(), Direction.DOWN, player);
+            workbay.addBus(items.withResource(BusConfig.Resource.ITEM).withRate(4).withSpeed(10));
+            workbay.addBus(BusConfig.create(java.util.UUID.randomUUID(), items.bay(),
+                    BusConfig.Resource.FLUID, items.mode(), items.connector(), items.target())
+                .withRate(20).withSpeed(10));
+            helper.assertValueEqual(workbay.linksAt(GlobalPos.of(level.dimension(),
+                targetPos.above())).size(), 2, "links anchored on the one Connector");
+
+            helper.startSequence()
+                .thenWaitUntil(() -> {
+                    int movedFluid = inTanks(level, targetPos, water);
+                    int movedItems = containers(level, targetPos);
+                    if (movedFluid <= 0 || movedItems <= 0) {
+                        throw new GameTestAssertException("one Connector carried "
+                            + movedFluid + " mB and " + movedItems + " buckets; Multichannel is "
+                            + "rows without carriage unless both are above zero");
+                    }
+                })
+                .thenExecute(() -> {
+                    // Neither resource may be created or lost by sharing a Connector -- and water
+                    // is counted in the buckets too, because <b>a bucket that lands in a Mekanism
+                    // tank's slot fills itself from the tank</b>. The first run of this test read
+                    // 7000 of 8000 mB and the missing litre was standing in a bucket: an item link
+                    // into a fluid tank is a fluid link as well, whatever the row says.
+                    helper.assertValueEqual(water(backshop, machinePos) + water(level, targetPos),
+                        filled, "water on both sides, buckets included, after the shared run");
+                    helper.assertValueEqual(
+                        containers(backshop, machinePos) + containers(level, targetPos),
+                        seededItems, "buckets on both sides after the shared Connector ran");
+                })
+                .thenSucceed();
+        });
+    }
+
+    /** Puts a stack into whichever face of a block will take it. Mirrors {@link #fill}. */
+    private static int putItem(ServerLevel level, BlockPos pos, ItemStack what) {
+        for (Direction side : Direction.values()) {
+            var handler = level.getCapability(Capabilities.ItemHandler.BLOCK, pos, side);
+            if (handler == null) {
+                continue;
+            }
+            for (int slot = 0; slot < handler.getSlots(); slot++) {
+                ItemStack left = handler.insertItem(slot, what.copy(), false);
+                if (left.getCount() < what.getCount()) {
+                    return what.getCount() - left.getCount();
+                }
+            }
+        }
+        return 0;
+    }
+
+    /** Every water there is at a block: what its tanks hold, plus a litre for each full bucket. */
+    private static int water(ServerLevel level, BlockPos pos) {
+        return inTanks(level, pos, net.minecraft.world.level.material.Fluids.WATER)
+            + countItems(level, pos, Items.WATER_BUCKET) * 1000;
+    }
+
+    /** Buckets of either kind: filling one does not make it a different container. */
+    private static int containers(ServerLevel level, BlockPos pos) {
+        return countItems(level, pos, Items.BUCKET) + countItems(level, pos, Items.WATER_BUCKET);
+    }
+
+    private static int countItems(ServerLevel level, BlockPos pos, net.minecraft.world.item.Item of) {
+        var handler = level.getCapability(Capabilities.ItemHandler.BLOCK, pos, null);
+        if (handler == null) {
+            return 0;
+        }
+        int total = 0;
+        for (int slot = 0; slot < handler.getSlots(); slot++) {
+            if (handler.getStackInSlot(slot).is(of)) {
+                total += handler.getStackInSlot(slot).getCount();
+            }
+        }
+        return total;
     }
 
     private static int fill(ServerLevel level, BlockPos pos, FluidStack what) {

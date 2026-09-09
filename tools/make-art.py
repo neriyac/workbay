@@ -440,36 +440,8 @@ def port():
     return im
 
 
-def assay_face():
-    """The flat side of the cartridge. SPEC.md section 7: no ports on any face -- the absence is
-    the point, so nothing here may look like a socket. A reading window and a grip instead."""
-    im = blank()
-    d = ImageDraw.Draw(im)
-    rect(d, 0, 0, 15, 15, STEEL_D)
-    bevel(d, 0, 0, 15, 15, STEEL_L, DARK)
-    rect(d, 2, 2, 13, 8, GLASS_D)
-    bevel(d, 2, 2, 13, 8, DARK, STEEL)
-    # The reading, in the mod's own cyan: a bar part filled, which is what an Assay measures.
-    for i, x in enumerate(range(3, 13)):
-        d.line([(x, 4), (x, 6)], fill=CYAN[1] if i < 6 else GLASS)
-    rect(d, 2, 10, 13, 13, STEEL)
-    bevel(d, 2, 10, 13, 13, STEEL_H, DARK)
-    for x in (4, 7, 10):
-        d.line([(x, 11), (x, 12)], fill=STEEL_D)
-    px(d, 12, 11, BOLT)
-    return im
 
 
-def assay_edge():
-    """The cartridge's rim. Blank steel with one keying rib -- an edge carrying detail would read
-    as a connector, which is exactly what an Assay does not have."""
-    im = blank()
-    d = ImageDraw.Draw(im)
-    rect(d, 0, 0, 15, 15, STEEL)
-    bevel(d, 0, 0, 15, 15, STEEL_H, DARK)
-    d.line([(6, 1), (6, 14)], fill=STEEL_D)
-    d.line([(7, 1), (7, 14)], fill=STEEL_L)
-    return im
 
 
 # =================================================================== the item sprites
@@ -801,7 +773,6 @@ def room_door_br():
 
 
 BLOCK_ART = {"connector": connector, "port": port,
-             "assay_face": assay_face, "assay_edge": assay_edge,
              "room_wall": room_wall, "room_floor": room_floor, "room_light": room_light,
              "room_door_tl": room_door_tl, "room_door_tr": room_door_tr,
              "room_door_bl": room_door_bl, "room_door_br": room_door_br}

@@ -137,11 +137,10 @@ public class RoomRegistryTests {
                     GlobalPos.of(WorkbayDimensions.BACKSHOP, new BlockPos(1, 2, 3)),
                     GlobalPos.of(WorkbayDimensions.BACKSHOP, new BlockPos(4, 5, 6)))))
                 .withDeployedCount(1)
-                // The Assay was the one thing this test never set, so every field of it round
-                // tripped vacuously: a codec that dropped Levy passed, and Levy is the balance a
+                // Every optional field is set, or a codec that drops one round-trips vacuously.
                 // player spends. All four, none of them the default, and `since` non-zero because
                 // a batch half converted at the moment of a save is exactly when it matters.
-                .withAssay(new WorkbayRecord.Assay(17, 42, 25, 12345L));
+;
 
             // A room is a place somebody built in, so it has to come back byte for byte: its
             // region (where their chests are), the tier standing in the world, the biome and the

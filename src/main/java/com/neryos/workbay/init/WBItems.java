@@ -16,10 +16,6 @@ public class WBItems {
     public static final DeferredItem<Item> HOUSING =
         ITEMS.registerSimpleItem("housing", new Item.Properties());
 
-    // No Levy item. The Assay has no faces (SPEC.md §2), so there is nowhere for it to hand a
-    // physical token to and nothing that could pipe one out; Levy is a balance on the network,
-    // banked by the Assay and spent on the upgrades screen. An item nothing produces and nothing
-    // consumes is a lie in the creative tab.
 
     // Consumed on install. SPEC.md §1: counters on the Workbay, no inventory and no removal path.
     public static final DeferredItem<Item> EXPANSION_PLATE =

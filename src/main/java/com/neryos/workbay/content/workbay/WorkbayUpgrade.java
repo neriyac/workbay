@@ -30,16 +30,10 @@ public enum WorkbayUpgrade implements StringRepresentable {
      */
     EXPANSION_PLATE("expansion_plate",
         () -> WorkbayConfig.SERVER.maxBaysPerWorkbay.get() - WorkbayRecord.BASE_BAYS,
-        () -> WorkbayConfig.SERVER.expansionPlateCost.get(),
-        () -> WorkbayConfig.SERVER.expansionPlateCostStep.get(),
         () -> WBItems.EXPANSION_PLATE.get()),
     RESONATOR("resonator", () -> 1,
-        () -> WorkbayConfig.SERVER.resonatorCost.get(),
-        () -> WorkbayConfig.SERVER.resonatorCostStep.get(),
         () -> WBItems.RESONATOR.get()),
     MULTICHANNEL("multichannel", () -> 1,
-        () -> WorkbayConfig.SERVER.multichannelCost.get(),
-        () -> WorkbayConfig.SERVER.multichannelCostStep.get(),
         () -> WBItems.MULTICHANNEL.get()),
     /**
      * Throughput, and the only upgrade that changes a number every link already has.
@@ -55,8 +49,6 @@ public enum WorkbayUpgrade implements StringRepresentable {
      * disagree, which is the whole reason the ladder moved to config.
      */
     IMPELLER("impeller", () -> WorkbayConfig.SERVER.maxImpellers.get(),
-        () -> WorkbayConfig.SERVER.impellerCost.get(),
-        () -> WorkbayConfig.SERVER.impellerCostStep.get(),
         () -> WBItems.IMPELLER.get()),
 
     /**
@@ -70,13 +62,10 @@ public enum WorkbayUpgrade implements StringRepresentable {
      * "already fitted" rather than quietly downgrading a room somebody is standing in.
      */
     ROOM_FRAME("room_frame", () -> 1,
-        () -> WorkbayConfig.SERVER.roomFrameCost.get(), () -> 0,
         () -> WBItems.ROOM_FRAME.get()),
     WIDE_ROOM_FRAME("wide_room_frame", () -> 1,
-        () -> WorkbayConfig.SERVER.wideRoomFrameCost.get(), () -> 0,
         () -> WBItems.WIDE_ROOM_FRAME.get()),
     VAST_ROOM_FRAME("vast_room_frame", () -> 1,
-        () -> WorkbayConfig.SERVER.vastRoomFrameCost.get(), () -> 0,
         () -> WBItems.VAST_ROOM_FRAME.get()),
 
     /**
@@ -88,14 +77,11 @@ public enum WorkbayUpgrade implements StringRepresentable {
      * upgrade that cannot be installed rather than a registry that changes shape (SPEC.md §13).
      */
     ANCHOR("anchor", () -> WorkbayConfig.SERVER.allowAnchors.get() ? 1 : 0,
-        () -> WorkbayConfig.SERVER.anchorCost.get(), () -> 0,
         () -> WBItems.ANCHOR.get()),
 
     /** +1 room each, at whatever size the Frame says. Three, so the ceiling is four rooms. */
     ANNEX_PLATE("annex_plate",
         () -> com.neryos.workbay.world.RoomGeometry.MAX_ROOMS - 1,
-        () -> WorkbayConfig.SERVER.annexPlateCost.get(),
-        () -> WorkbayConfig.SERVER.annexPlateCostStep.get(),
         () -> WBItems.ANNEX_PLATE.get());
 
     /**
@@ -120,16 +106,11 @@ public enum WorkbayUpgrade implements StringRepresentable {
 
     private final String name;
     private final IntSupplier max;
-    private final IntSupplier baseCost;
-    private final IntSupplier costStep;
     private final Supplier<Item> item;
 
-    WorkbayUpgrade(String name, IntSupplier max, IntSupplier baseCost, IntSupplier costStep,
-        Supplier<Item> item) {
+    WorkbayUpgrade(String name, IntSupplier max, Supplier<Item> item) {
         this.name = name;
         this.max = max;
-        this.baseCost = baseCost;
-        this.costStep = costStep;
         this.item = item;
     }
 
@@ -142,22 +123,6 @@ public enum WorkbayUpgrade implements StringRepresentable {
         return Math.max(0, max.getAsInt());
     }
 
-    /**
-     * What installing the next one costs in Levy. SPEC.md §1: "rising", which a crafting recipe
-     * cannot express - a recipe costs the same the tenth time as the first. The rise lives here,
-     * where the install happens and the screen can name it.
-     *
-     * <p><b>The first rung is cheap and the climb is steep.</b> Plate 1 costs 2 and plate 6 costs
-     * 52, so the whole ladder is 162 Levy where it used to be 42 — the step was raised from 6 to 10
-     * when the rest of the ladder was repriced and this sentence was left saying 32 and 102, which
-     * is the same fault as any other number that stops being true. That is where the entry cost
-     * went: SPEC.md §0 prices the upgrades, not the entry, and the recipes below the first Workbay
-     * were carrying weight that belongs here. A first plate the player reaches in a couple of
-     * minutes is what teaches them the dial is worth turning; everything after it is the game.
-     */
-    public int levyCost(int installed) {
-        return baseCost.getAsInt() + costStep.getAsInt() * Math.max(0, installed);
-    }
 
     public Item item() {
         return item.get();

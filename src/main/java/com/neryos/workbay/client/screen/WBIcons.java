@@ -294,6 +294,14 @@ public static final String[] ENTER = {
             || mode == com.neryos.workbay.world.RedstoneMode.PULSE;
     }
 
+    /**
+     * <b>Back to the machine.</b> The Workbay's own item, because that is the sentence: the three
+     * other pages had a tab and BAYS had none, so the only way back was to press the lit tab --
+     * which works, is in its tooltip, and was found by nobody. A fourth tab is twenty-two pixels
+     * of a header that had them.
+     */
+    public static final String[] BAYS = item("workbay:workbay");
+
     private static final String[] REDSTONE_DUST = item("minecraft:redstone");
     private static final String[] REDSTONE_TORCH = item("minecraft:redstone_torch");
     private static final String[] REDSTONE_PULSE = item("minecraft:repeater");
