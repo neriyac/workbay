@@ -119,5 +119,17 @@ public enum WorkbayAction {
      */
     CYCLE_ROOM_GUEST,
     /** Un-invites one guest. Packed the same way as {@link #CYCLE_ROOM_GUEST}. */
-    REMOVE_ROOM_GUEST
+    REMOVE_ROOM_GUEST,
+    /**
+     * How much one link moves in a step. {@code link} names the row and {@code arg} is the new
+     * value, clamped server-side against {@code linkMaxRate} -- the client works out the step and
+     * the server decides what is legal, because a config a client cannot see is the server's.
+     */
+    SET_LINK_RATE,
+    /**
+     * How long one link waits between steps. {@code arg} is an index into
+     * {@link com.neryos.workbay.bus.BusConfig#SPEEDS}: a free number would not divide the tick
+     * wheel, which is the whole reason the list is fixed.
+     */
+    SET_LINK_SPEED
 }

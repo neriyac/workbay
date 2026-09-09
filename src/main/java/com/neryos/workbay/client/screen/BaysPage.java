@@ -1179,7 +1179,10 @@ class BaysPage extends WorkbayPage {
         // pixels lower — a title orphaned from its box, which is the one arrangement that reads
         // worse than the dead slab this panel was centred to get away from. It is a dialog; a
         // dialog moves in one piece.
-        int panelH = SLOT_PITCH + 26;
+        // One line taller than the slots need: SPEC.md 5's link settings put Rate and Speed on the
+        // panel the row's gear opens, and until now a link had both and the player could see
+        // neither. OPEN_ISSUES #32.
+        int panelH = SLOT_PITCH + 26 + STEP_H + 4;
         int blockH = 18 + 6 + panelH;
         int blockY = y(linksY) + (18 + rows * ROW_PITCH + 12 - blockH) / 2;
 
@@ -1187,7 +1190,8 @@ class BaysPage extends WorkbayPage {
         // the mode button between them, and the first screenshot of this panel read the middle and
         // the right as one phrase, "Only these Chest", which is a sentence the mod does not mean.
         String label = labelOf(link);
-        text(g, "FILTER \u00B7 " + label, x(LIST_X + 4), blockY + 5, 100, Draw.TEXT);
+        // LINK, not FILTER: the panel carries what a link is set to and the filter is one of them.
+        text(g, "LINK \u00B7 " + label, x(LIST_X + 4), blockY + 5, 100, Draw.TEXT);
 
         int modeX = x(LIST_X + 108);
         boolean modeHover = screen.hovered(modeX, blockY, 110, 18, mouseX, mouseY);
@@ -1220,10 +1224,11 @@ class BaysPage extends WorkbayPage {
         Draw.well(g, x(LIST_X), panelY, LIST_W, panelH);
         // Centred, for the same reason. Nine slots pinned to the left edge of a 268-wide box read
         // as a list that ran out rather than as the whole of the filter.
+        throughput(g, mouseX, mouseY, config, panelY + 5);
         int slotsW = (com.neryos.workbay.bus.BusFilter.MAX - 1) * SLOT_PITCH + 18;
         int slotsX = LIST_X + (LIST_W - slotsW) / 2;
         for (int slot = 0; slot < com.neryos.workbay.bus.BusFilter.MAX; slot++) {
-            filterEntry(g, x(slotsX + slot * SLOT_PITCH), panelY + 6, config, slot);
+            filterEntry(g, x(slotsX + slot * SLOT_PITCH), panelY + 6 + STEP_H + 4, config, slot);
         }
         // One sentence, and it has to be true of what is on screen. It said "Nothing listed. This
         // link carries everything." over a slot with something in it -- caught on the first
@@ -1234,8 +1239,69 @@ class BaysPage extends WorkbayPage {
             : filter.isEmpty() ? "filter.empty"
             : filter.deny() ? "filter.listed.deny" : "filter.listed.allow";
         textCentre(g, WorkbayScreen.gui(said).getString(),
-            x(LIST_X + LIST_W / 2), panelY + SLOT_PITCH + 12, LIST_W - 16,
+            x(LIST_X + LIST_W / 2), panelY + SLOT_PITCH + 12 + STEP_H + 4, LIST_W - 16,
             carrying ? Draw.SELECT : Draw.TEXT_FAINT);
+    }
+
+    /** How tall one line of stepper controls is. */
+    private static final int STEP_H = 14;
+
+    /**
+     * <b>Rate and Speed, which every link has had since the first one and no screen has ever
+     * shown.</b> SPEC.md 5 draws them on the panel the row's gear opens and OPEN_ISSUES #32 is
+     * that they were never built: the Impeller moves both, for every link at once, and a player
+     * who wanted one link faster than the rest had nothing to press.
+     *
+     * <p>Minus and plus rather than a text field, which is EnderIO's and XNet's shared answer and
+     * far less code -- and it is the one control shape that cannot be typed into wrongly. Holding
+     * <b>shift</b> steps ten at a time and <b>ctrl</b> a hundred, so the top of a 64-rate ladder
+     * is two clicks rather than sixty; the tooltip says so, because a modifier nobody is told
+     * about is a modifier nobody uses.
+     */
+    private void throughput(GuiGraphics g, int mouseX, int mouseY, BusConfig config, int py) {
+        int max = 64;
+        int rate = config.rate();
+        int speed = config.speed();
+        int index = 0;
+        for (int i = 0; i < BusConfig.SPEEDS.length; i++) {
+            if (BusConfig.SPEEDS[i] == speed) {
+                index = i;
+            }
+        }
+
+        int left = x(LIST_X + 10);
+        text(g, WorkbayScreen.gui("links.rate").getString(), left, py + 3, 34, Draw.TEXT_DIM);
+        stepper(g, mouseX, mouseY, left + 36, py, String.valueOf(rate),
+            step -> screen.send(WorkbayAction.SET_LINK_RATE,
+                Math.clamp((long) rate + step, 1, max), config.id()),
+            WorkbayScreen.gui("links.rate"), WorkbayScreen.gui("links.rate.tip"));
+
+        int right = x(LIST_X + LIST_W / 2 + 16);
+        text(g, WorkbayScreen.gui("links.speed").getString(), right, py + 3, 40, Draw.TEXT_DIM);
+        final int at = index;
+        stepper(g, mouseX, mouseY, right + 42,
+            py, WorkbayScreen.gui("links.speed.ticks", speed).getString(),
+            // A faster link waits *less*, so plus has to move down the list or the button lies.
+            step -> screen.send(WorkbayAction.SET_LINK_SPEED,
+                Math.clamp(at - Integer.signum(step), 0, BusConfig.SPEEDS.length - 1), config.id()),
+            WorkbayScreen.gui("links.speed"), WorkbayScreen.gui("links.speed.tip"));
+    }
+
+    /** {@code [-] value [+]}, with the modifier scaling SPEC.md 5 asks for. */
+    private void stepper(GuiGraphics g, int mouseX, int mouseY, int px, int py, String value,
+        java.util.function.IntConsumer move, Component name, Component tip) {
+        int step = net.minecraft.client.gui.screens.Screen.hasControlDown() ? 100
+            : net.minecraft.client.gui.screens.Screen.hasShiftDown() ? 10 : 1;
+        for (int i = 0; i < 2; i++) {
+            boolean plus = i == 1;
+            int bx = plus ? px + 52 : px;
+            boolean hover = screen.hovered(bx, py, STEP_H, STEP_H, mouseX, mouseY);
+            Draw.button(g, bx, py, STEP_H, STEP_H, hover, false);
+            WBIcons.draw(g, plus ? WBIcons.PLUS : WBIcons.MINUS, bx + 1, py + 1, Draw.TEXT);
+            int delta = plus ? step : -step;
+            screen.hit(bx, py, STEP_H, STEP_H, () -> move.accept(delta), name, tip);
+        }
+        textCentre(g, value, px + 33, py + 3, 34, Draw.TEXT);
     }
 
     /** Leaving the panel puts down whatever the cursor was carrying: it belonged to this panel. */
@@ -1469,8 +1535,14 @@ class BaysPage extends WorkbayPage {
                 // Right-aligned against the badge rather than parked on a fixed x: the two
                 // strings are "what it is" and "where it points", and a fixed column left a
                 // forty-pixel hole between them on every row whose name was short.
-                textRight(g, from, px + 202, py + 5, 92,
-                    config.internal() ? Draw.BLUE : Draw.TEXT_DIM);
+                //
+                // And drawn only when it is a second fact. A link into a room derives both from
+                // the room, so the row read "Room 1 ... Room 1" -- the same word twice, which is
+                // the one thing a two-column row must never be.
+                if (!from.equals(label)) {
+                    textRight(g, from, px + 202, py + 5, 92,
+                        config.internal() ? Draw.BLUE : Draw.TEXT_DIM);
+                }
                 textRight(g, "B" + (config.bay() + 1), px + LIST_W - 18, py + 5, 20,
                     Draw.TEXT_FAINT);
                 screen.hit(px, py, LIST_W - 14, ROW_PITCH - 2, () -> {

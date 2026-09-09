@@ -293,6 +293,14 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("filter.close"), "Back to the links");
         add(WorkbayLang.guiKey("filter.close.tip"), "Saved as you change it.");
         add(WorkbayLang.guiKey("links.unknown"), "not loaded");
+        // SPEC.md 5's link settings: what one link moves in a step, and how long it waits.
+        add(WorkbayLang.guiKey("links.rate"), "Rate");
+        add(WorkbayLang.guiKey("links.rate.tip"), "How much this link moves in one step. Hold "
+            + "shift for ten at a time, ctrl for a hundred.");
+        add(WorkbayLang.guiKey("links.speed"), "Speed");
+        add(WorkbayLang.guiKey("links.speed.ticks"), "%st");
+        add(WorkbayLang.guiKey("links.speed.tip"), "Ticks between steps. Plus is faster; the "
+            + "list is fixed so every speed divides the wheel.");
         // What a link into a room is called, on the LINKS row and on the flow map's node. The
         // block first, because the room is the thing that repeats down a chain and the block is
         // the thing that tells one stage from the next.

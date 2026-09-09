@@ -488,6 +488,22 @@ public static final String[] EXTRACT = {
         "............",
     };
 
+    /** The other half of a stepper. Same bar as PLUS, so the pair reads as one control. */
+    public static final String[] MINUS = {
+        "............",
+        "............",
+        "............",
+        "............",
+        "............",
+        "..########..",
+        "..########..",
+        "............",
+        "............",
+        "............",
+        "............",
+        "............",
+    };
+
     public static final String[] PLUS = {
         "............",
         "............",

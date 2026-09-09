@@ -403,6 +403,67 @@ public class MenuTests {
      * would pass on the bug: bay 0 is occupied here, so {@code firstOccupiedBay} is 0 and the
      * button is asked for 2.
      */
+    /**
+     * <b>Rate and speed, which every link has had since the first one and no screen ever showed.</b>
+     * SPEC.md 5 draws them on the panel the row's gear opens; OPEN_ISSUES #32 was that they were
+     * never built, so the Impeller -- which moves both, for every link at once -- was the only way
+     * a player could change either.
+     *
+     * <p>The clamps are the half worth testing. A rate is clamped against a <b>server</b> config a
+     * client cannot see, and a speed is an index into a fixed list precisely because a free number
+     * would not divide the tick wheel; both are asked for out of range on purpose.
+     */
+    @GameTest
+    @TestHolder(description = "A link's rate and speed can be set from the menu, and both are clamped to what is legal.")
+    public static void aLinksRateAndSpeedAreSetAndClamped(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
+            com.neryos.workbay.bus.BusConfig link = com.neryos.workbay.bus.BusConfig.create(
+                java.util.UUID.randomUUID(), 0, com.neryos.workbay.bus.BusConfig.Resource.ITEM,
+                com.neryos.workbay.bus.BusConfig.Mode.INSERT,
+                net.minecraft.core.GlobalPos.of(level.dimension(), workbayPos.above()),
+                net.minecraft.core.GlobalPos.of(level.dimension(), workbayPos.above(2)));
+            workbay.addBus(link);
+            WorkbayMenu menu = menuFor(workbay, player);
+
+            menu.act(WorkbayAction.SET_LINK_RATE, 32, Optional.of(link.id()));
+            helper.assertValueEqual(current(workbay, link).rate(), 32, "the rate the menu set");
+
+            int cap = com.neryos.workbay.config.WorkbayConfig.SERVER.linkMaxRate.get();
+            menu.act(WorkbayAction.SET_LINK_RATE, 100_000, Optional.of(link.id()));
+            helper.assertValueEqual(current(workbay, link).rate(), cap,
+                "a rate asked for past the server's ceiling");
+            menu.act(WorkbayAction.SET_LINK_RATE, -5, Optional.of(link.id()));
+            helper.assertValueEqual(current(workbay, link).rate(), 1, "a rate asked for below one");
+
+            menu.act(WorkbayAction.SET_LINK_SPEED, 0, Optional.of(link.id()));
+            helper.assertValueEqual(current(workbay, link).speed(),
+                com.neryos.workbay.bus.BusConfig.SPEEDS[0], "the fastest speed on the list");
+            menu.act(WorkbayAction.SET_LINK_SPEED, 99, Optional.of(link.id()));
+            helper.assertValueEqual(current(workbay, link).speed(),
+                com.neryos.workbay.bus.BusConfig.SPEEDS[
+                    com.neryos.workbay.bus.BusConfig.SPEEDS.length - 1],
+                "a speed index past the end of the list");
+            // Every legal speed has to divide the wheel, which is the entire reason the list is
+            // fixed rather than a number the player types.
+            for (int s : com.neryos.workbay.bus.BusConfig.SPEEDS) {
+                helper.assertValueEqual(1200 % s, 0, "speed " + s + " dividing the 1200-tick wheel");
+            }
+            helper.succeed();
+        });
+    }
+
+    private static com.neryos.workbay.bus.BusConfig current(WorkbayBlockEntity workbay,
+        com.neryos.workbay.bus.BusConfig link) {
+        return workbay.buses().stream().filter(b -> b.id().equals(link.id())).findFirst()
+            .orElseThrow();
+    }
+
     @GameTest
     @TestHolder(description = "The Pair button stamps a Connector held in the offhand with the selected bay.")
     public static void pairReachesTheOffhandAndTheSelectedBay(final DynamicTest test) {

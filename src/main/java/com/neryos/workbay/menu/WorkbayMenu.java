@@ -193,6 +193,12 @@ public class WorkbayMenu extends AbstractContainerMenu {
                 link.filter().with((int) (arg >>> 32), filterEntry(link, (int) arg))));
             case TOGGLE_FILTER_DENY -> editLink(linkId,
                 link -> link.withFilter(link.filter().withDeny(!link.filter().deny())));
+            // Clamped here and nowhere else: the ceiling is a server config, and a client that
+            // sends 4000 has to be told no by the side that owns the number.
+            case SET_LINK_RATE -> editLink(linkId, link -> link.withRate((int) Math.clamp(arg, 1,
+                com.neryos.workbay.config.WorkbayConfig.SERVER.linkMaxRate.get())));
+            case SET_LINK_SPEED -> editLink(linkId, link -> link.withSpeed(
+                BusConfig.SPEEDS[(int) Math.clamp(arg, 0, BusConfig.SPEEDS.length - 1)]));
             case SET_BAY_NAME -> editBay(serverPlayer, record,
                 bay -> bay.withName(text.orElse("").strip()));
             // Capped where every other player-typed name in this mod is capped. The packet already
