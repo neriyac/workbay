@@ -160,7 +160,11 @@ public class WorkbayCommands {
             return 0;
         }
         if (!com.neryos.workbay.world.RoomVisit.enter(player, record.get(), index)) {
-            source.sendFailure(Component.literal("No room " + index + " on this network."));
+            // Deliberately vague about which of the two it was: RoomVisit puts "that room isn't
+            // yours" on the action bar itself when that is the reason, and a command that then
+            // adds "no room 2 on this network" is the mod contradicting itself in two places at
+            // once. This covers the other reason -- a slot the network does not have.
+            source.sendFailure(Component.literal("Could not enter room " + index + "."));
             return 0;
         }
         return 1;

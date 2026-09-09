@@ -915,7 +915,11 @@ public class WorkbayMenu extends AbstractContainerMenu {
                 room != null && room.anchored(),
                 room == null ? "" : room.effectiveBiome().location().toString(),
                 room == null ? com.neryos.workbay.content.room.RoomColour.DEFAULT : room.colour(),
-                room == null ? List.of() : room.guests()));
+                // The owner's alone. Anybody may open an unlocked Workbay, so sending every room's
+                // guest list on the snapshot would let one guest read who else was invited to
+                // every other room -- which is the thing the door screen already refuses to do.
+                room == null || !record.owner().equals(player.getUUID())
+                    ? List.of() : room.guests()));
         }
         return out;
     }

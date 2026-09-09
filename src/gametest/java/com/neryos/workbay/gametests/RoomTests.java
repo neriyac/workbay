@@ -521,6 +521,20 @@ public class RoomTests {
             record = registry.byId(site.record().id()).orElseThrow();
             helper.assertTrue(RoomVisit.enter(stranger, record, 0),
                 "an invited guest was refused the room they were invited to");
+
+            // And the guest list is the owner's alone. Anybody may open an unlocked Workbay, so a
+            // snapshot that carried every room's guests would let one guest read who else was
+            // invited to every other room -- which is what the door screen already refuses.
+            WorkbayBlockEntity workbay =
+                (WorkbayBlockEntity) helper.getLevel().getBlockEntity(site.workbayPos());
+            helper.assertFalse(com.neryos.workbay.menu.WorkbayMenu
+                .build(workbay, stranger, 0).rooms().stream()
+                .anyMatch(r -> !r.guests().isEmpty()),
+                "a guest's snapshot carries somebody else's guest list");
+            helper.assertTrue(com.neryos.workbay.menu.WorkbayMenu
+                .build(workbay, site.player(), 0).rooms().stream()
+                .anyMatch(r -> !r.guests().isEmpty()),
+                "the owner's own snapshot has no guest list on it, so the screen cannot draw one");
             helper.succeed();
         });
     }
