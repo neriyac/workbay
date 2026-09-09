@@ -31,7 +31,11 @@ public class WBItemModelProvider extends ItemModelProvider {
         flatItem(WBItems.RESONATOR.getId().getPath());
         flatItem(WBItems.MULTICHANNEL.getId().getPath());
         flatItem(WBItems.IMPELLER.getId().getPath());
-        blockItem(WBBlocks.CONNECTOR.getId().getPath());
+        // <b>Flat, not the block model.</b> A Connector is an 8x8x2 slab against one wall of its
+        // cube, so as a block item it drew a small plate hanging in the lower right of an empty
+        // box -- in the inventory, in JEI and on the Pair button. Its own 16x16 sprite fills the
+        // icon and fixes all three; make-art.py's connector_item draws it.
+        flatItem(WBBlocks.CONNECTOR.getId().getPath());
         blockItem(WBBlocks.ASSAY.getId().getPath());
     }
 

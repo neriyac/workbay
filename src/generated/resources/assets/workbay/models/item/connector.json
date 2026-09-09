@@ -1,3 +1,6 @@
 {
-  "parent": "workbay:block/connector"
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "workbay:item/connector"
+  }
 }

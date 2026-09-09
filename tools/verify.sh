@@ -46,6 +46,7 @@ fi
 
 step "doc budget" ./tools/check-docs.sh
 step "text widths" ./tools/check-text.sh
+step "lang keys"   python tools/check-lang.py
 
 echo "----------------------------------------------"
 if [ -n "$fails" ]; then

@@ -226,6 +226,10 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("links.type.item"), "Carries items");
         add(WorkbayLang.guiKey("links.type.fluid"), "Carries fluids");
         add(WorkbayLang.guiKey("links.type.energy"), "Carries energy");
+        // The fourth resource only exists when Mekanism is installed, which is why this line was
+        // missing and the tooltip's title read `gui.workbay.links.type.chemical` in bold.
+        // tools/check-lang.sh now walks every resource rather than the three anybody sees.
+        add(WorkbayLang.guiKey("links.type.chemical"), "Carries chemicals");
         add(WorkbayLang.guiKey("links.type.tip"), "Click to change what this link carries. Right-click steps back.");
         add(WorkbayLang.guiKey("links.none.here"), "No links on this bay. %s on other bays \u2014 press Add to move one here.");
         add(WorkbayLang.guiKey("links.adding"), "TO BAY %s");

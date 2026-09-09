@@ -385,6 +385,33 @@ def connector():
     return im
 
 
+def connector_item():
+    """The same plate, as an item rather than as a block face.
+
+    The block's item model used to be the block model, which is an 8x8x2 slab sitting against one
+    wall of its cube -- so the inventory, JEI and the Pair button all drew a small plate hanging in
+    the lower right of an empty box. A flat sprite fixes all three at once, and it cannot reuse
+    connector.png: that texture keeps the plate in the middle 8x8 because the model's UVs come off
+    the element's bounds, so a flat model of it would be a plate the size of a postage stamp inside
+    a frame of rim steel. This is the same drawing at twice the size, filling the icon.
+
+    Found by Neriya, looking at the Pair button."""
+    im = blank()
+    d = ImageDraw.Draw(im)
+    rect(d, 0, 0, 15, 15, STEEL)
+    bevel(d, 0, 0, 15, 15, STEEL_H, DARK)
+    rect(d, 4, 4, 11, 11, STEEL_D)
+    bevel(d, 4, 4, 11, 11, DARK, STEEL_L)
+    for cx, cy in ((2, 2), (13, 2), (2, 13), (13, 13)):
+        px(d, cx, cy, BOLT)
+    rect(d, 6, 6, 9, 9, CYAN[1])
+    px(d, 6, 6, CYAN[2])
+    px(d, 7, 6, CYAN[2])
+    px(d, 9, 9, CYAN[0])
+    px(d, 8, 9, CYAN[0])
+    return im
+
+
 def port():
     """The door of a bay: six of these seal one machine, seen only from inside the Backshop.
 
@@ -777,7 +804,8 @@ BLOCK_ART = {"connector": connector, "port": port,
              "room_door_bl": room_door_bl, "room_door_br": room_door_br}
 ITEM_ART = {"shopsteel": shopsteel, "housing": housing,
             "expansion_plate": expansion_plate, "resonator": resonator,
-            "multichannel": multichannel, "impeller": impeller}
+            "multichannel": multichannel, "impeller": impeller,
+            "connector": connector_item}
 
 
 def write_pip(root):

@@ -213,6 +213,7 @@
   "gui.workbay.links.speed.ticks": "%st",
   "gui.workbay.links.speed.tip": "Ticks between steps. Plus is faster; the list is fixed so every speed divides the wheel.",
   "gui.workbay.links.target.tip": "What this link is pointed at.",
+  "gui.workbay.links.type.chemical": "Carries chemicals",
   "gui.workbay.links.type.energy": "Carries energy",
   "gui.workbay.links.type.fluid": "Carries fluids",
   "gui.workbay.links.type.item": "Carries items",

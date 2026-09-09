@@ -15,6 +15,48 @@ import net.minecraft.client.gui.GuiGraphics;
 public final class WBIcons {
     private WBIcons() {}
 
+    /**
+     * <b>An icon that is a real item rather than a drawn grid.</b>
+     *
+     * <p>The grids stay for everything that means an <em>action</em> or a <em>direction</em>: no
+     * object means "down", "yes" or "sort", and a picture of one that happens to be near the idea
+     * is the trick that put a grass block on "items". What an object <em>can</em> mean is a noun,
+     * and where the noun exists in the game already the game's own picture beats a redrawing of
+     * it — a player has seen a name tag ten thousand times and has never seen our twelve pixels.
+     * Neriya's call, after the items icon.
+     *
+     * <p>Carried as a one-element {@code String[]} so that not one of the thirty call sites, two
+     * button helpers or the palette argument has to change: a row of pixels can never begin with
+     * {@code @}, so {@link #draw} can tell the two apart in its first line and everything else in
+     * this file stays what it was.
+     */
+    private static String[] item(String id) {
+        return new String[] { "@" + id };
+    }
+
+    private static final java.util.Map<String, net.minecraft.world.item.ItemStack> STACKS =
+        new java.util.HashMap<>();
+
+    /**
+     * One item sprite, {@code side} pixels wide instead of the sixteen it is drawn at, dimmed to
+     * the panel when the colour it was asked for is a faint one.
+     *
+     * <p>An item sprite cannot be tinted -- {@code renderItem} goes through the item renderer and
+     * never sees {@code GuiGraphics#setColor} -- so "disabled" is the wash every other disabled
+     * thing on these screens uses, laid over the top.
+     */
+    public static void sprite(GuiGraphics graphics, net.minecraft.world.item.ItemStack stack,
+        int x, int y, int side, boolean full) {
+        graphics.pose().pushPose();
+        graphics.pose().translate(x, y, 0);
+        graphics.pose().scale(side / 16.0F, side / 16.0F, 1.0F);
+        graphics.renderItem(stack, 0, 0);
+        graphics.pose().popPose();
+        if (!full) {
+            Draw.disabled(graphics, x, y, side, side);
+        }
+    }
+
     public static final String[] UPGRADE = {
         "............",
         ".....##.....",
@@ -52,42 +94,6 @@ public static final String[] MAP = {
     };
 
     // ------------------------------------------------------- what a link carries
-
-    /**
-     * <b>Items.</b> Not one block, because no single block means "items" — a grass block meant
-     * "the first thing in the registry", a chest means storage and an ingot means metal. What
-     * means <em>items</em> is <b>several different ones together</b>, so this is three: a bar of
-     * something, a gem, and a pinch of dust, each in its own colour. The colours are the whole
-     * reason it works at twelve pixels — in one tint the three shapes merge into a smudge.
-     */
-    public static final String[] ITEM = {
-        "............",
-        "............",
-        "...22....11.",
-        "..2222..1111",
-        "..2222..1111",
-        "...22....11.",
-        "..44444444..",
-        ".4444444444.",
-        ".3333333333.",
-        "..33333333..",
-        "............",
-        "............",
-    };
-
-    /**
-     * Items' palette: redstone red, lapis blue, and the ingot in two greys — a body and a lit top
-     * face, which is what makes a bar read as <em>an ingot</em> rather than as a line.
-     *
-     * <p><b>Both of the first draft's mistakes were about size, not colour.</b> The ingot was a
-     * three-row parallelogram, which at twelve pixels is a scratch across the bottom of the icon,
-     * and the dust was drawn as a cross — the same shape as {@link #PLUS}, a button two inches
-     * away on the same screen. Shipped, judged in a real client at the size it is drawn, and
-     * redrawn: the three shapes now touch, so they read as one heap of goods rather than as three
-     * things that happen to be near each other.
-     */
-    public static final int[] ITEM_COLOURS =
-        { 0xFFC9483C, 0xFF3F63C4, 0xFFA8AEB8, 0xFFDEE3EA };
 
     /**
      * <b>Energy.</b> A bolt. The one glyph in the genre that needs no caption, and the reason the
@@ -229,77 +235,25 @@ public static final String[] ENTER = {
         "............",
     };
 
-    public static final String[] RENAME = {
-        "............",
-        "........###.",
-        ".......####.",
-        "......####..",
-        ".....####...",
-        "....####....",
-        "...####.....",
-        "..####......",
-        ".####.......",
-        ".##.........",
-        "............",
-        ".##########.",
-    };
+    /**
+     * <b>Rename.</b> The thing you rename with, and the one object in the game that means exactly that.
+     */
+    public static final String[] RENAME = item("minecraft:name_tag");
 
     /**
-     * A redstone torch. Fourth attempt, and the first that reads as itself — because it is the
-     * first drawn in <b>two colours</b>. A red head on a brown stick is a redstone torch to
-     * anybody who has played the game; the same silhouette in one tint is the trophy that got the
-     * torch rejected the first time. A repeater shipped in between and read as an anvil, and
-     * redstone dust's cross was indistinguishable from {@link #PLUS} two inches away.
+     * <b>Redstone.</b> The genre's own picture of a redstone gate; EnderIO and Mekanism both use it. The mode is carried by the button lighting and by the icon dimming when the bay ignores redstone altogether.
      */
-    public static final String[] REDSTONE = {
-        "............",
-        "....1111....",
-        "...111111...",
-        "...111111...",
-        "....1111....",
-        ".....22.....",
-        ".....22.....",
-        ".....22.....",
-        ".....22.....",
-        ".....22.....",
-        "............",
-        "............",
-    };
+    public static final String[] REDSTONE = item("minecraft:redstone_torch");
 
-    /** The torch's palette: redstone red, stick brown. */
-    public static final int[] REDSTONE_COLOURS = { 0xFFD03A32, 0xFF9A6B3F };
+    /**
+     * <b>Copy.</b> Book and quill: the pair reads as copy/paste the way a floppy disk reads as save, and the quill is what tells it from PASTE on the button beside it.
+     */
+    public static final String[] COPY = item("minecraft:writable_book");
 
-    /** Two sheets, the back one offset — the copy idiom every desktop has taught since 1984. */
-    public static final String[] COPY = {
-        "............",
-        "..#######...",
-        "..#.....#...",
-        "..#..######.",
-        "..#..#....#.",
-        "..#..#....#.",
-        "..####....#.",
-        ".....#....#.",
-        ".....#....#.",
-        ".....######.",
-        "............",
-        "............",
-    };
-
-    /** A clipboard with its clip. Deliberately unlike COPY at a glance, not a mirrored twin. */
-    public static final String[] PASTE = {
-        "............",
-        "....####....",
-        "..#.####.#..",
-        "..##########",
-        "..#........#",
-        "..#..####..#",
-        "..#........#",
-        "..#..####..#",
-        "..#........#",
-        "..##########",
-        "............",
-        "............",
-    };
+    /**
+     * <b>Paste.</b> The written half of that pair.
+     */
+    public static final String[] PASTE = item("minecraft:written_book");
 
     /** Into the machine: the arrow passes through the wall of the box, which is the only part of
      *  the picture that separates it from {@link #EXTRACT}. */
@@ -416,21 +370,10 @@ public static final String[] EXTRACT = {
         "............",
     };
 
-    /** Filter: a funnel. Also the filter-view button in the LINKS header. */
-    public static final String[] FILTER = {
-        "............",
-        ".##########.",
-        ".##########.",
-        "..########..",
-        "...######...",
-        "....####....",
-        "....####....",
-        "....####....",
-        "....####....",
-        "............",
-        "............",
-        "............",
-    };
+    /**
+     * <b>Filter.</b> A funnel. The only vanilla object that means 'some of this goes through'.
+     */
+    public static final String[] FILTER = item("minecraft:hopper");
 
     public static final String[] SORT = {
         "............",
@@ -449,23 +392,9 @@ public static final String[] EXTRACT = {
 
 
     /**
-     * ROOMS. A doorway with a floor line, which is what the page is about — somewhere to walk into.
-     * Not a house or a box: both read as storage, and this mod already draws a bay as a box.
+     * <b>Door.</b> The rooms tab, and a room's way out is a door.
      */
-    public static final String[] DOOR = {
-        "............",
-        "..########..",
-        "..##....##..",
-        "..##....##..",
-        "..##....##..",
-        "..##....##..",
-        "..##....##..",
-        "..##.##.##..",
-        "..##....##..",
-        "..##....##..",
-        "############",
-        "............",
-    };
+    public static final String[] DOOR = item("minecraft:iron_door");
 
     /** The room anchor toggle: a shackle over two flukes, read at twelve pixels as "held down". */
     public static final String[] ANCHOR = {
@@ -484,25 +413,9 @@ public static final String[] EXTRACT = {
     };
 
     /**
-     * A guest. Head and shoulders, solid, with the head outlined and the shoulders filled.
-     * Rendered at 1x and 4x against three rejected drafts, the way every icon in this set was: an
-     * outlined bust vanishes at twelve pixels, one with arms reads as a robot, and one with a gap
-     * between head and shoulders reads as two shapes rather than as a person.
+     * <b>Guest.</b> Rendered as the block model, which is a head: the one icon here that is 3D and is better for it.
      */
-    public static final String[] GUEST = {
-        "............",
-        "....####....",
-        "...##..##...",
-        "...##..##...",
-        "....####....",
-        "...######...",
-        "..########..",
-        ".##########.",
-        ".##########.",
-        ".##########.",
-        "............",
-        "............",
-    };
+    public static final String[] GUEST = item("minecraft:player_head");
 
     /** The other half of a stepper. Same bar as PLUS, so the pair reads as one control. */
     public static final String[] MINUS = {
@@ -571,6 +484,15 @@ public static final String[] EXTRACT = {
     public static void draw(GuiGraphics graphics, String[] icon, int x, int y, int argb,
         int... palette) {
         int lit = Math.max(argb >> 16 & 0xFF, Math.max(argb >> 8 & 0xFF, argb & 0xFF));
+        // A row of pixels cannot start with '@'; an item icon is nothing else. See #item.
+        if (icon.length == 1 && icon[0].startsWith("@")) {
+            sprite(graphics, STACKS.computeIfAbsent(icon[0], id ->
+                new net.minecraft.world.item.ItemStack(
+                    net.minecraft.core.registries.BuiltInRegistries.ITEM.get(
+                        net.minecraft.resources.ResourceLocation.parse(id.substring(1))))),
+                x, y, 12, lit >= 0xC0);
+            return;
+        }
         for (int row = 0; row < icon.length; row++) {
             String line = icon[row];
             int run = -1;

@@ -57,13 +57,20 @@ class BaysPage extends WorkbayPage {
     private static final int LIST_X = 40;
     private static final int LIST_W = 268;
     /**
-     * Where a row's status column starts, and how wide it is. Pushed right from 142 and cut from
-     * 54: its longest word is "No machine" at forty-five pixels, and the eight it gives up plus
-     * the four off its own width are eight more characters of the name beside it — which is the
-     * difference between "Connec..." and "Connector".
+     * Where a row's status column starts, and how wide it is.
+     *
+     * <p><b>54, because that is what the longest short status measures.</b> It was cut to 46 to
+     * buy the name beside it twelve pixels, on the written claim that "No machine" is forty-five
+     * — it is fifty-four, and three of the eleven statuses came out clipped: "No mach...",
+     * "Off-worl..." and "No targe...". The clipped ones still carry the full string in a tooltip,
+     * which is why it survived a release: the fault only shows on the row itself.
+     *
+     * <p>The arithmetic, the same way "No Assay racked is 76 pixels" was got: every glyph's
+     * advance is its width plus one, so N6 o6 space4 m6 a6 c6 h6 i2 n6 e6. Nothing here is a
+     * guess, and the guess is what shipped. Found by Neriya, reading a row. OPEN_ISSUES #58.
      */
-    private static final int STATUS_X = 150;
-    private static final int STATUS_W = 46;
+    private static final int STATUS_X = 142;
+    private static final int STATUS_W = 54;
 
     private final int height;
     private final int rackPitch;
@@ -497,7 +504,7 @@ class BaysPage extends WorkbayPage {
             () -> screen.send(WorkbayAction.CYCLE_REDSTONE),
             WorkbayScreen.gui("redstone." + bay.redstone().getSerializedName()),
             WorkbayScreen.gui("redstone." + bay.redstone().getSerializedName() + ".tip"),
-            WBIcons.REDSTONE_COLOURS);
+            NO_PALETTE, !unlocked ? Draw.TEXT_FAINT : gated ? Draw.TEXT : Draw.TEXT_DIM);
 
         // Copy and paste. Eight bays running the same machine is the first complaint this mod will
         // get, and Mekanism answers it with a Configuration Card (SPEC.md §7).
@@ -580,27 +587,51 @@ class BaysPage extends WorkbayPage {
     }
 
     /**
-     * <b>What a link carries, drawn.</b> These four were item sprites standing in for icons that
-     * nobody had drawn yet, and the stand-in showed: <em>items</em> was a <b>grass block</b>, which
-     * says "the first block in the registry" and nothing else; energy was a lump of coal, and a
-     * fluid was a water bottle. All three were the same trick — borrow a picture of a thing that
-     * happens to be made of the stuff, and hope it reads as the category.
+     * Three real sprites, shrunk and stacked, and nothing about them is tinted or redrawn.
      *
-     * <p>Drawn instead, in {@link WBIcons}: items is three different things together (a gem, a
-     * pinch of dust, an ingot — because no single object means "items"), energy is a bolt, a fluid
-     * is a drop and a chemical is a flask. Each carries its own colour, which is what lets three
-     * shapes at twelve pixels stay three shapes.
+     * <p><b>Energy, fluid and chemical stay drawn glyphs</b> for the reason they always did: a
+     * bolt, a drop and a flask each mean the category outright, and the sprites that stood in for
+     * them meant something else — energy was a lump of coal and a fluid was a water bottle,
+     * pictures of a thing that happens to be made of the stuff.
      *
-     * <p>And they land on the pixel grid. An item sprite scaled to 0.75 is a 16x16 texture drawn
-     * across twelve pixels, which is every edge in it landing between two of them.
+     * <p><b>Items is the one that has no such glyph, so it uses the things themselves.</b> Nothing
+     * means "items"; several different ones together do. A hand-drawn version of that shipped and
+     * read as two dots on a slab at the size it is actually drawn — which is the argument for
+     * the sprites: a player already knows what lapis, redstone and an ingot look like, so the icon
+     * is recognised rather than decoded. Neriya's call, and the layout was picked off a rendered
+     * mock at 3x and 8x rather than by restarting the game.
+     *
+     * <p>The old objection was the pixel grid: a 16x16 sprite across twelve pixels puts every edge
+     * between two of them. It is still true and it is visible in the mock; what the mock also
+     * shows is that it does not matter here, because the three shapes are read by colour and
+     * silhouette long before an edge is. The ingot's ten pixels sit at {@code y + 3}, so its ink
+     * ends inside the box even though its transparent bottom row does not.
      */
     private void resourceIcon(GuiGraphics g, BusConfig.Resource resource, int x, int y) {
         switch (resource) {
-            case ITEM -> WBIcons.draw(g, WBIcons.ITEM, x, y, Draw.TEXT, WBIcons.ITEM_COLOURS);
+            case ITEM -> {
+                sprite(g, LAPIS, x, y, 7);
+                sprite(g, REDSTONE, x + 5, y, 7);
+                sprite(g, INGOT, x + 1, y + 3, 10);
+            }
             case FLUID -> WBIcons.draw(g, WBIcons.FLUID, x, y, Draw.FLUID);
             case ENERGY -> WBIcons.draw(g, WBIcons.ENERGY, x, y, Draw.ENERGY);
             case CHEMICAL -> WBIcons.draw(g, WBIcons.CHEMICAL, x, y, Draw.CHEMICAL);
         }
+    }
+
+    /** Held rather than built per draw: this runs three times a row, on every row, every frame. */
+    private static final ItemStack LAPIS = new ItemStack(net.minecraft.world.item.Items.LAPIS_LAZULI);
+    private static final ItemStack REDSTONE = new ItemStack(net.minecraft.world.item.Items.REDSTONE);
+    private static final ItemStack INGOT = new ItemStack(net.minecraft.world.item.Items.IRON_INGOT);
+
+    /** One item sprite, {@code side} pixels wide instead of the sixteen it is drawn at. */
+    private static void sprite(GuiGraphics g, ItemStack stack, int px, int py, int side) {
+        g.pose().pushPose();
+        g.pose().translate(px, py, 0);
+        g.pose().scale(side / 16.0F, side / 16.0F, 1.0F);
+        g.renderItem(stack, 0, 0);
+        g.pose().popPose();
     }
 
     /** A 20x20 button in the machine row: enabled draws lit and clicks, disabled draws sunken. */
@@ -615,9 +646,24 @@ class BaysPage extends WorkbayPage {
     private void actionButton(GuiGraphics g, int mouseX, int mouseY, int px, String[] icon,
         boolean enabled, boolean lit, Runnable onClick, Component name, Component tip,
         int[] palette) {
+        actionButton(g, mouseX, mouseY, px, icon, enabled, lit, onClick, name, tip, palette,
+            enabled ? Draw.TEXT : Draw.TEXT_FAINT);
+    }
+
+    /**
+     * The same, for the one button whose icon carries a state the button's own lighting does not.
+     *
+     * <p>Redstone has four modes and only one of them is "ignore the signal", so the torch is
+     * drawn full while a gate is in use and dimmed while it is not -- which is what EnderIO and
+     * Mekanism both do, and what the lit button alone cannot say on a screen where several
+     * buttons light.
+     */
+    private void actionButton(GuiGraphics g, int mouseX, int mouseY, int px, String[] icon,
+        boolean enabled, boolean lit, Runnable onClick, Component name, Component tip,
+        int[] palette, int iconArgb) {
         boolean hover = screen.hovered(px, y(98), 20, 20, mouseX, mouseY);
         Draw.button(g, px, y(98), 20, 20, hover && enabled, lit && enabled, enabled);
-        WBIcons.draw(g, icon, px + 4, y(102), enabled ? Draw.TEXT : Draw.TEXT_FAINT, palette);
+        WBIcons.draw(g, icon, px + 4, y(102), iconArgb, palette);
         screen.hit(px, y(98), 20, 20, enabled ? onClick : () -> { }, name, tip);
     }
 
@@ -838,9 +884,16 @@ class BaysPage extends WorkbayPage {
             WorkbayScreen.gui("links.sort." + sort.name().toLowerCase(java.util.Locale.ROOT)),
             WorkbayScreen.gui("links.sort.tip"));
 
-        // The skim, at rest, directly above the rows it takes from. SPEC.md §3: goods going missing
-        // must be explained where the loss is noticed, and the loss is noticed on these rows. It is
-        // read-only here — the dial itself lives on the upgrades screen, beside the Levy it buys.
+        // The skim, directly above the rows it takes from. SPEC.md §3: goods going missing must be
+        // explained where the loss is noticed, and the loss is noticed on these rows.
+        //
+        // <b>And it turns here too.</b> It was read-only, on the argument that the dial belongs
+        // beside the Levy it buys -- but it kept the dial's tooltip, so it promised "Click +5,
+        // right-click -5" and did nothing at all. Two answers to that: a second string saying
+        // where the real dial is, or one line making this the real dial as well. The second is
+        // smaller, needs no wording to keep in sync with the first, and is what the comment above
+        // was already arguing for: the number is read where the goods go missing, so that is
+        // where a player reaches for it. Found by Neriya, clicking it. OPEN_ISSUES #57.
         boolean assay = hasAssay(snap);
         // The short form on the line, the sentence in the tooltip: "No Assay racked" is 76 pixels
         // in a slot 62 wide however the header is packed, so it arrived as "No Ass...".
@@ -854,7 +907,8 @@ class BaysPage extends WorkbayPage {
         int rateW = Math.min(SKIM_W, Draw.width(font, rate));
         textRight(g, rate, addX - 8, y(linksY + 5), rateW,
             skimming(snap) ? Draw.AMBER : Draw.TEXT_FAINT);
-        screen.hit(addX - 10 - rateW, y(linksY + 2), rateW + 4, 14, () -> { },
+        screen.hit(addX - 10 - rateW, y(linksY + 2), rateW + 4, 14,
+            () -> screen.send(WorkbayAction.SET_SKIM),
             assay || snap.skimRate() == 0
                 ? WorkbayScreen.gui("skim.name", snap.skimRate())
                 : WorkbayScreen.gui("skim.no_assay"),
