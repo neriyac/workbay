@@ -107,7 +107,35 @@ public class WorkbayBlockEntity extends BlockEntity {
      * The three-layer spend model and round-robin sharing to bays are not built yet, so this is a
      * real buffer the screen reads rather than a number invented for a progress bar.
      */
-    private final EnergyStorage energy = new EnergyStorage(BUFFER_FE, MAX_FE_PER_TICK, 0);
+    private final EnergyStorage energy = new EnergyStorage(BUFFER_FE, MAX_FE_PER_TICK, 0) {
+        private long tick = Long.MIN_VALUE;
+        private int taken;
+
+        /**
+         * The screen prints <b>Up to 10,000 FE/t</b> and {@link EnergyStorage}'s own ceiling is per
+         * <em>call</em>: three pushes in one tick put in thirty thousand, measured. Six cables on
+         * six faces are six pushes, so the printed rate was out by however many things happened to
+         * be pushing.
+         *
+         * <p>Keyed on the level's game time rather than reset from {@link #serverTick}, so a
+         * Workbay in a chunk that is loaded but not ticking cannot be left holding a spent budget
+         * forever. {@code deserializeNBT} writes the field directly and so is not throttled, which
+         * is what lets a full buffer come back off disk in one go.
+         */
+        @Override
+        public int receiveEnergy(int toReceive, boolean simulate) {
+            long now = level == null ? 0 : level.getGameTime();
+            if (now != tick) {
+                tick = now;
+                taken = 0;
+            }
+            int got = super.receiveEnergy(Math.min(toReceive, MAX_FE_PER_TICK - taken), simulate);
+            if (!simulate) {
+                taken += got;
+            }
+            return got;
+        }
+    };
 
     public static final int BUFFER_FE = 100_000;
     public static final int MAX_FE_PER_TICK = 10_000;
@@ -289,6 +317,15 @@ public class WorkbayBlockEntity extends BlockEntity {
         workbay.runner.power(server.hasNeighborSignal(pos));
         workbay.record().ifPresent(record -> {
             if (record.buses().isEmpty()) {
+                return;
+            }
+            // One runner per network per tick. Links live on the record, not on the block, so every
+            // Workbay standing on a record used to run every link on it -- two blocks moved a
+            // rate-1 link twice a second and the Assay skimmed twice, which is a number the panel
+            // prints being wrong by however many Workbays happen to be loaded. OPEN_ISSUES #40 and
+            // #54, and the reason a printed rate can be a promise at all.
+            if (!com.neryos.workbay.world.RoomRegistry.get(server.getServer())
+                .takeBusTurn(record.id(), server.getGameTime())) {
                 return;
             }
             workbay.runner.tick(server, record, record.buses(),
@@ -555,7 +592,13 @@ public class WorkbayBlockEntity extends BlockEntity {
         workbayId = tag.contains(ID_KEY)
             ? UUIDUtil.CODEC.parse(NbtOps.INSTANCE, tag.get(ID_KEY)).result().orElse(null)
             : null;
-        energy.receiveEnergy(tag.getInt(ENERGY_KEY), false);
+        // Not receiveEnergy: that is clamped to MAX_FE_PER_TICK, so a Workbay holding a full
+        // hundred thousand came back off disk with ten and the screen printed the loss as the
+        // truth. Measured: stored 100000, saved 100000, reloaded 10000. Same IntTag on disk either
+        // way, so nothing already saved has to be migrated.
+        if (tag.contains(ENERGY_KEY)) {
+            energy.deserializeNBT(registries, tag.get(ENERGY_KEY));
+        }
         // Absent on disk, present on the update tag. getByteArray answers with an empty array for
         // a key that is not there, which is exactly "no links to show".
         pips = tag.getByteArray(PIPS_KEY);

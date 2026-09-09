@@ -1021,6 +1021,58 @@ public class RoomTests {
      * whole number of chunks from a chunk-aligned corner. That is the entire reason the tiers are
      * 14/30/46 and not 9/17/33.
      */
+    /**
+     * The room screen prints what anchoring costs, and it was printing the wrong number.
+     *
+     * <p>"Holding 1 chunk loaded" is the count of <b>tickets</b>. A forced chunk is held at the
+     * entity-ticking level and drags its neighbours up to loaded two chunks out, so one ticket is a
+     * five-by-five square: measured in the Backshop, a tier-1 room really held twenty-five and a
+     * Vast room forty-nine against a printed nine. The footprint is still on the line above; this
+     * is the line that says what a server owner is paying.
+     *
+     * <p>Counted in the world rather than computed, so the assertion is over what the chunk source
+     * answers and not over the formula restated.
+     */
+    @GameTest(timeoutTicks = 400)
+    @TestHolder(description = "An anchored room holds exactly the chunks its tooltip prints.")
+    public static void anAnchoredRoomHoldsTheChunksItsTooltipPrints(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            Site site = site(helper, 1, 0, 1);
+            helper.assertTrue(RoomVisit.enter(site.player(), site.record(), 0), "room refused");
+            RoomVisit.leave(site.player());
+
+            RoomRegistry registry = RoomRegistry.get(helper.getLevel().getServer());
+            menu(helper, site).act(com.neryos.workbay.menu.WorkbayAction.TOGGLE_ROOM_ANCHOR, 0,
+                java.util.Optional.empty());
+            RoomRecord room = rooms(helper, site).get(0);
+            helper.assertTrue(room.anchored(), "the anchor did not switch on");
+
+            helper.startSequence().thenIdle(20).thenExecute(() -> {
+                net.minecraft.world.level.ChunkPos first =
+                    new net.minecraft.world.level.ChunkPos(RoomGeometry.origin(room.region()));
+                int side = (int) Math.round(Math.sqrt(room.chunkCost()));
+                int loaded = 0;
+                // Two chunks of slack past the halo on every side, so a wider one would be seen
+                // rather than cropped out by the window this counts in.
+                for (int dx = -4; dx < side + 4; dx++) {
+                    for (int dz = -4; dz < side + 4; dz++) {
+                        if (site.backshop().getChunkSource().hasChunk(first.x + dx, first.z + dz)) {
+                            loaded++;
+                        }
+                    }
+                }
+                helper.assertValueEqual(loaded, RoomGeometry.anchorChunks(room.chunkCost()),
+                    "chunks the Backshop really holds for an anchored " + room.chunkCost()
+                        + "-chunk room");
+            }).thenExecute(() -> registry.putRoom(rooms(helper, site).get(0).withAnchored(false)))
+                .thenExecute(() -> com.neryos.workbay.world.RoomAnchors.apply(site.backshop(),
+                    rooms(helper, site).get(0)))
+                .thenSucceed();
+        });
+    }
+
     @GameTest
     @TestHolder(description = "Every room tier is an exact square of chunks, and no two regions overlap.")
     public static void everyRoomTierIsAWholeNumberOfChunks(final DynamicTest test) {

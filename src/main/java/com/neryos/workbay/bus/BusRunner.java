@@ -397,7 +397,11 @@ public class BusRunner {
         if (rate <= 0 || !AssayBlock.rackedIn(record)) {
             return 0;
         }
-        skimCarry += bus.rate() * rate;
+        // The budget this step is actually moving, Impellers and the server ceiling included --
+        // not the raw dial. They were different numbers: the dial says "% of the goods your links
+        // carry", and with one Impeller the link carried twice its rate while the skim accrued on
+        // the rate alone, so a dial set to 25 took 12. Measured, 32 items of 256 that left.
+        skimCarry += rate(record, bus) * rate;
         int cut = skimCarry / 100;
         if (cut <= 0) {
             return 0;

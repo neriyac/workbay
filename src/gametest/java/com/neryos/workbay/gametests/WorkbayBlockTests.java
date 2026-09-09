@@ -48,6 +48,61 @@ public class WorkbayBlockTests {
     }
 
     /**
+     * The two things the energy figures on three screens promise, both of which were false.
+     *
+     * <p><b>"Up to 10,000 FE/t" is a rate</b>, and {@link net.neoforged.neoforge.energy.EnergyStorage}
+     * caps per <em>call</em>: three pushes in one tick put in thirty thousand. Six cables on six
+     * faces are six pushes, so the number was out by however many things were pushing.
+     *
+     * <p><b>"%s / %s FE" has to survive a save.</b> The load path put the saved figure back through
+     * {@code receiveEnergy}, which the same cap clamps, so a full buffer came off disk as a tenth
+     * of one and the screen printed the loss as the truth: measured, 100,000 stored, 100,000
+     * saved, 10,000 reloaded. Neither fault is reachable from a screenshot, and both are what a
+     * printed number is for.
+     */
+    @GameTest
+    @TestHolder(description = "The Workbay's buffer takes its printed rate once a tick and comes "
+        + "back off disk with everything it had.")
+    public static void theBufferKeepsItsPrintedRateAndItsContents(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos pos = place(helper, level, helper.absolutePos(new BlockPos(0, 1, 0)), player,
+                new ItemStack(WBBlocks.WORKBAY.get()));
+            WorkbayBlockEntity workbay = (WorkbayBlockEntity) level.getBlockEntity(pos);
+
+            int first = workbay.energy().receiveEnergy(Integer.MAX_VALUE, false);
+            int second = workbay.energy().receiveEnergy(Integer.MAX_VALUE, false);
+            helper.assertValueEqual(first, WorkbayBlockEntity.MAX_FE_PER_TICK,
+                "what one push takes");
+            helper.assertValueEqual(second, 0,
+                "what a second push in the same tick takes, over a screen promising "
+                    + WorkbayBlockEntity.MAX_FE_PER_TICK + " FE/t");
+
+            // Filled the honest way -- a tick each -- so the round trip is over a real full buffer
+            // rather than one written straight into the field.
+            helper.startSequence()
+                .thenExecuteFor(WorkbayBlockEntity.BUFFER_FE / WorkbayBlockEntity.MAX_FE_PER_TICK,
+                    () -> workbay.energy().receiveEnergy(Integer.MAX_VALUE, false))
+                .thenExecute(() -> {
+                    int stored = workbay.energy().getEnergyStored();
+                    helper.assertValueEqual(stored, WorkbayBlockEntity.BUFFER_FE,
+                        "a buffer filled one tick at a time");
+                    net.minecraft.nbt.CompoundTag tag =
+                        workbay.saveCustomOnly(level.registryAccess());
+                    WorkbayBlockEntity reloaded =
+                        new WorkbayBlockEntity(pos, level.getBlockState(pos));
+                    reloaded.loadWithComponents(tag, level.registryAccess());
+                    helper.assertValueEqual(reloaded.energy().getEnergyStored(), stored,
+                        "the buffer after a save and load");
+                })
+                .thenSucceed();
+        });
+    }
+
+    /**
      * SPEC.md §14, and the question the config's own comment leaves open: what happens when a
      * network has <b>two</b> Workbay blocks and both are broken — which one does re-placing bring
      * back?

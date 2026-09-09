@@ -148,7 +148,9 @@ public enum WorkbayUpgrade implements StringRepresentable {
      * where the install happens and the screen can name it.
      *
      * <p><b>The first rung is cheap and the climb is steep.</b> Plate 1 costs 2 and plate 6 costs
-     * 32, so the whole ladder is 102 Levy where it used to be 42. That is where the entry cost
+     * 52, so the whole ladder is 162 Levy where it used to be 42 — the step was raised from 6 to 10
+     * when the rest of the ladder was repriced and this sentence was left saying 32 and 102, which
+     * is the same fault as any other number that stops being true. That is where the entry cost
      * went: SPEC.md §0 prices the upgrades, not the entry, and the recipes below the first Workbay
      * were carrying weight that belongs here. A first plate the player reaches in a couple of
      * minutes is what teaches them the dial is worth turning; everything after it is the game.

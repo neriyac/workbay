@@ -326,8 +326,11 @@ class RoomsPage extends WorkbayPage {
                 iconButton(g, mouseX, mouseY, px + ANCHOR_X, py, WBIcons.ANCHOR, room.anchored(),
                     () -> screen.send(WorkbayAction.TOGGLE_ROOM_ANCHOR, room.index()),
                     WorkbayScreen.gui(room.anchored() ? "rooms.anchored" : "rooms.unanchored"),
+                    // The chunks actually held, not the tickets taken. A forced chunk keeps its
+                    // neighbours loaded two out, so a one-chunk room costs a host twenty-five --
+                    // measured, and the room's own footprint is already on the line above.
                     WorkbayScreen.gui(room.anchored() ? "rooms.anchored.tip" : "rooms.unanchored.tip",
-                        room.chunkCost()));
+                        com.neryos.workbay.world.RoomGeometry.anchorChunks(room.chunkCost())));
             }
 
             // A door to walk through, or a plus to spend the region on one. Two icons rather than

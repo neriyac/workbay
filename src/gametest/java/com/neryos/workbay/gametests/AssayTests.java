@@ -11,6 +11,7 @@ import com.neryos.workbay.init.WBItems;
 import com.neryos.workbay.menu.WorkbayAction;
 import com.neryos.workbay.menu.WorkbayMenu;
 import com.neryos.workbay.world.BayGeometry;
+import com.neryos.workbay.world.RoomRegistry;
 import com.neryos.workbay.world.WorkbayDimensions;
 import com.neryos.workbay.world.WorkbayRecord;
 import net.minecraft.core.BlockPos;
@@ -261,6 +262,81 @@ public class AssayTests {
                         "iron that arrived with the dial at maximum and no Assay racked");
                     helper.assertValueEqual(workbay.record().orElseThrow().assay().skimmed(), 0,
                         "goods skimmed with no Assay racked");
+                })
+                .thenExecute(() -> level.setBlock(workbayPos, Blocks.AIR.defaultBlockState(),
+                    Block.UPDATE_ALL))
+                .thenSucceed();
+        });
+    }
+
+    /**
+     * <b>The dial says "% of the goods your links carry", so it has to be a share of what left.</b>
+     *
+     * <p>It was a share of the raw rate on the row, while the link's actual budget is that rate
+     * times the Impellers and clamped to the server's ceiling. Those are two different numbers the
+     * moment a plate is fitted: measured with one Impeller, a dial set to 25 took 32 items of the
+     * 256 that left the bay — twelve per cent. The upgrade that makes a link carry more quietly
+     * made the Assay take a smaller share of it, which is a printed percentage that means something
+     * different on every Workbay.
+     *
+     * <p>The Impeller is what makes this test able to fail; without one the two numbers agree.
+     */
+    @GameTest(timeoutTicks = 900)
+    @TestHolder(description = "The skim dial takes its printed share of what a link carries, with "
+        + "an Impeller fitted as well as without.")
+    public static void theSkimTakesItsPrintedShareEvenWithAnImpeller(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos targetPos = helper.absolutePos(new BlockPos(4, 1, 4));
+            level.setBlock(targetPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+
+            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
+            WorkbayMenu menu = menuFor(workbay, player);
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            int dial = 25;
+
+            helper.startSequence()
+                .thenIdle(3)
+                .thenExecute(() -> {
+                    rack(menu, player, 0, new ItemStack(WBBlocks.ASSAY.get()));
+                    rack(menu, player, 1, new ItemStack(Blocks.CHEST));
+                    WorkbayRecord record = workbay.record().orElseThrow();
+                    WorkbayRecord.Upgrades up = record.upgrades();
+                    RoomRegistry.get(level.getServer()).put(record.withUpgrades(
+                        new WorkbayRecord.Upgrades(up.expansionPlates(), up.resonators(),
+                            up.anchors(), up.annexPlates(), up.roomTier(), up.multichannel(), 1)));
+                    fill(backshop, BayGeometry.machinePos(record.bayColumn(), 1),
+                        new ItemStack(Items.IRON_INGOT, 64), 4);
+                    // Rate 8, not the helper's 64: a move carries at most one slot's stack, so a
+                    // budget above 64 delivers less than it was allowed while the skim still takes
+                    // its whole cut, and the share of what left comes out above the dial. The dial
+                    // is a share of the step's budget; they are the same number only while the
+                    // budget fits in a stack, which is every rate a player can set.
+                    workbay.addBus(connect(helper, workbay, 1, targetPos.above(), player)
+                        .withRate(8));
+                    setSkim(menu, dial);
+                })
+                .thenWaitUntil(() -> {
+                    if (countIn(backshop, BayGeometry.machinePos(
+                        workbay.record().orElseThrow().bayColumn(), 1), Items.IRON_INGOT) > 0) {
+                        throw new GameTestAssertException("the bay still holds iron");
+                    }
+                })
+                .thenExecute(() -> {
+                    WorkbayRecord now = workbay.record().orElseThrow();
+                    int delivered = countIn(level, targetPos, Items.IRON_INGOT);
+                    int taken = now.assay().skimmed()
+                        + now.assay().levy() * AssayBlock.itemsPerLevy();
+                    int left = taken + delivered;
+                    helper.assertValueEqual(left, 256, "iron that left the bay");
+                    // A whole-item skim on a whole-item budget lands on the dial exactly; the
+                    // carry is what makes that true rather than a rounding band.
+                    helper.assertValueEqual(taken, left * dial / 100,
+                        "items the skim took of the " + left + " that left, at a dial of " + dial);
                 })
                 .thenExecute(() -> level.setBlock(workbayPos, Blocks.AIR.defaultBlockState(),
                     Block.UPDATE_ALL))

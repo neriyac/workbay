@@ -60,6 +60,18 @@ public class RoomRegistry extends SavedData {
      */
     private final Map<UUID, RoomRecord> rooms = new HashMap<>();
 
+    /**
+     * Which tick each network's buses were last run on. <b>Not saved</b>: it is a claim on the
+     * current tick and nothing more.
+     *
+     * <p>Every Workbay on a record ticks <em>every</em> bus on it, so two blocks standing on one
+     * network moved every link twice and the Assay skimmed twice — a link the panel printed as one
+     * item every twenty ticks delivered two a second, measured in a live world (OPEN_ISSUES #54,
+     * and #40 is the fault). The rate and the wheel were both right; the link was simply stepped by
+     * two runners. One entry per network, replaced every tick.
+     */
+    private final Map<UUID, Long> busTurn = new HashMap<>();
+
     private int nextBayColumn = 0;
 
     /**
@@ -73,6 +85,18 @@ public class RoomRegistry extends SavedData {
 
     public static RoomRegistry get(MinecraftServer server) {
         return server.overworld().getDataStorage().computeIfAbsent(FACTORY, FILE);
+    }
+
+    /**
+     * True for exactly one Workbay per network per tick — whichever asks first.
+     *
+     * <p>An election rather than a fixed block, because a fixed one stops the whole network the
+     * moment its chunk unloads. Block entities tick in a stable order, so the same Workbay wins
+     * every tick while it is loaded and another takes over on its own when it is not.
+     */
+    public boolean takeBusTurn(UUID network, long gameTime) {
+        Long ranOn = busTurn.put(network, gameTime);
+        return ranOn == null || ranOn != gameTime;
     }
 
     // ---------------------------------------------------------------- reading

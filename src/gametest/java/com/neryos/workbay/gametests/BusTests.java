@@ -752,6 +752,82 @@ public class BusTests {
     }
 
     /**
+     * The other half of {@link #busObeysItsRate}, and the half nobody wrote: <b>how often</b> a
+     * step comes round. A rate is a promise per step, a speed is a promise about the gap, and a
+     * link kept to its rate but stepped twice as often lies by exactly as much as one that keeps
+     * its interval and moves double.
+     *
+     * <p>OPEN_ISSUES #54 was measured in a live world: 126 items in 61 s from a link the panel
+     * printed as one item every twenty ticks. The wheel was right and the rate was right --
+     * <b>two Workbay blocks were standing on one network, and each of them ran every link on it</b>
+     * (#40). The scratch world had three, six chunks apart, from before the deployed cap existed.
+     * So the number the panel prints is only a promise the mod can keep if exactly one block per
+     * network runs the buses, which is what this asserts and what the single-Workbay case could
+     * never have caught.
+     */
+    @GameTest(timeoutTicks = 900)
+    @TestHolder(description = "Two Workbays on one network deliver a link's printed rate once "
+        + "between them, not once each.")
+    public static void twoWorkbaysOnOneNetworkStillDeliverThePrintedRate(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(7, 5, 7));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos secondPos = helper.absolutePos(new BlockPos(0, 1, 4));
+            BlockPos targetPos = helper.absolutePos(new BlockPos(4, 1, 4));
+
+            level.setBlock(targetPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            if (level.getBlockEntity(targetPos) instanceof Container source) {
+                source.setItem(0, new ItemStack(Items.GOLD_INGOT, 64));
+            }
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.BARREL));
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+
+            BusConfig link = connect(helper, workbay, targetPos.above(), Direction.DOWN, player);
+            workbay.addBus(link.withMode(BusConfig.Mode.EXTRACT).withRate(1).withSpeed(20));
+
+            // A second block on the same network, placed the way the worlds that have one got it:
+            // straight through setPlacedBy, which is where an unbound Workbay joins the placer's
+            // existing record. WorkbayItem's cap refuses this to a player now; it did not always,
+            // and a config may raise it, so the runner cannot rely on there being only one.
+            level.setBlock(secondPos, WBBlocks.WORKBAY.get().defaultBlockState(), Block.UPDATE_ALL);
+            WBBlocks.WORKBAY.get().setPlacedBy(level, secondPos, level.getBlockState(secondPos),
+                player, new ItemStack(WBBlocks.WORKBAY.get()));
+            helper.assertValueEqual(
+                ((WorkbayBlockEntity) level.getBlockEntity(secondPos)).workbayId().orElse(null),
+                record.id(), "the second Workbay's network");
+
+            int[] atStart = new int[1];
+            helper.startSequence()
+                // Start the window on a delivery rather than on an arbitrary tick, so the count is
+                // not off by whatever fraction of an interval the setup landed in.
+                .thenWaitUntil(() -> {
+                    if (countIn(backshop, machinePos, Items.GOLD_INGOT) <= 0) {
+                        throw new GameTestAssertException("nothing has moved yet");
+                    }
+                })
+                .thenExecute(() -> atStart[0] = countIn(backshop, machinePos, Items.GOLD_INGOT))
+                .thenIdle(200)
+                .thenExecute(() -> {
+                    int moved = countIn(backshop, machinePos, Items.GOLD_INGOT) - atStart[0];
+                    if (moved != 10) {
+                        helper.fail("a link at rate 1, speed 20 moved " + moved
+                            + " items in 200 ticks; the panel promises 10");
+                    }
+                })
+                .thenExecute(() -> {
+                    level.setBlock(secondPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+                    tearDown(helper, workbayPos);
+                })
+                .thenSucceed();
+        });
+    }
+
+    /**
      * Reported from play, not from reading: a chest hosted in a bay with one face set to <b>in</b>
      * refused to send anything and the row said nothing was wrong, while another row said
      * <code>No port</code> without saying which end had none.

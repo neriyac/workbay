@@ -82,10 +82,25 @@ public final class RoomGeometry {
         return inside == 0 ? 0 : inside + 2;
     }
 
-    /** What an anchored room of this tier holds loaded: 1, 4 or 9. The room screen prints it. */
+    /** The room's own footprint in chunks: 1, 4 or 9. One forced ticket per chunk of it. */
     public static int chunkCost(int tier) {
         int chunks = footprint(tier) / 16;
         return chunks * chunks;
+    }
+
+    /**
+     * What anchoring a room of that footprint really keeps loaded, which is <b>not</b> the number
+     * of tickets it takes.
+     *
+     * <p>A forced chunk is held at the entity-ticking level, and its neighbours are dragged up to
+     * merely loaded two chunks out — so one ticket is a five-by-five square. Measured in the
+     * Backshop rather than reasoned from the ticket API: a tier-1 room whose page said "1 chunk"
+     * had twenty-five chunks loaded around it, and a Vast room said 9 and had forty-nine. The
+     * screen prints this now, because the number a host is paying is the one that is loaded.
+     */
+    public static int anchorChunks(int footprintChunks) {
+        int side = (int) Math.round(Math.sqrt(footprintChunks)) + 4;
+        return footprintChunks == 0 ? 0 : side * side;
     }
 
     /**
