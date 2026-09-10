@@ -804,11 +804,12 @@ class BaysPage extends WorkbayPage {
             // rather than pinned to its top edge with an empty half underneath.
             wrapped(g, WorkbayScreen.gui("faces.empty"), x(WELL_X + 4), y(WELL_Y + 20),
                 WELL_W - 8, Draw.TEXT_FAINT);
-        } else if (filterTop < y(WELL_Y + WELL_H)) {
-            // <b>Not while a filter panel stands over it.</b> The cube is a real block model at
-            // z=200 with its markers at 400 -- see render() -- and nobody is turning it while they
-            // are listing items in a filter, so it simply waits.
         } else {
+            // A filter panel standing over this well cuts the cube at its top edge, the way it
+            // cuts the racked machine's sprite: render() scissors this whole call. The cube was
+            // skipped outright for one build and left a well with nothing in it, which read as a
+            // broken render rather than a dialog over a control.
+
             // A face marker projects to wherever its face's centre lands on screen, which at a
             // steep enough drag angle is genuinely outside the well - the marker is correct, the
             // well is just not wide enough to contain every angle. Scissored to the well's own
