@@ -211,12 +211,6 @@ public class WorkbayMenu extends AbstractContainerMenu {
                 link -> link.withName(text.orElse("").strip()));
             case CYCLE_REDSTONE -> editBay(serverPlayer, record,
                 bay -> bay.withRedstone(bay.redstone().step(back)));
-            case OPEN_BAY_VIEW -> {
-                if (!BayViewMenu.open(serverPlayer, workbay, record, selectedBay)) {
-                    WorkbaySounds.refuse(serverPlayer,
-                        com.neryos.workbay.WorkbayLang.message("bayview_unreachable"));
-                }
-            }
             case ENTER_ROOM -> {
                 // Closing first, for the same reason a bay visit does: the player is about to be
                 // somewhere this menu's stillValid would refuse, and a screen left open over a

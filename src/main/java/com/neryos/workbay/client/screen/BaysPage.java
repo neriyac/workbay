@@ -98,6 +98,14 @@ class BaysPage extends WorkbayPage {
 
     /** The header's power readout: right-aligned here, and where the counters beside it must stop. */
     private static final int POWER_X = 246;
+    /**
+     * The <em>floor</em> of the readout's width, not the width. 58 was measured against
+     * {@code 0 / 100.0k} and shipped cutting a full buffer to {@code 100.0k / 10...}: the string
+     * grows with the number in it, so any constant here is a guess that a bigger buffer falsifies.
+     * The bay rows next to it have measured their own figure since the day a Mekanism cube arrived;
+     * the header was the one power figure still on a hardcoded box. Kept as a minimum so the
+     * counters to its left do not shuffle every time the buffer crosses a digit.
+     */
     private static final int POWER_W = 58;
 
 
@@ -214,13 +222,23 @@ class BaysPage extends WorkbayPage {
         int used = (int) snap.bays().stream()
             .filter(bay -> bay.hosted().isPresent()).count();
 
+        // A bar with no figure beside it reads as broken, and an empty one reads as broken twice
+        // over, so with no capacity at all the words replace the bar entirely (SPEC.md §7).
+        boolean powered = snap.energyCapacity() > 0;
+        String power = powered
+            ? Draw.compact(snap.energy()) + " / " + Draw.compact(snap.energyCapacity())
+            : WorkbayScreen.gui("power.none").getString();
+        // Measured, not assumed -- see POWER_W. The counters are packed against this, so they are
+        // told the same number the readout is drawn with and the two can never disagree.
+        int powerW = Math.max(POWER_W, Draw.width(font, power));
+
         // Three counters, packed left to right against where the power readout starts, rather than
         // sitting on hardcoded pitches with guessed widths. Guessed widths were wrong twice on one
         // line: "no problems" arrived as "no proble..." in a 60-wide box, and "128 links" does not
         // fit 46 either. Packed, each one has exactly what it needs and the last one has the rest,
         // which is the only version of this that cannot be wrong for a count nobody tried.
         int textX = x(8);
-        int limit = x(POWER_X - POWER_W);
+        int limit = x(POWER_X) - powerW - 6;
         int cursor = textX;
         if (!snap.bays().isEmpty()) {
             cursor = counter(g, WorkbayScreen.gui("count.bays", used, snap.bayCapacity()),
@@ -249,15 +267,7 @@ class BaysPage extends WorkbayPage {
                 WorkbayScreen.gui("links.problems.tip"));
         }
 
-        // A bar with no figure beside it reads as broken, and an empty one reads as broken twice
-        // over, so with no capacity at all the words replace the bar entirely (SPEC.md §7).
-        boolean powered = snap.energyCapacity() > 0;
-        String power = powered
-            ? Draw.compact(snap.energy()) + " / " + Draw.compact(snap.energyCapacity())
-            : WorkbayScreen.gui("power.none").getString();
-        // 58, not 48: at 48 "0 / 100.0k" arrived as "0 / 100..." on the very first screen a
-        // player sees. The room between the problem count and the bar was there all along.
-        textRight(g, power, x(POWER_X), y(31), POWER_W, powered ? Draw.TEXT_DIM : Draw.TEXT_FAINT);
+        textRight(g, power, x(POWER_X), y(31), powerW, powered ? Draw.TEXT_DIM : Draw.TEXT_FAINT);
         if (powered) {
             Draw.bar(g, x(250), y(29), 44, 9, snap.energy(), snap.energyCapacity(), Draw.ENERGY);
             screen.hit(x(250), y(29), 44, 9, () -> { },
@@ -333,7 +343,16 @@ class BaysPage extends WorkbayPage {
             ItemStack icon = iconFor(bay.hosted());
             if (!icon.isEmpty()) {
                 // The hosted machine's own item, so a bay is identified at a glance (SPEC.md §4).
-                g.renderItem(icon, px + 4, py + 4);
+                //
+                // <b>Sized to the slot, never drawn at its natural sixteen.</b> A rack slot is
+                // {@code rackPitch - 2}, which is 18 on a short window, so a 16px sprite inset by
+                // four ran two pixels past the slot's own right edge and onto the rule beside it.
+                // OPEN_ISSUES #61 -- and it was photographed rather than reasoned out, because a
+                // sprite is drawn on the item renderer's own layer and always wins whatever it
+                // lands on, so nothing on the screen looks broken; it looks like the thing
+                // underneath was never drawn.
+                int side = Math.min(16, slot - 4);
+                WBIcons.sprite(g, icon, px + (slot - side) / 2, py + (slot - side) / 2, side, true);
             } else if (!locked) {
                 // The same dashes as the big slot, for the same reason: a bay you may fill and a
                 // bay you may not looked identical on a fresh Workbay.
@@ -350,11 +369,21 @@ class BaysPage extends WorkbayPage {
             // a bay going amber is five pixels changing hue on a rack of eight, which a player
             // looking anywhere else on the screen never sees. A flash is seen out of the corner of
             // an eye, which is the only place this pip is ever read from.
+            //
+            // <b>Above the sprite, and it has to say so.</b> Drawing it first is not enough: an
+            // item goes to the item renderer's own layer at Z 150 whatever the draw order was, so
+            // a pip filled before the machine's sprite is a pip the sprite covers. Four of its
+            // twenty-five pixels were left, on the rack a player reads bay status off.
+            // OPEN_ISSUES #61; the notice bar in WorkbayScreen carries the same note and the same
+            // fix, which is what named the cause here.
+            g.pose().pushPose();
+            g.pose().translate(0, 0, 300);
             g.fill(px + 2, py + 2, px + 7, py + 7, pipColour(bay.state()));
             float changed = Draw.pulse("pip" + index, bay.state().ordinal(), 0.5F);
             if (changed > 0) {
                 g.fill(px + 1, py + 1, px + 8, py + 8, Draw.flash(changed * 0.7F));
             }
+            g.pose().popPose();
 
             int captured = index;
             screen.hit(px, py, slot, slot, () -> screen.send(WorkbayAction.SELECT_BAY, captured),
@@ -522,21 +551,12 @@ class BaysPage extends WorkbayPage {
             WorkbayScreen.gui("button.paste"),
             WorkbayScreen.gui(copied == null ? "button.paste.empty" : "button.paste.tip"));
 
-        // Bay View, back. SPEC.md §1 grants it to the base Workbay, which is what settles §5's
-        // stray "unlocked by the first Expansion Plate": a racked container that cannot be filled
-        // by hand is a hole in the loop, not a feature to sell an upgrade with.
-        //
-        // It was withdrawn for naming a slot by simulating an insert, which reads a *full* input
-        // slot as one that takes nothing -- a furnace holding 64 iron and 64 coal labelled both of
-        // them "Output slot". A full slot is now asked a question its fullness cannot answer for
-        // it; OPEN_ISSUES #35, and `aFullInputSlotIsStillAnInputSlot` is the guard.
-        actionButton(g, mouseX, mouseY, x(170), WBIcons.SCREEN, !empty, false,
-            () -> screen.send(WorkbayAction.OPEN_BAY_VIEW),
-            WorkbayScreen.gui("button.bayview"), WorkbayScreen.gui("button.bayview.tip"));
-
-        // The machine's own screen. The other half of §5, and the half a player asks for first:
-        // Bay View can only show what a capability exposes, and a machine's recipe mode, side
-        // config and upgrade slots are exposed by nothing.
+        // The machine's own screen, and now the only way into one. <b>Bay View is gone</b>
+        // (OPEN_ISSUES #65): a second inventory screen over a machine that already has one, asked
+        // to be deleted three times. It could only ever show what a capability exposes -- never a
+        // recipe mode, a side config or an upgrade slot -- so every machine worth opening was
+        // opened through this button anyway, and the one beside it was a worse copy that had to be
+        // kept correct against every foreign handler in the game.
         //
         // Two ways there, and the button says which one this click gives. Where the player stands
         // when both sides have the mixins on (SPEC.md §0); a trip into the bay when either does
@@ -576,9 +596,9 @@ class BaysPage extends WorkbayPage {
     private void resourceIcon(GuiGraphics g, BusConfig.Resource resource, int x, int y) {
         switch (resource) {
             case ITEM -> {
-                sprite(g, LAPIS, x, y, 7);
-                sprite(g, REDSTONE, x + 5, y, 7);
-                sprite(g, INGOT, x + 1, y + 3, 10);
+                WBIcons.sprite(g, LAPIS, x, y, 7, true);
+                WBIcons.sprite(g, REDSTONE, x + 5, y, 7, true);
+                WBIcons.sprite(g, INGOT, x + 1, y + 3, 10, true);
             }
             case FLUID -> WBIcons.draw(g, WBIcons.FLUID, x, y, Draw.FLUID);
             case ENERGY -> WBIcons.draw(g, WBIcons.ENERGY, x, y, Draw.ENERGY);
@@ -591,14 +611,6 @@ class BaysPage extends WorkbayPage {
     private static final ItemStack REDSTONE = new ItemStack(net.minecraft.world.item.Items.REDSTONE);
     private static final ItemStack INGOT = new ItemStack(net.minecraft.world.item.Items.IRON_INGOT);
 
-    /** One item sprite, {@code side} pixels wide instead of the sixteen it is drawn at. */
-    private static void sprite(GuiGraphics g, ItemStack stack, int px, int py, int side) {
-        g.pose().pushPose();
-        g.pose().translate(px, py, 0);
-        g.pose().scale(side / 16.0F, side / 16.0F, 1.0F);
-        g.renderItem(stack, 0, 0);
-        g.pose().popPose();
-    }
 
     /** A 20x20 button in the machine row: enabled draws lit and clicks, disabled draws sunken. */
     private void actionButton(GuiGraphics g, int mouseX, int mouseY, int px, String[] icon,
@@ -865,9 +877,11 @@ class BaysPage extends WorkbayPage {
         boolean pairHover = screen.hovered(pairX, y(linksY), 46, 18, mouseX, mouseY);
         Draw.button(g, pairX, y(linksY), 46, 18, pairHover, false);
         // The Connector's own item, because the button only does anything while you are holding
-        // one and a plus sign does not say that.
-        g.renderItem(new ItemStack(com.neryos.workbay.init.WBBlocks.CONNECTOR.get()),
-            pairX + 1, y(linksY + 1));
+        // one and a plus sign does not say that. Fourteen inside an eighteen-pixel button: at its
+        // natural sixteen it covered the button's own bevel top and bottom and read as a sprite
+        // dropped on the control rather than sitting in it. OPEN_ISSUES #61.
+        WBIcons.sprite(g, new ItemStack(com.neryos.workbay.init.WBBlocks.CONNECTOR.get()),
+            pairX + 2, y(linksY + 2), 14, true);
         text(g, "Pair", pairX + 20, y(linksY + 5), 22, Draw.TEXT);
         screen.hit(pairX, y(linksY), 46, 18, () -> screen.send(WorkbayAction.PAIR),
             WorkbayScreen.gui("links.pair"), WorkbayScreen.gui("links.pair.tip"));

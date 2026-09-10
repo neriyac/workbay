@@ -220,7 +220,13 @@ class RoomsPage extends WorkbayPage {
             boolean canInstall = !maxed;
 
             Draw.well(g, px, py, ROW_W, ROW_H);
-            g.renderItem(new ItemStack(upgrade.item()), px + 2, py + 1);
+            // The whole row answers, not only the plus -- see UpgradesPage. OPEN_ISSUES #68.
+            screen.hit(px, py, ROW_W, ROW_H, () -> { },
+                WorkbayScreen.gui("upgrade." + upgrade.getSerializedName()),
+                WorkbayScreen.gui("upgrade." + upgrade.getSerializedName() + ".long"));
+            // Fourteen in an eighteen-pixel row, not sixteen -- see BaysPage's Pair button.
+            // OPEN_ISSUES #61.
+            WBIcons.sprite(g, new ItemStack(upgrade.item()), px + 2, py + 2, 14, true);
 
             String key = "upgrade." + upgrade.getSerializedName();
             // A name is never faint -- see UpgradesPage.
@@ -241,7 +247,7 @@ class RoomsPage extends WorkbayPage {
                 maxed ? new Component[] {
                     WorkbayScreen.gui(key), WorkbayScreen.gui("upgrades.maxed") }
                     : new Component[] {
-                        WorkbayScreen.gui(key), WorkbayScreen.gui(key + ".desc"),
+                        WorkbayScreen.gui(key), WorkbayScreen.gui(key + ".long"),
                         WorkbayScreen.gui("upgrades.add", WorkbayScreen.gui(key)) });
         }
     }

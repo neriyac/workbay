@@ -395,16 +395,37 @@ public class WBLanguageProvider extends LanguageProvider {
         // tooltip, which is where this mod's text budget goes.
         add(WorkbayLang.guiKey("upgrade.expansion_plate"), "Expansion Plate");
         add(WorkbayLang.guiKey("upgrade.expansion_plate.desc"), "+1 bay");
+        add(WorkbayLang.guiKey("upgrade.expansion_plate.long"),
+            "One more bay on this rack. A machine lives in a bay, so this is how many "
+            + "machines one Workbay can hold at once.");
         add(WorkbayLang.guiKey("upgrade.room_frame"), "Room Frame");
         add(WorkbayLang.guiKey("upgrade.room_frame.desc"), "14x14");
+        add(WorkbayLang.guiKey("upgrade.room_frame.long"),
+            "Buys your first room, and sets the size of every room this network owns. "
+            + "Installing a bigger Frame later grows the room you already have where it "
+            + "stands: nothing is moved and nothing inside it is lost.");
         add(WorkbayLang.guiKey("upgrade.wide_room_frame"), "Wide Room Frame");
         add(WorkbayLang.guiKey("upgrade.wide_room_frame.desc"), "30x30");
+        add(WorkbayLang.guiKey("upgrade.wide_room_frame.long"),
+            "Grows every room this network owns to 30 blocks across, in place. What is "
+            + "built inside stays exactly where it is; the walls move outwards around it.");
         add(WorkbayLang.guiKey("upgrade.vast_room_frame"), "Vast Room Frame");
         add(WorkbayLang.guiKey("upgrade.vast_room_frame.desc"), "46x46");
+        add(WorkbayLang.guiKey("upgrade.vast_room_frame.long"),
+            "Grows every room this network owns to 46 blocks across, in place. What is "
+            + "built inside stays exactly where it is; the walls move outwards around it.");
         add(WorkbayLang.guiKey("upgrade.annex_plate"), "Annex Plate");
         add(WorkbayLang.guiKey("upgrade.annex_plate.desc"), "+1 room");
+        add(WorkbayLang.guiKey("upgrade.annex_plate.long"),
+            "One more room, at whatever size your Room Frame sets. It does not change the "
+            + "size of the rooms you have.");
         add(WorkbayLang.guiKey("upgrade.anchor"), "Anchor");
-        add(WorkbayLang.guiKey("upgrade.anchor.desc"), "While empty");
+        add(WorkbayLang.guiKey("upgrade.anchor.desc"), "While away");
+        add(WorkbayLang.guiKey("upgrade.anchor.long"),
+            "Keeps the Backshop running with nobody there. It holds this Workbay's own "
+            + "chunk and its bay column, which is what lets its links keep moving goods after "
+            + "you log out, and it lets a room be switched on below to hold its own chunks "
+            + "too.");
 
         add(WorkbayLang.guiKey("button.rooms"), "Rooms");
         add(WorkbayLang.guiKey("button.rooms.tip"), "Somewhere to build, out the back. A Connector works in a room, so one can be a "
@@ -495,56 +516,35 @@ public class WBLanguageProvider extends LanguageProvider {
             + "Switch another one off first.");
         add(WorkbayLang.guiKey("upgrade.resonator"), "Resonator");
         add(WorkbayLang.guiKey("upgrade.resonator.desc"), "Any dimension");
+        add(WorkbayLang.guiKey("upgrade.resonator.long"),
+            "Lets a link's two ends stand in different dimensions. Without one, a Connector "
+            + "in the Nether cannot be reached from an overworld Workbay -- the Backshop "
+            + "itself always can.");
         add(WorkbayLang.guiKey("upgrade.multichannel"), "Multichannel");
         add(WorkbayLang.guiKey("upgrade.multichannel.desc"), "All types at once");
+        add(WorkbayLang.guiKey("upgrade.multichannel.long"),
+            "One Connector carries items, fluids, energy and chemicals to its target at the "
+            + "same time. Without it a Connector carries one kind and you place a second one "
+            + "for the next.");
         // The Impeller shipped with no name at all: its row on the upgrades screen drew
         // "gui.workbay.upgr..." and "gui.workbay.u...", in red boxes, because the screen builds
         // this key from the enum and nobody added the row when the enum grew. Found by opening
         // the screen at a real window size, which nothing else in this mod can do for you.
         add(WorkbayLang.guiKey("upgrade.impeller"), "Impeller");
         add(WorkbayLang.guiKey("upgrade.impeller.desc"), "Faster links");
+        add(WorkbayLang.guiKey("upgrade.impeller.long"),
+            "Every link on this Workbay moves twice as much per step and waits half as long "
+            + "between steps. Two of them stack.");
 
-        add(WorkbayLang.guiKey("bayview.title"), "Bay View · Bay %s");
-        add(WorkbayLang.guiKey("bayview.limits"), "Recipe modes, side configuration and upgrade "
-            + "slots stay on the machine. Eject it to change those.");
         // The gauges under the grid. The figures on the line have no unit - it does not fit - so
         // the tooltip is where "mB" and "FE" are actually said.
-        add(WorkbayLang.guiKey("bayview.tank"), "%s / %s mB");
-        add(WorkbayLang.guiKey("bayview.tank.empty"), "Empty tank");
-        add(WorkbayLang.guiKey("bayview.tank.tip"), "Fill it from a container below, or put an empty one there to draw.");
         // The fluid slots. The resting line is the label - two unnamed slots are a guess - and the
         // three others are the refusals. Only mixing names anything: whether a tank is full or
         // empty is already drawn, in a gauge, directly above them.
-        add(WorkbayLang.guiKey("bayview.limits.short"), "Settings stay on the machine.");
-        add(WorkbayLang.guiKey("bayview.chemical"), "%s / %s mB");
-        add(WorkbayLang.guiKey("bayview.chemical.empty"), "Empty chemical tank");
-        add(WorkbayLang.guiKey("bayview.chemical.tip"), "A Mekanism chemical. It has no bucket, so there is nothing to click.");
-        add(WorkbayLang.guiKey("bayview.slot.in"), "Input slot");
-        add(WorkbayLang.guiKey("bayview.slot.fuel"), "Fuel slot");
-        add(WorkbayLang.guiKey("bayview.slot.out"), "Output slot");
-        add(WorkbayLang.guiKey("bayview.slot.fluid"), "Takes a bucket or tank, which is how this "
-            + "machine's own fluid is filled by hand.");
-        add(WorkbayLang.guiKey("bayview.slot.readonly"), "Read-only here. This machine only accepts "
-            + "items through a link, or from inside the bay.");
-        add(WorkbayLang.guiKey("bayview.exchange"), "Container in, result out.");
-        add(WorkbayLang.guiKey("bayview.exchange.mixed"), "This tank holds %s.");
-        add(WorkbayLang.guiKey("bayview.exchange.blocked"), "Take the result out first.");
-        add(WorkbayLang.guiKey("bayview.exchange.refused"), "Nothing moves either way.");
-        add(WorkbayLang.guiKey("bayview.exchange.wrong_way"), "Press the arrow - it is set the "
-            + "other way.");
-        add(WorkbayLang.guiKey("bayview.exchange.into"), "Filling the machine");
-        add(WorkbayLang.guiKey("bayview.exchange.outof"), "Emptying the machine");
-        add(WorkbayLang.guiKey("bayview.exchange.direction.tip"), "Which way the top container carries. The result comes out below.");
-        add(WorkbayLang.guiKey("bayview.energy"), "Stored energy");
-        add(WorkbayLang.guiKey("bayview.energy.tip"), "The machine's own buffer. The Workbay shares power to it.");
-        add(WorkbayLang.guiKey("button.bayview"), "Bay View");
-        add(WorkbayLang.guiKey("button.bayview.tip"), "This machine's slots, tanks and power, to top up by hand.");
         add(WorkbayLang.messageKey("reject.op_only_data"), "%s carries settings only an operator "
             + "may place. Racking it would rack an empty one, so it is refused instead.");
         add(WorkbayLang.messageKey("filter_no_chemical"), "There is no chemical in that tank to "
             + "name. Fill it first, then list what is in it.");
-        add(WorkbayLang.messageKey("bayview_unreachable"), "Nothing in this bay answers by hand. "
-            + "A machine with no slots, tanks or power is reached by a link or not at all.");
         // Entering the bay. SPEC.md §5: the machine's own screen is reachable only by standing in
         // front of it, so this is the one control that answers "how do I upgrade the thing".
         add(WorkbayLang.guiKey("button.open"), "Open its screen");

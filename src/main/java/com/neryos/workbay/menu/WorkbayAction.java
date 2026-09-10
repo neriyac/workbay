@@ -87,10 +87,10 @@ public enum WorkbayAction {
      */
     UNUSED_WAS_SET_SKIM,
     /**
-     * Opens Bay View on the selected bay (SPEC.md §5). A second menu rather than a page of this
-     * one: it is the only screen in the mod with real slots, and this menu deliberately has none.
+     * <b>Dead, and kept.</b> It opened Bay View, which is deleted (OPEN_ISSUES #65). Kept for the
+     * reason {@link #UNUSED_WAS_SET_SKIM} is: an action travels as its ordinal.
      */
-    OPEN_BAY_VIEW,
+    UNUSED_WAS_OPEN_BAY_VIEW,
     /**
      * Gets the player to the selected machine's own screen (SPEC.md §5). <b>Where they stand if
      * both sides can</b>, and a trip into the bay if either cannot — {@code arg} is 1 when the

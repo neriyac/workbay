@@ -164,6 +164,13 @@ class UpgradesPage extends WorkbayPage {
             boolean canInstall = !maxed;
 
             Draw.well(g, px, py, ROW_W, ROW_H);
+            // The whole row, registered before the + so the + still wins the click: hits dispatch
+            // in reverse registration order. A row carried a name and a two-word line and had no
+            // hover at all, so the only way to the sentence explaining it was to point at a 22px
+            // button whose own tooltip is about buying it. OPEN_ISSUES #68.
+            screen.hit(px, py, ROW_W, ROW_H, () -> { },
+                WorkbayScreen.gui("upgrade." + upgrade.getSerializedName()),
+                WorkbayScreen.gui("upgrade." + upgrade.getSerializedName() + ".long"));
 
             ItemStack icon = new ItemStack(upgrade.item());
             g.renderItem(icon, px + 6, py + 9);
@@ -198,7 +205,7 @@ class UpgradesPage extends WorkbayPage {
                     WorkbayScreen.gui(key), WorkbayScreen.gui("upgrades.maxed") }
                     : new net.minecraft.network.chat.Component[] {
                         WorkbayScreen.gui(key),
-                        WorkbayScreen.gui(key + ".desc"),
+                        WorkbayScreen.gui(key + ".long"),
                         WorkbayScreen.gui("upgrades.add", WorkbayScreen.gui(key)) });
         }
     }

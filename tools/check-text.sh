@@ -61,6 +61,26 @@ MSG
   fail=1
 fi
 
+# Third one, same shape. Vanilla has no bold face: Font#renderChar draws the glyph a second time
+# one pixel to the right. The bitmap font's thinnest stroke is a whole pixel so the copy overlaps
+# and reads as weight; this mod's font is an antialiased TTF at 9.5px, where a comma and a slash
+# ARE one pixel, so the copy lands beside the original and a power tooltip reads
+# "1,,598,,000 // 1,600,000". OPEN_ISSUES #78. Emphasis on these screens is colour, never weight.
+bold=$(grep -rn --include='*.java' -e 'withBold(' -e 'ChatFormatting.BOLD' src/main/java 2>/dev/null   | grep -vE '^[^:]+:[0-9]+: *(\*|//)')
+
+if [ -n "$bold" ]; then
+  cat <<MSG
+Bold asked for in this mod's own font:
+
+$bold
+
+There is no bold face -- vanilla draws the glyph twice, one pixel apart, which
+splits every one-pixel glyph in this mod's TTF into two. Use Draw.TEXT over
+Draw.TEXT_DIM for emphasis.
+MSG
+  fail=1
+fi
+
 if [ "$fail" -eq 1 ]; then
   echo
   echo "To commit anyway: git commit --no-verify"

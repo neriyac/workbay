@@ -17,7 +17,6 @@ public final class WBNetwork {
     static void register(RegisterPayloadHandlersEvent event) {
         var registrar = event.registrar("1");
         registrar.playToClient(SnapshotPacket.TYPE, SnapshotPacket.STREAM_CODEC, SnapshotPacket::handle);
-        registrar.playToClient(BayViewPacket.TYPE, BayViewPacket.STREAM_CODEC, BayViewPacket::handle);
         registrar.playToClient(RemoteMachinePacket.TYPE, RemoteMachinePacket.STREAM_CODEC,
             RemoteMachinePacket::handle);
         registrar.playToServer(ActionPacket.TYPE, ActionPacket.STREAM_CODEC, ActionPacket::handle);

@@ -683,7 +683,19 @@ public final class Draw {
      * <p>This mod's tooltips are written as full sentences (SPEC.md §4: "tooltips are where this
      * mod's text budget is spent"), and {@code renderComponentTooltip} does not wrap — one of them
      * unbroken is half the screen wide. Every tooltip is (title, explanation), the convention
-     * vanilla's own item tooltips use, so the bold is here rather than at each call site.
+     * vanilla's own item tooltips use; the title is separated by <em>colour</em> — {@link #TEXT}
+     * over {@link #TEXT_DIM} — and never by bold.
+     *
+     * <p><b>Nothing in this mod may ask for bold, and this is where that was learnt.</b> Vanilla
+     * has no bold face: {@code Font#renderChar} draws the same glyph a second time at
+     * {@code x + getBoldOffset()}, which is one pixel. On the bitmap font, whose thinnest stroke
+     * is a whole pixel, the copy overlaps and reads as weight. On an antialiased TTF at 9.5px a
+     * comma and a slash <em>are</em> one pixel, so the copy lands beside the original rather than
+     * over it and the player reads {@code 1,,598,,000 // 1,600,000}. Photographed on a power
+     * tooltip; OPEN_ISSUES #78, whose investigation went to the font's {@code size} and
+     * {@code oversample} because the grep that cleared "fake bold" looked for
+     * {@code ChatFormatting.BOLD} and this line said {@code withBold(true)}.
+     * {@code tools/check-text.sh} is what keeps it deleted.
      *
      * <p>Here rather than on one screen because there are two screens that draw tooltips, and a
      * rule that lives on one of them is a rule the other gets wrong.
@@ -691,10 +703,7 @@ public final class Draw {
     public static List<net.minecraft.util.FormattedCharSequence> tooltip(Font font,
         List<Component> lines) {
         List<net.minecraft.util.FormattedCharSequence> wrapped = new java.util.ArrayList<>();
-        for (int i = 0; i < lines.size(); i++) {
-            Component line = i == 0
-                ? lines.get(0).copy().withStyle(style -> style.withBold(true))
-                : lines.get(i);
+        for (Component line : lines) {
             wrapped.addAll(font.split(line.copy().withStyle(style -> style.withFont(UI_FONT)),
                 TOOLTIP_WIDTH));
         }

@@ -26,9 +26,6 @@ public class WBMenus {
      * slots: {@link WorkbayMenu} deliberately has none, and bolting a grid onto it would give every
      * other screen a player inventory it does not want.
      */
-    public static final DeferredHolder<MenuType<?>, MenuType<com.neryos.workbay.menu.BayViewMenu>>
-        BAY_VIEW = MENUS.register("bay_view",
-            () -> IMenuTypeExtension.create(com.neryos.workbay.menu.BayViewMenu::new));
 
     /**
      * The screen a room's wall opens. Its own type because it is built from a player and a block
