@@ -54,18 +54,6 @@ public class ConnectorBlock extends BaseEntityBlock {
     /** Points <em>into</em> the block this Connector is stuck to, the way an observer's does. */
     public static final DirectionProperty FACING = BlockStateProperties.FACING;
 
-    /**
-     * <b>One Connector, one link.</b> OPEN_ISSUES #77's model. It was a cap -- one resource on a
-     * base Connector, every resource this install has once a Multichannel was in -- and the cap
-     * was the thing that let one block hold four rows. The number is now one and it is not a
-     * number: the invariant lives on {@link com.neryos.workbay.world.WorkbayRecord}, where every
-     * path that writes a link has to go through it.
-     *
-     * <p><b>That was the Multichannel Upgrade's only reader.</b> Named in #77 rather than fixed
-     * here: the upgrade is still craftable, priced and installable and now gates nothing.
-     */
-    public static final int LINKS_PER_CONNECTOR = 1;
-
     private static final VoxelShape[] SHAPES = new VoxelShape[6];
 
     static {

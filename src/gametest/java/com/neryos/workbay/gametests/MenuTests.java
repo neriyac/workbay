@@ -431,7 +431,7 @@ public class MenuTests {
             WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
             WorkbayRecord record = workbay.record().orElseThrow();
             com.neryos.workbay.world.RoomRegistry.get(level.getServer())
-                .put(record.withUpgrades(new WorkbayRecord.Upgrades(2, 0, 0, 0, 0, 0, 0)));
+                .put(record.withUpgrades(new WorkbayRecord.Upgrades(2, 0, 0, 0, 0, 0)));
 
             ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
             com.neryos.workbay.world.WorkbayTickets.force(backshop,
@@ -635,27 +635,27 @@ public class MenuTests {
             WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
             WorkbayMenu menu = menuFor(workbay, player);
 
-            player.getInventory().add(new ItemStack(WBItems.MULTICHANNEL.get(), 2));
-            helper.assertValueEqual(workbay.record().orElseThrow().upgrades().multichannel(), 0,
-                "Multichannel installed before anything is clicked");
+            player.getInventory().add(new ItemStack(WBItems.RESONATOR.get(), 2));
+            helper.assertValueEqual(workbay.record().orElseThrow().upgrades().resonators(), 0,
+                "Resonator installed before anything is clicked");
 
             // One gate per rung: holding the item is the whole of it now. The Levy that used to be
             // the second gate is gone -- neither its author nor a player could say in a sentence
             // what it was for -- so an install succeeds the moment the item is in the inventory.
-            menu.act(WorkbayAction.INSTALL_UPGRADE, WorkbayUpgrade.MULTICHANNEL.ordinal(), Optional.empty());
-            helper.assertValueEqual(workbay.record().orElseThrow().upgrades().multichannel(), 1,
-                "Multichannel installed off the item alone");
+            menu.act(WorkbayAction.INSTALL_UPGRADE, WorkbayUpgrade.RESONATOR.ordinal(), Optional.empty());
+            helper.assertValueEqual(workbay.record().orElseThrow().upgrades().resonators(), 1,
+                "Resonator installed off the item alone");
 
             // Max is one. A second click must refuse rather than eat the item.
-            menu.act(WorkbayAction.INSTALL_UPGRADE, WorkbayUpgrade.MULTICHANNEL.ordinal(), Optional.empty());
-            helper.assertValueEqual(workbay.record().orElseThrow().upgrades().multichannel(), 1,
-                "Multichannel installed after clicking past the maximum");
-            helper.assertValueEqual(player.getInventory().countItem(WBItems.MULTICHANNEL.get()), 1,
-                "Multichannel Upgrades left after a refused install");
+            menu.act(WorkbayAction.INSTALL_UPGRADE, WorkbayUpgrade.RESONATOR.ordinal(), Optional.empty());
+            helper.assertValueEqual(workbay.record().orElseThrow().upgrades().resonators(), 1,
+                "Resonator installed after clicking past the maximum");
+            helper.assertValueEqual(player.getInventory().countItem(WBItems.RESONATOR.get()), 1,
+                "Resonators left after a refused install");
 
             // And what the screen would draw has to agree with what the registry holds.
             WorkbaySnapshot snapshot = WorkbayMenu.build(workbay, player, 0);
-            helper.assertValueEqual(snapshot.upgrades().multichannel(), 1, "the snapshot's count");
+            helper.assertValueEqual(snapshot.upgrades().resonators(), 1, "the snapshot's count");
             helper.assertValueEqual(snapshot.bayCapacity(), WorkbayRecord.BASE_BAYS,
                 "the snapshot's bay capacity");
 
@@ -892,7 +892,7 @@ public class MenuTests {
             // Three bays, so the target-bay ring has a value on both sides of the hole. One plate,
             // because the base Workbay already grants two (WorkbayRecord.BASE_BAYS).
             registry.put(workbay.record().orElseThrow()
-                .withUpgrades(new WorkbayRecord.Upgrades(1, 0, 0, 0, 0, 0, 0)));
+                .withUpgrades(new WorkbayRecord.Upgrades(1, 0, 0, 0, 0, 0)));
             WorkbayMenu menu = menuFor(workbay, player);
 
             // The redstone ring: forward one step off ALWAYS, then back past it to the far end.

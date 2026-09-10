@@ -281,7 +281,7 @@ public class WorkbayBlockEntity extends BlockEntity {
         return buses().stream().filter(bus -> bus.id().equals(busId)).findFirst();
     }
 
-    /** Every link anchored by the Connector at one position. Base is one; Multichannel allows three. */
+    /** Every link anchored by the Connector at one position. As many as the player pulled in. */
     public List<BusConfig> linksAt(GlobalPos connector) {
         return buses().stream().filter(bus -> bus.connector().equals(connector)).toList();
     }

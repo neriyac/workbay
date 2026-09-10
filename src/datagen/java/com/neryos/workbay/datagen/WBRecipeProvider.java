@@ -78,7 +78,6 @@ public class WBRecipeProvider extends RecipeProvider {
         // *rises* along each line, and a recipe costs the same the tenth time as the first. So the
         upgrade(output, WBItems.EXPANSION_PLATE.get(), Items.IRON_INGOT);
         upgrade(output, WBItems.RESONATOR.get(), Items.ENDER_EYE);
-        upgrade(output, WBItems.MULTICHANNEL.get(), Items.AMETHYST_SHARD);
         upgrade(output, WBItems.IMPELLER.get(), Items.BREEZE_ROD);
         // The room ladder's cores climb, and its first rung is not quartz. A private dimension
         // gated behind the block you find in the first nether trip was the cheapest gate in the

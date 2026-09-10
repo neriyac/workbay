@@ -73,12 +73,11 @@ public class ConnectorScreen extends AbstractContainerScreen<ConnectorMenu> {
             ROW_W, Draw.TEXT);
         Draw.slot(g, px, topPos + FIELD_Y, ROW_W, FIELD_H);
 
-        // Which bay it is on, said here because it is the one thing about a Connector the player
-        // cannot read off the block -- and because "on no bay" is a real state a detached link
-        // sits in, which otherwise only the Add list ever admits to.
-        Component hint = menu.view().bay() < 0
-            ? WorkbayLang.gui("connector.nobay", menu.view().fallback())
-            : WorkbayLang.gui("connector.hint", menu.view().fallback(), menu.view().bay() + 1);
+        // <b>A Connector belongs to a Workbay, never to a bay.</b> This line used to end
+        // "* on bay 2", which was wrong even when a Connector had one row and is now unanswerable:
+        // a Connector carries a row for every time it was pulled into a bay, and those rows can sit
+        // on different bays at once. What a bay owns is a row. What this panel names is the block.
+        Component hint = WorkbayLang.gui("connector.hint", menu.view().fallback());
         Draw.text(g, font, hint.getString(), px, topPos + HINT_Y, ROW_W, Draw.TEXT_DIM);
 
         boolean over = isHovering(MARGIN, SAVE_Y, ROW_W, SAVE_H, mouseX, mouseY);

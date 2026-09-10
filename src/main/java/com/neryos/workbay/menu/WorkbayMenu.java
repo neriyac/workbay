@@ -282,7 +282,20 @@ public class WorkbayMenu extends AbstractContainerMenu {
             case LINK_ASSIGN_BAY -> {
                 int bay = (int) arg;
                 if (bay >= 0 && bay < record.bayCapacity()) {
-                    editLink(linkId, link -> link.withBay(bay));
+                    editLink(linkId, link -> link.bay() == bay && !link.internal()
+                        ? link : link.withBay(bay));
+                    // <b>Pulling a Connector into the bay it is already on is a second row.</b>
+                    // A Connector may be pulled in as many times as the player likes and each row
+                    // is its own channel -- own resource, direction, filter, rate and name -- so
+                    // the same Connector on the same machine carries items in on one row and
+                    // energy out on another. That is the promise (SPEC.md §0); a cap on it was
+                    // the thing the Multichannel upgrade used to sell.
+                    linkId.flatMap(workbay::bus)
+                        .filter(link -> link.bay() == bay && !link.internal())
+                        .ifPresent(link -> workbay.addBus(BusConfig.create(UUID.randomUUID(), bay,
+                            BusConfig.Resource.ITEM, BusConfig.Mode.INSERT,
+                            link.connector(), link.target())
+                            .withTargetBlock(link.targetBlock())));
                 }
             }
             case LINK_CYCLE_TARGET_BAY -> editLink(linkId, link -> link.internal()

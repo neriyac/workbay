@@ -199,7 +199,7 @@ public class BusTests {
             WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.CHEST));
             WorkbayRecord record = workbay.record().orElseThrow();
             RoomRegistry.get(level.getServer()).put(record.withUpgrades(
-                new WorkbayRecord.Upgrades(0, 0, 0, 0, 0, 0, 1)));
+                new WorkbayRecord.Upgrades(0, 0, 0, 0, 0, 1)));
             ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
             BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
 
@@ -605,8 +605,7 @@ public class BusTests {
                     WorkbayRecord now = workbay.record().orElseThrow();
                     WorkbayRecord.Upgrades up = now.upgrades();
                     registry.put(now.withUpgrades(new WorkbayRecord.Upgrades(up.expansionPlates(),
-                        1, up.anchors(), up.annexPlates(), up.roomTier(), up.multichannel(),
-                        up.impellers())));
+                        1, up.anchors(), up.annexPlates(), up.roomTier(), up.impellers())));
                 })
                 .thenIdle(12)
                 .thenExecute(() -> helper.assertFalse(
@@ -1363,7 +1362,7 @@ public class BusTests {
             WorkbayRecord record = workbay.record().orElseThrow();
             // A second bay to link to. Racking directly, the way setUp racks bay 0, rather than
             // going through an Expansion Plate item this test does not need to own.
-            registry.put(record.withUpgrades(new WorkbayRecord.Upgrades(1, 0, 0, 0, 0, 0, 0)));
+            registry.put(record.withUpgrades(new WorkbayRecord.Upgrades(1, 0, 0, 0, 0, 0)));
             record = workbay.record().orElseThrow();
             ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
             BayHosting.rack(backshop, record.bayColumn(), 1, new ItemStack(Blocks.CHEST), player,
@@ -1435,7 +1434,7 @@ public class BusTests {
             RoomRegistry registry = RoomRegistry.get(level.getServer());
             WorkbayRecord record = workbay.record().orElseThrow();
             // Two Expansion Plates: bay 0 is the source, bays 1 and 2 are the two targets.
-            registry.put(record.withUpgrades(new WorkbayRecord.Upgrades(2, 0, 0, 0, 0, 0, 0)));
+            registry.put(record.withUpgrades(new WorkbayRecord.Upgrades(2, 0, 0, 0, 0, 0)));
             record = workbay.record().orElseThrow();
             ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
             BayHosting.rack(backshop, record.bayColumn(), 1, new ItemStack(Blocks.CHEST), player,
@@ -1515,7 +1514,7 @@ public class BusTests {
             WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.CHEST));
             RoomRegistry registry = RoomRegistry.get(level.getServer());
             WorkbayRecord record = workbay.record().orElseThrow();
-            registry.put(record.withUpgrades(new WorkbayRecord.Upgrades(1, 0, 0, 0, 0, 0, 0)));
+            registry.put(record.withUpgrades(new WorkbayRecord.Upgrades(1, 0, 0, 0, 0, 0)));
             record = workbay.record().orElseThrow();
 
             ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
@@ -1585,7 +1584,7 @@ public class BusTests {
             WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.CHEST));
             // Three bays, so retargeting has somewhere else to go than straight back.
             RoomRegistry.get(level.getServer()).put(workbay.record().orElseThrow()
-                .withUpgrades(new WorkbayRecord.Upgrades(2, 0, 0, 0, 0, 0, 0)));
+                .withUpgrades(new WorkbayRecord.Upgrades(2, 0, 0, 0, 0, 0)));
 
             player.moveTo(workbayPos.getX() + 0.5, workbayPos.getY(), workbayPos.getZ() + 0.5);
             WorkbayMenu menu = new WorkbayMenu(1, player.getInventory(), workbay,

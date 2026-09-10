@@ -30,6 +30,7 @@ SRC = ROOT / "src/main/java/com/neryos/workbay"
 BUILT = {
     "gui.workbay.links.type.": ("bus/BusConfig.java", "Resource", "serial"),
     "gui.workbay.links.mode.": ("bus/BusConfig.java", "Mode", "serial"),
+    "gui.workbay.faces.": ("bus/BusConfig.java", "Resource", "serial"),
     "gui.workbay.status.": ("bus/BusRunner.java", "BusStatus", "name"),
     "gui.workbay.status.short.": ("bus/BusRunner.java", "BusStatus", "name"),
     "gui.workbay.bay.": ("menu/WorkbaySnapshot.java", "State", "name"),

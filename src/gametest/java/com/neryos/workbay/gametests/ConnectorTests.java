@@ -27,7 +27,7 @@ import net.neoforged.testframework.gametest.StructureTemplateBuilder;
 
 /**
  * The Connector is the only way a link comes into existence, so these cover the whole life of one:
- * pairing, placing, the base one-type cap, what Multichannel buys, and what breaking it takes away.
+ * pairing, placing, the many channels one Connector may carry, and what breaking it takes away.
  *
  * <p>SPEC.md §0 rejected a configuration-only link precisely so this life cycle exists — a link the
  * player cannot see, find or break in the world is a link they cannot debug either.
@@ -189,16 +189,13 @@ public class ConnectorTests {
     }
 
     /**
-     * OPEN_ISSUES #77's model, as the one test that can fail against the fan-out it replaces.
-     *
-     * <p><b>A Connector is one object with one row, and the right-click is a rename.</b> The
-     * assertion that can actually fail is the menu: the row count alone cannot, because
-     * {@link WorkbayRecord}'s own invariant would fold a ladder's extra rows back to one before
-     * this could see them -- which is what {@code aRecordFoldsFourLinksOnOneConnectorToOne}
-     * covers, and this one would then be a test that cannot go red. So it asserts what the
-     * gesture <em>is</em>: after right-clicking, the player has the Connector's rename panel
-     * open, and the link is the one that was there before, untouched, on the bay it was paired
-     * to. Poked six times over a two-bay network.
+     * <b>Nothing is ever created automatically, and the right-click is a rename.</b> OPEN_ISSUES
+     * #77. A Connector may carry as many rows as the player pulls in -- that is
+     * {@code aRecordKeepsFourChannelsOnOneConnector} and
+     * {@code pullingAConnectorIntoItsOwnBayAgainIsASecondRow} -- but every one of them is a thing
+     * the player asked for on a bay screen. The world gesture makes none: after right-clicking,
+     * the player has the Connector's rename panel open and the link is the one that was there
+     * before, untouched, on the bay it was paired to. Poked six times over a two-bay network.
      */
     @GameTest
     @TestHolder(description = "A placed Connector is one row however often it is right-clicked.")
@@ -240,21 +237,19 @@ public class ConnectorTests {
     }
 
     /**
-     * The other half of #77's invariant: a <b>saved</b> world holding several links on one
-     * Connector folds to one when its record is read back, and an <em>attached</em> one wins over
-     * a detached one however they were ordered.
+     * <b>Four channels on one Connector, off a disk, all four kept.</b> This is the product
+     * (SPEC.md 0): the same Connector on the same machine carries items in on one row and energy
+     * out on the next, and each row has its own resource, direction, filter, rate and name.
      *
-     * <p>Written against {@link WorkbayRecord} directly rather than through a Connector, because
-     * the fan-out that made these rows no longer exists to make them -- the only way they arrive
-     * now is off a disk written by an older build, which is exactly what this constructs.
-     *
-     * <p>And an internal link is exempt, which is the trap: a bay-to-bay link anchors on the
-     * Workbay's own position, so a fold that did not exempt them would collapse every internal
-     * link in a network into one. Two are made here for that reason alone.
+     * <p>Written against {@link WorkbayRecord} directly because the thing that used to break this
+     * lived there -- a compact constructor that folded every non-internal link sharing a
+     * {@code GlobalPos} down to one, which is #77 read too literally. Two internal links are in
+     * the list because they were the fold's exemption, and an exemption that outlives its rule is
+     * the next quiet bug.
      */
     @GameTest
-    @TestHolder(description = "A record holding four links on one Connector folds to one, sparing bay-to-bay links.")
-    public static void aRecordFoldsFourLinksOnOneConnectorToOne(final DynamicTest test) {
+    @TestHolder(description = "A record holding four links on one Connector keeps all four.")
+    public static void aRecordKeepsFourChannelsOnOneConnector(final DynamicTest test) {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
 
         test.onGameTest(ExtendedGameTestHelper.class, helper -> {
@@ -263,15 +258,14 @@ public class ConnectorTests {
             GlobalPos target = GlobalPos.of(level.dimension(), helper.absolutePos(new BlockPos(2, 1, 1)));
             GlobalPos anchor = GlobalPos.of(level.dimension(), helper.absolutePos(new BlockPos(0, 1, 0)));
 
-            java.util.UUID kept = java.util.UUID.randomUUID();
             java.util.List<BusConfig> saved = java.util.List.of(
-                // Detached first, so "the attached one wins" is doing work rather than agreeing
-                // with list order by accident.
-                BusConfig.create(java.util.UUID.randomUUID(), BusConfig.NO_BAY,
-                    BusConfig.Resource.ITEM, BusConfig.Mode.INSERT, connector, target),
-                BusConfig.create(kept, 1, BusConfig.Resource.FLUID, BusConfig.Mode.INSERT,
-                    connector, target),
+                BusConfig.create(java.util.UUID.randomUUID(), 0, BusConfig.Resource.ITEM,
+                    BusConfig.Mode.EXTRACT, connector, target),
+                BusConfig.create(java.util.UUID.randomUUID(), 0, BusConfig.Resource.FLUID,
+                    BusConfig.Mode.EXTRACT, connector, target),
                 BusConfig.create(java.util.UUID.randomUUID(), 0, BusConfig.Resource.ENERGY,
+                    BusConfig.Mode.INSERT, connector, target),
+                BusConfig.create(java.util.UUID.randomUUID(), 1, BusConfig.Resource.ITEM,
                     BusConfig.Mode.INSERT, connector, target),
                 BusConfig.createInternal(java.util.UUID.randomUUID(), 0, anchor, target),
                 BusConfig.createInternal(java.util.UUID.randomUUID(), 1, anchor, target));
@@ -283,13 +277,63 @@ public class ConnectorTests {
                 java.util.Optional.empty(), java.util.List.of(), java.util.List.of(), saved, 1);
 
             helper.assertValueEqual(record.buses().stream()
-                .filter(bus -> !bus.internal()).count(), 1L,
+                .filter(bus -> !bus.internal()).count(), 4L,
                 "links left on one Connector after a saved record was read back");
             helper.assertValueEqual(record.buses().stream()
-                .filter(bus -> !bus.internal()).findFirst().orElseThrow().id(), kept,
-                "the link that survived the fold (the attached one, not the detached one)");
+                .filter(bus -> !bus.internal()).map(BusConfig::resource)
+                .distinct().count(), 3L,
+                "distinct resources those four rows carry");
             helper.assertValueEqual(record.buses().stream().filter(BusConfig::internal).count(), 2L,
                 "bay-to-bay links, which anchor on the Workbay and must not fold into each other");
+            helper.succeed();
+        });
+    }
+
+    /**
+     * <b>How a second channel is made.</b> The Add list on a bay screen offers every Connector the
+     * network holds, including the ones this bay already carries a row for; ticking one that is
+     * already here mints a fresh row on the same Connector, where {@code LINK_ASSIGN_BAY} used to
+     * reassign a link to the bay it was already on and do nothing at all.
+     *
+     * <p>Fresh is the point: the new row starts on ITEM, INSERT, off and unfiltered, so it is a
+     * channel of its own rather than a copy of the row it was made from.
+     */
+    @GameTest
+    @TestHolder(description = "Pulling a Connector into the bay it is already on adds a second row.")
+    public static void pullingAConnectorIntoItsOwnBayAgainIsASecondRow(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos chestPos = helper.absolutePos(new BlockPos(4, 1, 4));
+            BlockPos connectorPos = chestPos.above();
+
+            level.setBlock(chestPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
+            place(level, connectorPos, Direction.DOWN, paired(level, workbay), player);
+
+            BusConfig first = workbay.buses().getFirst();
+            int bay = first.bay();
+            // The menu's own reach check is eight blocks, and a mock player is created wherever
+            // the test structure happens to land. MenuTests#menuFor does the same.
+            player.moveTo(workbayPos.getX() + 0.5, workbayPos.getY(), workbayPos.getZ() + 0.5);
+            com.neryos.workbay.menu.WorkbayMenu menu = new com.neryos.workbay.menu.WorkbayMenu(
+                1, player.getInventory(), workbay,
+                com.neryos.workbay.menu.WorkbayMenu.build(workbay, player, bay));
+            menu.act(com.neryos.workbay.menu.WorkbayAction.LINK_ASSIGN_BAY, bay,
+                java.util.Optional.of(first.id()));
+            menu.act(com.neryos.workbay.menu.WorkbayAction.LINK_ASSIGN_BAY, bay,
+                java.util.Optional.of(first.id()));
+
+            GlobalPos here = GlobalPos.of(level.dimension(), connectorPos);
+            helper.assertValueEqual(workbay.linksAt(here).size(), 3,
+                "rows on one Connector after pulling it into its own bay twice");
+            helper.assertTrue(workbay.buses().stream().allMatch(bus -> bus.bay() == bay),
+                "every row landed on the bay it was pulled into");
+            helper.assertValueEqual(workbay.buses().stream().map(BusConfig::id).distinct().count(),
+                3L, "distinct link ids, so the rows are their own channels and not one row twice");
             helper.succeed();
         });
     }

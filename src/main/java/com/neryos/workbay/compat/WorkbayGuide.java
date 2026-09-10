@@ -47,7 +47,6 @@ public final class WorkbayGuide {
             page(WBItems.ANNEX_PLATE, "annex_plate", 1),
             page(WBItems.ANCHOR, "anchor", 2),
             page(WBItems.RESONATOR, "resonator", 1),
-            page(WBItems.MULTICHANNEL, "multichannel", 1),
             page(WBItems.IMPELLER, "impeller", 1),
             page(WBItems.SHOPSTEEL, "shopsteel", 1),
             page(WBItems.HOUSING, "housing", 1));

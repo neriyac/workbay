@@ -34,7 +34,6 @@ public class WBLanguageProvider extends LanguageProvider {
         addItem(WBItems.ANNEX_PLATE, "Annex Plate");
         addItem(WBItems.ANCHOR, "Anchor");
         addItem(WBItems.RESONATOR, "Resonator");
-        addItem(WBItems.MULTICHANNEL, "Multichannel Upgrade");
         addItem(WBItems.IMPELLER, "Impeller");
 
         // Chat, one-shot. SPEC.md §6 and §14's network model: a Workbay belongs to the player who
@@ -94,8 +93,11 @@ public class WBLanguageProvider extends LanguageProvider {
             + "was placed. You still have it.");
 
         // The Connector, which is where every link comes from. SPEC.md §0.
-        add(WorkbayLang.messageKey("connector_paired"), "Connector paired to bay %s. Place it against "
-            + "the block you want to link.");
+        // <b>Paired to the Workbay; the bay is only where its first row lands.</b> A Connector
+        // belongs to a network and can end up carrying rows on several bays at once, so nothing
+        // may say it is "on" one.
+        add(WorkbayLang.messageKey("connector_paired"), "Connector paired. Place it against the "
+            + "block you want to link — its first row lands on bay %s.");
         add(WorkbayLang.messageKey("connector_unpaired"), "This Connector isn't paired yet. "
             + "Right-click a Workbay with it first.");
         add(WorkbayLang.messageKey("connector_linked"), "Linked to %s on bay %s. Workbay %s has a "
@@ -124,8 +126,8 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("count.problems.none"), "no problems");
 
         add(WorkbayLang.guiKey("button.upgrades"), "Upgrades");
-        add(WorkbayLang.guiKey("button.upgrades.tip"), "Install Expansion Plates, a Resonator or a "
-            + "Multichannel Upgrade.");
+        add(WorkbayLang.guiKey("button.upgrades.tip"), "Install Expansion Plates, a Resonator or "
+            + "an Impeller.");
         add(WorkbayLang.guiKey("button.flow"), "Flow map");
         add(WorkbayLang.guiKey("button.flow.tip"), "See what every link moves, and which flows never "
             + "leave this block.");
@@ -190,6 +192,11 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("faces.item"), "Item faces");
         add(WorkbayLang.guiKey("faces.fluid"), "Fluid faces");
         add(WorkbayLang.guiKey("faces.energy"), "Energy faces");
+        // The fourth one, missing since the faces cycler grew a chemical tab: the tooltip's title
+        // read `gui.workbay.faces.chemical` on any install with Mekanism. Exactly the fault
+        // check-lang.py was written for, on a prefix it was not watching -- so the prefix is in
+        // BUILT now and this cannot be the third time.
+        add(WorkbayLang.guiKey("faces.chemical"), "Chemical faces");
         add(WorkbayLang.guiKey("faces.tip"), "Click a face to cycle it in, out, off. Right-click steps back.");
         add(WorkbayLang.guiKey("faces.face"), "Face: %s");
         add(WorkbayLang.guiKey("faces.role.none"), "Unset. With no face set, links use whichever "
@@ -202,7 +209,8 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("links.none"), "No links yet. Pair a Connector and place it on "
             + "something.");
         add(WorkbayLang.guiKey("links.pair"), "Pair a Connector");
-        add(WorkbayLang.guiKey("links.pair.tip"), "Pairs the held Connector to this bay. Place it on the block you want linked.");
+        add(WorkbayLang.guiKey("links.pair.tip"), "Pairs the held Connector to this Workbay. Place "
+            + "it on the block you want linked; its first row lands on this bay.");
         add(WorkbayLang.guiKey("links.internal"), "Link a bay");
         add(WorkbayLang.guiKey("links.internal.tip"), "A link straight to another bay, with no Connector to place.");
         add(WorkbayLang.guiKey("links.internal.retarget"), "Change which bay");
@@ -242,6 +250,10 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("links.add.apply.tip"), "Attaches everything ticked on both tabs in "
             + "one go, then closes the picker.");
         add(WorkbayLang.guiKey("links.add.link"), "%s, held by bay %s");
+        add(WorkbayLang.guiKey("links.add.again"), "%s, already on this bay");
+        add(WorkbayLang.guiKey("links.add.again.tip"), "Gives this bay a second row on the same "
+            + "Connector. Each row is its own channel — its own resource, direction, filter "
+            + "and rate.");
         add(WorkbayLang.guiKey("links.add.link.tip"), "Hands this link to bay %s. The Connector stays where it is.");
         add(WorkbayLang.guiKey("links.add.bay"), "Bay %s");
         add(WorkbayLang.guiKey("links.add.bay.tip"), "Makes a link straight to that bay. No "
@@ -497,8 +509,7 @@ public class WBLanguageProvider extends LanguageProvider {
         // The Connector's rename panel. One field, and a line saying what it is called when the
         // field is left empty -- which is the block's own coordinates, not a stored default.
         add(WorkbayLang.guiKey("connector.title"), "Name this Connector");
-        add(WorkbayLang.guiKey("connector.hint"), "Empty leaves it \"%s\" · on bay %s");
-        add(WorkbayLang.guiKey("connector.nobay"), "Empty leaves it \"%s\" · on no bay yet");
+        add(WorkbayLang.guiKey("connector.hint"), "Empty leaves it \"%s\"");
         add(WorkbayLang.guiKey("connector.save"), "Save");
 
         add(WorkbayLang.guiKey("door.title"), "Way out");
@@ -547,12 +558,6 @@ public class WBLanguageProvider extends LanguageProvider {
             "Lets a link's two ends stand in different dimensions. Without one, a Connector "
             + "in the Nether cannot be reached from an overworld Workbay -- the Backshop "
             + "itself always can.");
-        add(WorkbayLang.guiKey("upgrade.multichannel"), "Multichannel");
-        add(WorkbayLang.guiKey("upgrade.multichannel.desc"), "All types at once");
-        add(WorkbayLang.guiKey("upgrade.multichannel.long"),
-            "One Connector carries items, fluids, energy and chemicals to its target at the "
-            + "same time. Without it a Connector carries one kind and you place a second one "
-            + "for the next.");
         // The Impeller shipped with no name at all: its row on the upgrades screen drew
         // "gui.workbay.upgr..." and "gui.workbay.u...", in red boxes, because the screen builds
         // this key from the enum and nobody added the row when the enum grew. Found by opening
@@ -598,7 +603,7 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.tooltipKey("code"), "Code %s");
         add(WorkbayLang.tooltipKey("connector_unpaired"), "Not paired. Right-click a Workbay with "
             + "this to pair it.");
-        add(WorkbayLang.tooltipKey("connector_paired"), "Paired \u00b7 bay %s");
+        add(WorkbayLang.tooltipKey("connector_paired"), "Paired \u00b7 first row on bay %s");
 
         // The guide, on every item's Information tab in JEI and EMI. SPEC.md §6's voice at the one
         // length it is ever allowed: a player right-clicking a Workbay in a recipe viewer used to
@@ -627,9 +632,9 @@ public class WBLanguageProvider extends LanguageProvider {
             + "and which bay. Place it against a chest, tank or machine and the link exists. Break "
             + "it and the link is gone.");
         add(WorkbayLang.infoKey("connector.2"), "It reaches all six faces of the block it is stuck "
-            + "to, so which side you put it on does not matter. One Connector carries one kind of "
-            + "resource; with the Multichannel upgrade fitted, right-click a placed Connector with "
-            + "an empty hand to add the next kind.");
+            + "to, so which side you put it on does not matter. One Connector carries as many rows "
+            + "as you give it: press Add on a bay and pick it again, and the new row is its own "
+            + "channel with its own resource, direction, filter and rate.");
         add(WorkbayLang.infoKey("connector.3"), "A link out of the dimension its Workbay stands in "
             + "needs a Resonator. Anything inside that dimension, and anything in the Backshop, "
             + "does not.");
@@ -662,9 +667,6 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.infoKey("resonator.1"), "Lets this network's links reach into other "
             + "dimensions. Without one, a Connector in the Nether pointing at a Workbay in the "
             + "Overworld sits still, and its row says so.");
-        add(WorkbayLang.infoKey("multichannel.1"), "Lets one Connector carry items, fluids and "
-            + "energy to the same target at once instead of one of them. Right-click a placed "
-            + "Connector with an empty hand to add the next kind.");
         add(WorkbayLang.infoKey("impeller.1"), "Doubles what every link moves in a step and halves "
             + "the wait between steps \u2014 both, on every link this network has. Two may be "
             + "fitted. Throughput is the one thing a fresh Workbay is deliberately short of.");

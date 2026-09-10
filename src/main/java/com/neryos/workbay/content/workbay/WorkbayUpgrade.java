@@ -42,8 +42,6 @@ public enum WorkbayUpgrade implements StringRepresentable {
     RESONATOR("resonator",
         () -> WorkbayConfig.SERVER.allowCrossDimensionLinks.get() ? 1 : 0,
         () -> WBItems.RESONATOR.get()),
-    MULTICHANNEL("multichannel", () -> 1,
-        () -> WBItems.MULTICHANNEL.get()),
     /**
      * Throughput, and the only upgrade that changes a number every link already has.
      *
@@ -105,8 +103,7 @@ public enum WorkbayUpgrade implements StringRepresentable {
      * rooms it applies to beside it.
      */
     public boolean aboutRooms() {
-        return this != EXPANSION_PLATE && this != RESONATOR && this != MULTICHANNEL
-            && this != IMPELLER;
+        return this != EXPANSION_PLATE && this != RESONATOR && this != IMPELLER;
     }
 
     /** The Room Frame tier this upgrade grants, or 0 for anything that is not a Frame. */

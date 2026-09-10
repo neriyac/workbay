@@ -39,9 +39,8 @@ import org.apache.commons.lang3.tuple.Pair;
  *       link</em> in every existing world.</li>
  *   <li><b>The speeds a link may run at.</b> Fixed, because each has to divide the 1200-tick
  *       transfer wheel; a free number does not.</li>
- *   <li><b>How many resources a Multichannel Connector carries.</b> It is every resource that
- *       exists in this install — three without Mekanism, four with it. A knob would only let a host
- *       pick a number smaller than "all of them", which names no setting anyone wants.</li>
+ *   <li><b>How many rows one Connector may carry.</b> As many as the player pulls in: each row is
+ *       its own channel, and a cap on that is a cap on the product (SPEC.md §0).</li>
  *   <li><b>Room sizes, room biomes, and what may be hosted.</b> Datapack, all three: the Frames are
  *       recipes ({@code data/workbay/recipe/}), biomes are {@code #workbay:room_biomes}, hostability
  *       is §11's tags. A pack drops the Vast Room Frame recipe to cap room size.</li>

@@ -100,34 +100,81 @@ public final class WBIcons {
     // ------------------------------------------------------- what a link carries
 
     /**
-     * <b>Energy.</b> A block of redstone.
+     * <b>Fluid, energy and chemical, drawn here and shaded rather than borrowed from the game.</b>
      *
-     * <p>It was a drawn cell, and the cell was a good drawing of the wrong thing to be: the row
-     * beside it is an item sprite (items) and a bucket (fluids), so a hand-drawn object among
-     * rendered ones reads as the one icon that failed to load. A block of redstone is the game's
-     * own noun for stored power and the material every tech mod in the genre spends on its first
-     * tier -- and at twelve pixels it is a solid red cube, which is nothing like the scattered
-     * dust, the torch or the repeater the redstone-mode button uses two panels away.
+     * <p>They were vanilla item sprites -- a block of redstone, a water bucket, a bottle of
+     * dragon's breath. On the LINKS list that reads as borrowed, and each names a <em>particular</em>
+     * thing (water, redstone, dragon's breath) where the row means a whole kind. The first
+     * redrawing was worse: flat one-colour glyphs next to sixteen-colour item sprites look like
+     * programmer art, which is what {@link #ITEM} kept and these three did not.
+     *
+     * <p>So they are shaded the way an item texture is -- a dark outline, three bands lit from the
+     * top left, and their own palette rather than the row's colour. The grids are
+     * <b>generated from a silhouette</b>, not typed: hand-shading a 12x12 is how a row ends up
+     * eleven characters long, and the silhouette is the only part that has to read. Judged on a
+     * rendered mock at 1x, 3x and 8x on the panel grey, which is where a hollow-necked flask
+     * turned out to read as a workbench.
+     *
+     * <p>Being data still buys what a PNG could not: {@link #dim} scales the whole palette, so one
+     * of these goes dark with a disabled row instead of staying lit at Z 150 the way a sprite does.
      */
-    public static final String[] ENERGY = item("minecraft:redstone_block");
+    public static final String[] FLUID = {
+        ".....44.....",
+        ".....14.....",
+        "....4114....",
+        "....4114....",
+        "...411224...",
+        "..41122224..",
+        ".4112222234.",
+        ".4122222334.",
+        "412222233334",
+        ".4222233334.",
+        "..44233344..",
+        "....4444....",
+    };
+    public static final int[] FLUID_COLOURS =
+        { 0xFFEAF7FF, 0xFF7FC9F0, 0xFF3E9BD8, 0xFF1B5E92 };
+
+    /** A bolt. The one shape that means electricity without naming a block that stores it. */
+    public static final String[] ENERGY = {
+        "......4444..",
+        ".....41124..",
+        "....41124...",
+        "...41124....",
+        "..41122244..",
+        "..4422234...",
+        "....42334...",
+        "...42334....",
+        "..42334.....",
+        ".42334......",
+        "..434.......",
+        "..44........",
+    };
+    public static final int[] ENERGY_COLOURS =
+        { 0xFFFFF7CE, 0xFFFFDD55, 0xFFEDA317, 0xFF7A4A04 };
 
     /**
-     * <b>Fluid.</b> A water bucket.
-     *
-     * <p>The drop it replaces was drawn to avoid naming one fluid, and the objection was real --
-     * a link carries whatever it is pointed at. It is the wrong trade: every fluid UI in the game
-     * and in the genre is a bucket, so the bucket is the word for "fluid" rather than the word
-     * for "water", and the drop was the shape a player had to be taught.
+     * A flask: pale glass for the neck and shoulder, violet for what is in it. Two palettes in one
+     * -- 1-4 the glass, 5-8 the liquid -- because a substance that is neither an item you stack nor
+     * a fluid you pour is read off the <em>container</em>, and a single-colour flask is a jar.
      */
-    public static final String[] FLUID = item("minecraft:water_bucket");
-
-    /**
-     * <b>Chemical.</b> A bottle of dragon's breath -- vanilla's only container of gas, and the
-     * one object in the game that is a substance which is neither an item you stack nor a fluid
-     * you pour. Mekanism's own chemicals cannot be named here: they are the resource that is
-     * absent from an install without it, and an icon may not be.
-     */
-    public static final String[] CHEMICAL = item("minecraft:dragon_breath");
+    public static final String[] CHEMICAL = {
+        "...444444...",
+        "....4114....",
+        "....4114....",
+        "....4124....",
+        "...412224...",
+        "..41222224..",
+        ".8555566668.",
+        "855556666778",
+        "855566667778",
+        "855666677778",
+        ".8666677778.",
+        "..88888888..",
+    };
+    public static final int[] CHEMICAL_COLOURS =
+        { 0xFFF4FBFF, 0xFFAFD4E4, 0xFF6E93A6, 0xFF24384A,
+          0xFFF0D2FF, 0xFFC77BEA, 0xFF9B45CC, 0xFF6B2492 };
 
     /**
      * <b>Lock and unlock stay drawn, and they are the one pair that has to.</b> Every other noun
@@ -519,7 +566,8 @@ public static final String[] EXTRACT = {
      * the one control that recolours itself.
      */
     private static final java.util.Map<String[], int[]> PALETTES = java.util.Map.of(
-        FILTER, FILTER_COLOURS, PAPER, PAPER_COLOURS);
+        FILTER, FILTER_COLOURS, PAPER, PAPER_COLOURS,
+        FLUID, FLUID_COLOURS, ENERGY, ENERGY_COLOURS, CHEMICAL, CHEMICAL_COLOURS);
 
     public static void draw(GuiGraphics graphics, String[] icon, int x, int y, int argb,
         int... palette) {

@@ -65,7 +65,7 @@ public class RoomTests {
         WorkbayRecord record = workbay.record().orElseThrow();
         WorkbayRecord.Upgrades up = record.upgrades();
         record = record.withUpgrades(new WorkbayRecord.Upgrades(up.expansionPlates(), up.resonators(),
-            anchors, annexPlates, tier, up.multichannel(), up.impellers()));
+            anchors, annexPlates, tier, up.impellers()));
         RoomRegistry.get(level.getServer()).put(record);
 
         return new Site(player, level.getServer().getLevel(WorkbayDimensions.BACKSHOP), record,
@@ -418,7 +418,7 @@ public class RoomTests {
             // Three bays, and a container racked in each. Racked directly, the way BusTests racks:
             // an Expansion Plate item is not what this test is about.
             WorkbayRecord record = registry.byId(site.record().id()).orElseThrow();
-            registry.put(record.withUpgrades(new WorkbayRecord.Upgrades(2, 0, 0, 0, 1, 0, 0)));
+            registry.put(record.withUpgrades(new WorkbayRecord.Upgrades(2, 0, 0, 0, 1, 0)));
             record = registry.byId(site.record().id()).orElseThrow();
             for (int bay = 0; bay < 3; bay++) {
                 com.neryos.workbay.world.BayHosting.rack(backshop, record.bayColumn(), bay,

@@ -29,7 +29,6 @@ public class WBItemModelProvider extends ItemModelProvider {
         flatItem(WBItems.ANNEX_PLATE.getId().getPath());
         flatItem(WBItems.ANCHOR.getId().getPath());
         flatItem(WBItems.RESONATOR.getId().getPath());
-        flatItem(WBItems.MULTICHANNEL.getId().getPath());
         flatItem(WBItems.IMPELLER.getId().getPath());
         // <b>Flat, not the block model.</b> A Connector is an 8x8x2 slab against one wall of its
         // cube, so as a block item it drew a small plate hanging in the lower right of an empty

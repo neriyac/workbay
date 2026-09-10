@@ -69,7 +69,7 @@ class BaysPage extends WorkbayPage {
      * advance is its width plus one, so N6 o6 space4 m6 a6 c6 h6 i2 n6 e6. Nothing here is a
      * guess, and the guess is what shipped. Found by Neriya, reading a row. OPEN_ISSUES #58.
      */
-    private static final int STATUS_X = 142;
+    private static final int STATUS_X = 130;
     private static final int STATUS_W = 54;
 
     private final int height;
@@ -331,8 +331,16 @@ class BaysPage extends WorkbayPage {
         int bottomY = y(linksY - 6);
         rule(g, x(46), topY, bottomY);
         rule(g, x(FACES_X - 8), topY, bottomY);
-        // The rack, in a recess of its own, so eight slots read as one thing rather than as eight.
-        Draw.well(g, x(RACK_X - 3), y(RACK_Y - 4), slot + 10, 8 * rackPitch + 6);
+        // The rack, in a recess of its own, so the bays read as one thing rather than as eight.
+        //
+        // <b>The recess ends at the capacity the header prints, not at eight.</b> It used to hold
+        // all eight, so a network reading "2 / 3 bays" was drawn as one box of eight slots and
+        // the picture disagreed with the number beside it -- five of them washed out, which at
+        // guiScale 3 is a shade, not a sentence. Now the recess holds exactly the bays this
+        // network has and the ones it has not bought stand outside it: still drawn, because what
+        // an Expansion Plate buys is worth seeing, and no longer counted.
+        Draw.well(g, x(RACK_X - 3), y(RACK_Y - 4), slot + 10,
+            snapshot().bayCapacity() * rackPitch + 6);
         // And the line under the bay's own details.
         g.fill(x(50), y(118), x(FACES_X - 12), y(119), 0x18FFFFFF);
     }
@@ -620,14 +628,18 @@ class BaysPage extends WorkbayPage {
      */
     private void resourceIcon(GuiGraphics g, BusConfig.Resource resource, int x, int y) {
         switch (resource) {
+            // <b>Items stayed the three sprites.</b> Neriya's call, twice now: lapis, redstone and
+            // an iron ingot piled in twelve pixels is the best of the four and a drawn cube was a
+            // downgrade. The other three carry their own palettes, so the colour passed here is
+            // only the brightness they are drawn at.
             case ITEM -> {
                 WBIcons.sprite(g, LAPIS, x, y, 7, true);
                 WBIcons.sprite(g, REDSTONE, x + 5, y, 7, true);
                 WBIcons.sprite(g, INGOT, x + 1, y + 3, 10, true);
             }
-            case FLUID -> WBIcons.draw(g, WBIcons.FLUID, x, y, Draw.FLUID);
-            case ENERGY -> WBIcons.draw(g, WBIcons.ENERGY, x, y, Draw.ENERGY);
-            case CHEMICAL -> WBIcons.draw(g, WBIcons.CHEMICAL, x, y, Draw.CHEMICAL);
+            case FLUID -> WBIcons.draw(g, WBIcons.FLUID, x, y, Draw.TEXT);
+            case ENERGY -> WBIcons.draw(g, WBIcons.ENERGY, x, y, Draw.TEXT);
+            case CHEMICAL -> WBIcons.draw(g, WBIcons.CHEMICAL, x, y, Draw.TEXT);
         }
     }
 
@@ -976,9 +988,17 @@ class BaysPage extends WorkbayPage {
     }
 
     /**
-     * One row. Per SPEC.md §4: status swatch, resource icon, direction icon, name, target or status,
-     * filter slot, gear — and <b>remove lives inside the gear</b>, because two controls per row is
-     * the ceiling and a delete button on every row is how somebody deletes the wrong one.
+     * One row. Per SPEC.md §4: resource icon, direction icon, name, target or status, filter slot,
+     * gear — and <b>remove lives inside the gear</b>, because two controls per row is the ceiling
+     * and a delete button on every row is how somebody deletes the wrong one.
+     *
+     * <p><b>The status swatch is gone, and its sixteen pixels bought the gutters.</b> It was a
+     * 10px chip saying, in colour, the thing the status column beside it says in words and the
+     * red gutter bar says louder — three copies of one fact on a row that had no room for one.
+     * What was left was ten controls at four-pixel spacing, and at those gaps the status column's
+     * "Off" and the face button's "-" ran together into one word. Eight pixels between the
+     * right-hand three now, ten before them, and the name column came out four wider than it went
+     * in.
      */
     private void row(GuiGraphics g, int mouseX, int mouseY, WorkbaySnapshot.Link link, int py) {
         var font = screen.font();
@@ -1011,11 +1031,6 @@ class BaysPage extends WorkbayPage {
             WorkbayScreen.gui(on ? "links.disable" : "links.enable"),
             WorkbayScreen.gui(on ? "links.disable.tip" : "links.enable.tip"));
 
-        g.fill(px + 16, py + 4, px + 26, py + 14, Draw.EDGE_DARK);
-        g.fill(px + 17, py + 5, px + 25, py + 13, statusColour(link.status()));
-        screen.hit(px + 16, py + 4, 10, 10, () -> { },
-            statusName(link.status()), statusHelp(link.status()));
-
         // <b>The arrow never turns round; the two ends swap around it.</b> A row that reads right
         // to left half the time is a row the player has to re-read to know which end is which, and
         // "which way is it going" was being asked of a twelve-pixel glyph that changes shape.
@@ -1027,8 +1042,8 @@ class BaysPage extends WorkbayPage {
         // icons they belong to and neither can be clicked where it is not drawn.
         boolean insert = config.mode() == BusConfig.Mode.INSERT;
         Optional<ResourceLocation> icon = targetIcon(link);
-        int fromX = px + 30;
-        int toX = px + 62;
+        int fromX = px + 16;
+        int toX = px + 48;
         int resourceX = insert ? fromX : toX;
         int targetX = insert ? toX : fromX;
 
@@ -1038,8 +1053,8 @@ class BaysPage extends WorkbayPage {
             WorkbayScreen.gui("links.type." + config.resource().getSerializedName()),
             WorkbayScreen.gui("links.type.tip"));
 
-        WBIcons.draw(g, WBIcons.ARROW_RIGHT, px + 46, py + 3, insert ? Draw.BLUE : Draw.GREEN);
-        screen.hit(px + 46, py + 3, 12, 12,
+        WBIcons.draw(g, WBIcons.ARROW_RIGHT, px + 32, py + 3, insert ? Draw.BLUE : Draw.GREEN);
+        screen.hit(px + 32, py + 3, 12, 12,
             () -> screen.send(WorkbayAction.LINK_FLIP_MODE, config.id()),
             WorkbayScreen.gui("links.mode." + config.mode().getSerializedName()),
             WorkbayScreen.gui("links.mode.tip"));
@@ -1071,7 +1086,7 @@ class BaysPage extends WorkbayPage {
         }
         // The name starts after whichever slot the far end used, and reclaims the second slot when
         // nothing was drawn in it.
-        int cursor = drewTarget || !insert ? px + 76 : px + 62;
+        int cursor = drewTarget || !insert ? px + 62 : px + 48;
         if (showBay) {
             text(g, bayBadge(config), cursor, py + 5, 14, Draw.TEXT_DIM);
             screen.hit(cursor, py + 3, 14, 12, () -> { },
@@ -1147,8 +1162,8 @@ class BaysPage extends WorkbayPage {
                 statusName(link.status()), statusHelp(link.status()));
         }
 
-        faceButton(g, mouseX, mouseY, px + 200, py + 3, config);
-        filterSlot(g, px + 216, py + 1, config);
+        faceButton(g, mouseX, mouseY, px + 194, py + 3, config);
+        filterSlot(g, px + 214, py + 1, config);
 
         WBIcons.draw(g, WBIcons.CROSS, px + 238, py + 3,
             screen.hovered(px + 238, py + 3, 12, 12, mouseX, mouseY) ? Draw.RED : Draw.TEXT_FAINT);
@@ -1621,8 +1636,12 @@ class BaysPage extends WorkbayPage {
     private void candidates(GuiGraphics g, int mouseX, int mouseY, WorkbaySnapshot snap) {
         int selected = screen.selectedBay();
 
+        // <b>A Connector already on this bay is still on the list.</b> Pulling it in again is a
+        // second row on the same Connector, and each row is its own channel -- items in on one,
+        // energy out on the next, through the same plate. An internal link is the exception: a
+        // second bay-to-bay row is what the Bays tab mints.
         List<WorkbaySnapshot.Link> loose = snap.links().stream()
-            .filter(link -> link.config().bay() != selected)
+            .filter(link -> link.config().bay() != selected || !link.config().internal())
             .toList();
         // Bays that exist and are not this one. A bay with no machine is still worth offering: the
         // link outlives the machine, and racking one later is the normal order of work.
@@ -1708,8 +1727,10 @@ class BaysPage extends WorkbayPage {
                         pickedLinks.add(config.id());
                     }
                 }, config.detached() ? WorkbayScreen.gui("links.add.detached", label)
+                    : config.bay() == selected ? WorkbayScreen.gui("links.add.again", label)
                     : WorkbayScreen.gui("links.add.link", label, config.bay() + 1),
-                    WorkbayScreen.gui("links.add.link.tip", selected + 1));
+                    config.bay() == selected ? WorkbayScreen.gui("links.add.again.tip")
+                        : WorkbayScreen.gui("links.add.link.tip", selected + 1));
             } else {
                 int bay = bays.get(index);
                 boolean ticked = pickedBays.contains(bay);

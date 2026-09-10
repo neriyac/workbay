@@ -39,54 +39,6 @@ public record WorkbayRecord(
     List<com.neryos.workbay.bus.BusConfig> buses,
     int deployedCount) {
 
-    /**
-     * <b>One Connector, one link.</b> OPEN_ISSUES #77's model, enforced where every path that
-     * builds a record has to go through it rather than in the one place that happened to mint
-     * links -- the fan-out that made four rows out of one Connector was written in a block's
-     * {@code useWithoutItem}, and a rule that lives beside the mistake is a rule the next mistake
-     * will not obey.
-     *
-     * <p>It is an <em>invariant on the list</em> and not a change of shape: {@link
-     * com.neryos.workbay.bus.BusConfig} already carries the Connector's own {@code GlobalPos},
-     * so "a Connector owns its placement" is what was already stored.
-     *
-     * <p><b>Internal links are exempt, and that is not a detail.</b> A bay-to-bay link anchors on
-     * the Workbay's own position ({@code BusConfig#createInternal}) because there is no Connector
-     * to anchor it to -- so folding by position without this exemption collapses every internal
-     * link in a network into one.
-     *
-     * <p>An attached link beats a detached one, then list order wins. A world saved before this
-     * loses the extras, with their filter, rate, speed and name; that is stated in #77 rather
-     * than migrated, because the extras are rows the model says should never have existed.
-     */
-    public WorkbayRecord {
-        buses = foldByConnector(buses);
-    }
-
-    private static List<com.neryos.workbay.bus.BusConfig> foldByConnector(
-        List<com.neryos.workbay.bus.BusConfig> all) {
-        java.util.Map<GlobalPos, Integer> seen = new java.util.HashMap<>();
-        List<com.neryos.workbay.bus.BusConfig> kept = new java.util.ArrayList<>(all.size());
-        boolean folded = false;
-        for (com.neryos.workbay.bus.BusConfig bus : all) {
-            if (bus.internal()) {
-                kept.add(bus);
-                continue;
-            }
-            Integer at = seen.get(bus.connector());
-            if (at == null) {
-                seen.put(bus.connector(), kept.size());
-                kept.add(bus);
-                continue;
-            }
-            folded = true;
-            if (kept.get(at).detached() && !bus.detached()) {
-                kept.set(at, bus);
-            }
-        }
-        return folded ? List.copyOf(kept) : all;
-    }
-
     public static final Codec<WorkbayRecord> CODEC = RecordCodecBuilder.create(i -> i.group(
         UUIDUtil.CODEC.fieldOf("Id").forGetter(WorkbayRecord::id),
         Codec.STRING.fieldOf("Code").forGetter(WorkbayRecord::code),
@@ -248,8 +200,8 @@ public record WorkbayRecord(
      * carried in v1 so that v2 adds behaviour rather than a migration.
      */
     public record Upgrades(int expansionPlates, int resonators, int anchors, int annexPlates,
-        int roomTier, int multichannel, int impellers) {
-        public static final Upgrades NONE = new Upgrades(0, 0, 0, 0, 0, 0, 0);
+        int roomTier, int impellers) {
+        public static final Upgrades NONE = new Upgrades(0, 0, 0, 0, 0, 0);
 
         /**
          * What one Impeller is worth, on both halves of what a link does.
@@ -274,7 +226,6 @@ public record WorkbayRecord(
             Codec.INT.optionalFieldOf("Anchors", 0).forGetter(Upgrades::anchors),
             Codec.INT.optionalFieldOf("AnnexPlates", 0).forGetter(Upgrades::annexPlates),
             Codec.INT.optionalFieldOf("RoomTier", 0).forGetter(Upgrades::roomTier),
-            Codec.INT.optionalFieldOf("Multichannel", 0).forGetter(Upgrades::multichannel),
             Codec.INT.optionalFieldOf("Impellers", 0).forGetter(Upgrades::impellers)
         ).apply(i, Upgrades::new));
 
@@ -282,23 +233,21 @@ public record WorkbayRecord(
         public Upgrades plus(com.neryos.workbay.content.workbay.WorkbayUpgrade upgrade) {
             return switch (upgrade) {
                 case EXPANSION_PLATE -> new Upgrades(expansionPlates + 1, resonators, anchors,
-                    annexPlates, roomTier, multichannel, impellers);
+                    annexPlates, roomTier, impellers);
                 case RESONATOR -> new Upgrades(expansionPlates, resonators + 1, anchors,
-                    annexPlates, roomTier, multichannel, impellers);
-                case MULTICHANNEL -> new Upgrades(expansionPlates, resonators, anchors,
-                    annexPlates, roomTier, multichannel + 1, impellers);
+                    annexPlates, roomTier, impellers);
                 case IMPELLER -> new Upgrades(expansionPlates, resonators, anchors,
-                    annexPlates, roomTier, multichannel, impellers + 1);
+                    annexPlates, roomTier, impellers + 1);
                 case ANNEX_PLATE -> new Upgrades(expansionPlates, resonators, anchors,
-                    annexPlates + 1, roomTier, multichannel, impellers);
+                    annexPlates + 1, roomTier, impellers);
                 case ANCHOR -> new Upgrades(expansionPlates, resonators, anchors + 1,
-                    annexPlates, roomTier, multichannel, impellers);
+                    annexPlates, roomTier, impellers);
                 // Highest wins, and never down: a smaller Frame fitted over a bigger room would
                 // put bedrock through a factory somebody built. install() refuses it first; this
                 // is the second half of the same rule, where the number actually changes.
                 case ROOM_FRAME, WIDE_ROOM_FRAME, VAST_ROOM_FRAME ->
                     new Upgrades(expansionPlates, resonators, anchors, annexPlates,
-                        Math.max(roomTier, upgrade.roomTier()), multichannel, impellers);
+                        Math.max(roomTier, upgrade.roomTier()), impellers);
             };
         }
 
@@ -306,7 +255,6 @@ public record WorkbayRecord(
             return switch (upgrade) {
                 case EXPANSION_PLATE -> expansionPlates;
                 case RESONATOR -> resonators;
-                case MULTICHANNEL -> multichannel;
                 case IMPELLER -> impellers;
                 case ANNEX_PLATE -> annexPlates;
                 case ANCHOR -> anchors;
