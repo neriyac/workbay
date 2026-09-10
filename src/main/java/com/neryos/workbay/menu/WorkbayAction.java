@@ -165,5 +165,17 @@ public enum WorkbayAction {
      * <p>Last in the enum, for the reason every room action before it was appended: an action
      * travels as its ordinal, so inserting one silently renames every action after it on the wire.
      */
-    SET_ROOM_NAME
+    SET_ROOM_NAME,
+    /**
+     * Hands room {@code arg} back: takes the shell down and returns the slot to "Not opened yet".
+     *
+     * <p><b>Refused rather than destructive.</b> What is standing in a room is a player's build and
+     * SPEC.md §8 does not void one, so a room with anything at all in it, or anybody in it, is not
+     * given back and the refusal says which. OPEN_ISSUES #62. The confirm is the screen's job: the
+     * server does not need to be asked twice, it needs to be asked correctly.
+     *
+     * <p>Last in the enum, for the reason every action before it was appended: an action travels
+     * as its ordinal.
+     */
+    REMOVE_ROOM
 }

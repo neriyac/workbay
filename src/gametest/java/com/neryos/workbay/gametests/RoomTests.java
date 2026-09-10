@@ -87,6 +87,54 @@ public class RoomTests {
      * open screen — sends a player home on the next tick, and a room's occupant has no screen by
      * design. Deleting the room case from {@code BayVisit#tick} puts this straight back in the red.
      */
+    /**
+     * OPEN_ISSUES #62. Opening a room was a one-way door: a slot spent on a misplaced click was a
+     * slot owned for ever, and a network with four rooms and one mistake had three.
+     *
+     * <p>Both halves, because the refusal is the whole design: a room with something in it is
+     * <b>not</b> handed back, because what is in a room is a build and SPEC.md §8 does not delete
+     * one to save a player a click. Empty it and the same click works.
+     */
+    @GameTest
+    @TestHolder(description = "A room is handed back only once it is empty, and the slot comes back with it.")
+    public static void aRoomIsHandedBackOnlyWhenEmpty(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            Site site = site(helper, 1);
+            ServerLevel backshop = site.backshop();
+            helper.assertTrue(RoomVisit.enter(site.player(), site.record(), 0),
+                "opening the room failed");
+            RoomVisit.leave(site.player());
+            RoomRegistry registry = RoomRegistry.get(helper.getLevel().getServer());
+            RoomRecord room = room(helper, site);
+            helper.assertTrue(room.built(), "the room was not built by entering it");
+
+            // Something of the player's, one block inside the door.
+            BlockPos inside = RoomGeometry.origin(room.region()).offset(2, 2, 2);
+            backshop.setBlock(inside, Blocks.CHEST.defaultBlockState(), 3);
+
+            WorkbayBlockEntity workbay =
+                (WorkbayBlockEntity) helper.getLevel().getBlockEntity(site.workbayPos());
+            com.neryos.workbay.menu.WorkbayMenu menu = new com.neryos.workbay.menu.WorkbayMenu(1, site.player().getInventory(), workbay,
+                com.neryos.workbay.menu.WorkbayMenu.build(workbay, site.player(), 0));
+            menu.act(com.neryos.workbay.menu.WorkbayAction.REMOVE_ROOM, 0, java.util.Optional.empty());
+            helper.assertTrue(room(helper, site).built(),
+                "a room with a chest in it was handed back anyway, which throws away a build");
+            helper.assertTrue(backshop.getBlockState(inside).is(Blocks.CHEST),
+                "the chest inside the room");
+
+            backshop.setBlock(inside, Blocks.AIR.defaultBlockState(), 3);
+            menu.act(com.neryos.workbay.menu.WorkbayAction.REMOVE_ROOM, 0, java.util.Optional.empty());
+            helper.assertFalse(room(helper, site).built(),
+                "an empty room was still not handed back, so the slot is spent for ever");
+            helper.assertTrue(
+                backshop.getBlockState(RoomGeometry.origin(room.region())).isAir(),
+                "the shell is still standing after the room was handed back");
+            helper.succeed();
+        });
+    }
+
     @GameTest
     @TestHolder(description = "A player enters a room, stands on its floor, and is still in it ticks later.")
     public static void aRoomIsAPlaceAPlayerCanStandIn(final DynamicTest test) {

@@ -239,6 +239,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
                     selectedBay);
             }
             case TOGGLE_ROOM_ANCHOR -> toggleRoomAnchor(serverPlayer, record, (int) arg);
+            case REMOVE_ROOM -> removeRoom(serverPlayer, record, (int) arg);
             case CYCLE_ROOM_BIOME -> cycleRoomBiome(serverPlayer, record, (int) arg);
             case CYCLE_ROOM_COLOUR -> cycleRoomColour(serverPlayer, record, (int) arg, back);
             // The biome travels as its own id, never as a position in the list: the picker is
@@ -722,6 +723,65 @@ public class WorkbayMenu extends AbstractContainerMenu {
      * is the number a server owner is actually paying, so it is checked on the click and not read
      * once at startup.
      */
+    /**
+     * Gives a room back. OPEN_ISSUES #62: opening one was a one-way door, so a slot opened by a
+     * misplaced click was a slot owned for ever and a network was one room poorer.
+     *
+     * <p>Three refusals before anything is taken down, in the order a player is most likely to hit
+     * them: it is not yours, somebody is standing in it, and <b>there is something in it</b>. The
+     * last is the one that matters -- a room's contents are a build, and this mod does not delete a
+     * player's build to save them a click. Emptying it first is a thing they can do; undoing this
+     * is not.
+     */
+    private void removeRoom(ServerPlayer serverPlayer, WorkbayRecord record, int index) {
+        if (!record.owner().equals(serverPlayer.getUUID())) {
+            WorkbaySounds.refuse(serverPlayer, com.neryos.workbay.WorkbayLang.message("locked"));
+            return;
+        }
+        com.neryos.workbay.world.RoomRegistry registry =
+            com.neryos.workbay.world.RoomRegistry.get(serverPlayer.server);
+        List<com.neryos.workbay.world.RoomRecord> rooms = registry.roomsOf(record);
+        if (index < 0 || index >= rooms.size()) {
+            return;
+        }
+        com.neryos.workbay.world.RoomRecord room = rooms.get(index);
+        if (!room.built()) {
+            return;
+        }
+        net.minecraft.server.level.ServerLevel backshop =
+            serverPlayer.server.getLevel(com.neryos.workbay.world.WorkbayDimensions.BACKSHOP);
+        if (backshop == null) {
+            return;
+        }
+        // Anybody at all, not just the owner: a guest standing in a room being taken down would be
+        // ejected by the bounds check a tick later, which is a correct answer to the wrong question.
+        boolean occupied = serverPlayer.server.getPlayerList().getPlayers().stream()
+            .anyMatch(other -> com.neryos.workbay.world.RoomVisit.roomOf(other)
+                .map(id -> id.equals(room.id())).orElse(false));
+        if (occupied) {
+            WorkbaySounds.refuse(serverPlayer,
+                com.neryos.workbay.WorkbayLang.message("room_occupied"));
+            return;
+        }
+        var standing = com.neryos.workbay.world.RoomBuilder.firstThingInside(backshop, room);
+        if (standing.isPresent()) {
+            WorkbaySounds.refuse(serverPlayer, com.neryos.workbay.WorkbayLang.message(
+                "room_not_empty", standing.get().getBlock().getName()));
+            return;
+        }
+        // Its ticket first: a room that is no longer built must not be holding chunks, and
+        // RoomAnchors#apply reads `built` and returns early rather than releasing.
+        com.neryos.workbay.world.RoomRecord released = room.withAnchored(false);
+        registry.putRoom(released);
+        com.neryos.workbay.world.RoomAnchors.apply(backshop, released);
+        com.neryos.workbay.world.RoomBuilder.demolish(backshop, released);
+        registry.putRoom(released.withBuiltTier(0));
+        WorkbaySounds.confirm(serverPlayer,
+            com.neryos.workbay.WorkbayLang.message("room_removed", index + 1),
+            net.minecraft.sounds.SoundEvents.COPPER_BULB_TURN_OFF, 1.0F);
+        refreshNow();
+    }
+
     private void toggleRoomAnchor(ServerPlayer serverPlayer, WorkbayRecord record, int index) {
         if (!record.owner().equals(serverPlayer.getUUID())) {
             WorkbaySounds.refuse(serverPlayer, com.neryos.workbay.WorkbayLang.message("locked"));

@@ -265,6 +265,18 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("links.remove.tip"), "The link keeps its filter, rate and name and "
             + "waits under Add. Breaking the Connector is what deletes one.");
         add(WorkbayLang.guiKey("links.add.detached"), "%s, on no bay");
+        add(WorkbayLang.messageKey("workbay_stamped"), "This Workbay will join network %s.");
+        add(WorkbayLang.messageKey("network_reused_named"), "Joined network %s.");
+        add(WorkbayLang.messageKey("room_occupied"), "Somebody is in that room.");
+        add(WorkbayLang.messageKey("room_not_empty"), "There is a %s in that room. A room is only "
+            + "given back once it is empty - nothing you built is thrown away here.");
+        add(WorkbayLang.messageKey("room_removed"), "Room %s handed back.");
+        add(WorkbayLang.guiKey("rooms.remove"), "Hand this room back");
+        add(WorkbayLang.guiKey("rooms.remove.tip"), "Takes the shell down and frees the slot. Only "
+            + "an empty room, and it asks again before it does it.");
+        add(WorkbayLang.guiKey("rooms.remove.sure"), "Hand it back?");
+        add(WorkbayLang.guiKey("rooms.remove.sure.tip"), "Click again to take the room down. "
+            + "Anything else on this screen calls it off.");
         add(WorkbayLang.guiKey("status.no_power"), "No power");
         add(WorkbayLang.guiKey("status.short.no_power"), "No power");
         add(WorkbayLang.guiKey("status.no_power.tip"), "The Workbay's buffer is empty. Running "

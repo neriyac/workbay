@@ -91,6 +91,16 @@ class RoomsPage extends WorkbayPage {
     private static final int ENTER_X = ROW_W - GAP - BTN;
     private static final int ANCHOR_X = ENTER_X - GAP - BTN;
     private static final int SETTINGS_X = ANCHOR_X - GAP - BTN;
+    private static final int REMOVE_X = SETTINGS_X - GAP - BTN;
+
+    /**
+     * Which room's X is armed, or -1. <b>The confirm is the screen's, not the server's.</b>
+     * Client-side and static, like Copy's clipboard on BAYS: it is view state, nothing else can
+     * disagree with it, and it costs no round trip. Cleared by drawing any other page, by clicking
+     * anything else, and by the room list changing under it -- an armed X that survives the row
+     * moving is an X that deletes the wrong room. OPEN_ISSUES #62.
+     */
+    private static int armed = -1;
 
     // The settings window.
     private static final int WIN_W = 200;
@@ -199,6 +209,11 @@ class RoomsPage extends WorkbayPage {
         // that stopped existing -- the search narrowed the list, the window closed -- cannot leave
         // a live rectangle behind for the next press to land in.
         barX = -1;
+        // An armed X must not outlive the row it belongs to: a room list one shorter than it was
+        // is a list where index 2 is a different room.
+        if (armed >= snapshot().rooms().size()) {
+            armed = -1;
+        }
         header(g, mouseX, mouseY, "ROOMS");
         ladder(g, mouseX, mouseY);
         rooms(g, mouseX, mouseY);
@@ -309,8 +324,28 @@ class RoomsPage extends WorkbayPage {
             // Right-aligned against the controls rather than parked on a fixed x. "Not opened
             // yet" is 62 pixels in a 96-wide column, so an unopened room drew its one fact in the
             // middle of the row with a hundred pixels of nothing on either side of it.
-            textRight(g, size, px + SETTINGS_X - 8, py + TEXT_Y, ROOM_SIZE_W,
+            textRight(g, size, px + REMOVE_X - 8, py + TEXT_Y, ROOM_SIZE_W,
                 room.built() ? Draw.TEXT_DIM : Draw.TEXT_FAINT);
+
+            // Handing the room back. Only a built one has anything to hand back, and the click is
+            // asked twice: once to arm, once to do it. A room is four chunks of somebody's build
+            // and this is the only control on the screen that can take one away.
+            if (room.built()) {
+                boolean sure = armed == room.index();
+                iconButton(g, mouseX, mouseY, px + REMOVE_X, py, WBIcons.CROSS, sure,
+                    () -> armed = sure ? -1 : room.index(),
+                    WorkbayScreen.gui(sure ? "rooms.remove.sure" : "rooms.remove"),
+                    WorkbayScreen.gui(sure ? "rooms.remove.sure.tip" : "rooms.remove.tip"));
+                if (sure) {
+                    // The second click is a separate hit on top of the first, registered after it
+                    // so it wins: the screen dispatches in reverse registration order.
+                    screen.hit(px + REMOVE_X, py, BTN, BTN, () -> {
+                        screen.send(WorkbayAction.REMOVE_ROOM, room.index());
+                        armed = -1;
+                    }, WorkbayScreen.gui("rooms.remove.sure"),
+                        WorkbayScreen.gui("rooms.remove.sure.tip"));
+                }
+            }
 
             // Only a built room has a shell to paint or chunks to write a biome over, and an
             // unopened one has no record to remember either choice on -- SPEC.md §8 spends the

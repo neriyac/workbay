@@ -136,8 +136,13 @@ public class WorkbayBlock extends BaseEntityBlock {
         if (placer instanceof Player player) {
             // No code in the message. SPEC.md §14: the network is found by owner, so a code is
             // something for a player to write down, mistype and ask about, and nothing else.
-            player.sendSystemMessage(WorkbayLang.message(
-                reused != null ? "network_reused" : "room_created"));
+            // Which one, by code. "Joined your network" is fine for a player with one and is the
+            // whole of OPEN_ISSUES #63's complaint for a player with two: a message that does not
+            // name the network is a message that cannot be checked. Stamping the item beforehand
+            // is how a player chooses; this is how they find out what they got.
+            player.sendSystemMessage(reused != null
+                ? WorkbayLang.message("network_reused_named", record.code())
+                : WorkbayLang.message("room_created"));
         }
     }
 
@@ -174,7 +179,10 @@ public class WorkbayBlock extends BaseEntityBlock {
     protected net.minecraft.world.ItemInteractionResult useItemOn(ItemStack stack, BlockState state,
         Level level, BlockPos pos, Player player, net.minecraft.world.InteractionHand hand,
         net.minecraft.world.phys.BlockHitResult hit) {
-        if (!stack.is(WBBlocks.CONNECTOR.get().asItem())) {
+        boolean connector = stack.is(WBBlocks.CONNECTOR.get().asItem());
+        boolean blank = stack.is(WBBlocks.WORKBAY.get().asItem())
+            && stack.get(WBDataComponents.BINDING.get()) == null;
+        if (!connector && !blank) {
             return net.minecraft.world.ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
         if (level.isClientSide) {
@@ -187,6 +195,9 @@ public class WorkbayBlock extends BaseEntityBlock {
         if (record == null) {
             return net.minecraft.world.ItemInteractionResult.FAIL;
         }
+        if (blank) {
+            return stamp(stack, record, player);
+        }
         int bay = firstOccupiedBay(record);
         pair(stack, record, GlobalPos.of(level.dimension(), pos), bay);
         // Which bay, because this path always lands on the first occupied one and a player with a
@@ -194,6 +205,41 @@ public class WorkbayBlock extends BaseEntityBlock {
         // else is the screen's Pair button.
         WorkbaySounds.confirm(player, WorkbayLang.message("connector_paired", bay + 1),
             net.minecraft.sounds.SoundEvents.COMPARATOR_CLICK, 1.6F);
+        return net.minecraft.world.ItemInteractionResult.CONSUME;
+    }
+
+    /**
+     * <b>Which network the next Workbay joins, chosen by pointing at one.</b> OPEN_ISSUES #63.
+     *
+     * <p>A fresh Workbay placed by somebody who already owns a network silently joins whichever
+     * one {@code ownedBy} happened to return first, and with more than one there was no way to say
+     * which -- not on placement, not afterwards. This is the way to say it, and it is the gesture
+     * the mod already teaches: a Connector is bound to a Workbay by right-clicking that Workbay
+     * with it, and now so is a Workbay.
+     *
+     * <p><b>A picker on placement is what was asked for and this is not that.</b> It is what fits
+     * in the mod as it stands: the binding component, the tooltip that reads it and the rejoin path
+     * in {@link #setPlacedBy} all exist and are tested, so stamping the item costs one branch and
+     * no new screen, packet or menu. A list of networks to choose from -- Flux Networks' shape --
+     * is still worth building, and is still open. Note that {@code maxNetworksPerPlayer} ships at
+     * <b>1</b>, so nobody meets this without having raised it on purpose.
+     */
+    private static net.minecraft.world.ItemInteractionResult stamp(ItemStack stack,
+        WorkbayRecord record, @Nullable Player player) {
+        // The counts are the tooltip's, and they are the network's rather than the item's, because
+        // that is what this item will be part of the moment it is placed.
+        stack.set(WBDataComponents.BINDING.get(),
+            WorkbayBinding.of(record, (int) java.util.stream.IntStream
+                .range(0, record.bayCapacity())
+                .filter(i -> record.bay(i).hosted().isPresent())
+                .count(), record.buses().size(), 0));
+        if (player != null) {
+            // The code, here and nowhere else. SPEC.md §14 keeps codes off the screens because a
+            // network is found by owner -- but this is the one moment a player is choosing between
+            // two networks, and a name is what a choice needs.
+            WorkbaySounds.confirm(player, WorkbayLang.message("workbay_stamped", record.code()),
+                net.minecraft.sounds.SoundEvents.COMPARATOR_CLICK, 1.2F);
+        }
         return net.minecraft.world.ItemInteractionResult.CONSUME;
     }
 

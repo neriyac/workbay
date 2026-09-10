@@ -224,4 +224,64 @@ public final class RoomBuilder {
             && backshop.getBlockState(RoomGeometry.origin(room.region()))
                 .is(WBBlocks.ROOM_WALL.get());
     }
+
+    /**
+     * The first thing a player has put inside this room, if there is one.
+     *
+     * <p><b>What a room contains is a build, and a build is never silently voided</b> (SPEC.md §8;
+     * OPEN_ISSUES #62). Giving a room back is therefore refused rather than destructive, and this
+     * is the question that refusal asks. Walks the interior air only -- the shell is ours and does
+     * not count -- and stops at the first block it finds, so an empty room costs a scan and a room
+     * with a chest by the door costs almost nothing.
+     *
+     * @return the block standing in the room, or empty for a room holding nothing but air
+     */
+    public static java.util.Optional<BlockState> firstThingInside(ServerLevel backshop,
+        RoomRecord room) {
+        int inside = RoomGeometry.interior(room.builtTier());
+        int high = RoomGeometry.height(room.builtTier());
+        BlockPos low = RoomGeometry.origin(room.region()).offset(1, 1, 1);
+        BlockPos.MutableBlockPos at = new BlockPos.MutableBlockPos();
+        for (int y = 0; y < high; y++) {
+            for (int x = 0; x < inside; x++) {
+                for (int z = 0; z < inside; z++) {
+                    at.set(low.getX() + x, low.getY() + y, low.getZ() + z);
+                    BlockState state = backshop.getBlockState(at);
+                    if (!state.isAir() && !isShell(state)) {
+                        return java.util.Optional.of(state);
+                    }
+                }
+            }
+        }
+        return java.util.Optional.empty();
+    }
+
+    /**
+     * Takes the shell back down and hands the slot back, so a room opened by accident is not a
+     * room owned for ever. OPEN_ISSUES #62.
+     *
+     * <p>The caller is what decides this is allowed: this only knows how to demolish. It clears
+     * the whole footprint -- shell and interior together -- because a room's region is reused the
+     * next time that slot is opened and a leftover wall would be inherited by whatever is built
+     * there next.
+     */
+    public static void demolish(ServerLevel backshop, RoomRecord room) {
+        if (!room.built()) {
+            return;
+        }
+        int side = RoomGeometry.footprint(room.builtTier());
+        int high = RoomGeometry.ceilingY(room.builtTier()) + 1;
+        BlockPos origin = RoomGeometry.origin(room.region());
+        BlockPos.MutableBlockPos at = new BlockPos.MutableBlockPos();
+        for (int y = RoomGeometry.FLOOR_Y; y <= high; y++) {
+            for (int x = 0; x < side; x++) {
+                for (int z = 0; z < side; z++) {
+                    at.set(origin.getX() + x, y, origin.getZ() + z);
+                    if (isShell(backshop.getBlockState(at))) {
+                        backshop.setBlock(at, Blocks.AIR.defaultBlockState(), 2);
+                    }
+                }
+            }
+        }
+    }
 }
