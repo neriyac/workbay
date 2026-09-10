@@ -879,6 +879,745 @@ def icons_preview(path, java_path, only=None):
     return path
 
 
+# ------------------------------------------------------------------ the screen icons
+#
+# Most of WBIcons used to be the game's own item sprites. **They are the mod's own 16x16 textures
+# now**, drawn here, because twelve pixels in nine colours is a ceiling and not a style: the same
+# silhouette at sixteen with a full palette is a rounder, darker-rimmed, better-lit drawing, and
+# that is the difference between a glyph and a sprite. Neriya, on three rounds of twelve-pixel
+# grids: flat, and not pretty. They were.
+#
+# The grids stay for the flat controls -- arrows, tick, cross, plus, power -- which are symbols and
+# want to be flat. Anything that is a *thing* is a texture.
+#
+#   python tools/make-art.py icons                 # write the textures
+#   python tools/make-art.py --candidates o.png    # old beside new, at 1x, 3x and 8x
+#
+# **A silhouette, not a shading.** One letter per pixel naming what that pixel is made of; the
+# outline, the bands and the glint are computed. What is *not* computed is where the object's
+# highlight goes: a zone letter forces a tone, which is the one thing every reference Neriya sent
+# has and no bevel rule produces.
+
+import colorsys
+
+# One colour per material, and it is saturated. Every base sits well clear of Draw.PANEL
+# (0x2B2E33), because an icon that needs its own backing plate to be seen is not an icon.
+MATERIALS = {
+    "steel": 0x8894AC,
+    "cyan":  0x4FC8F0,
+    "gold":  0xE8B23C,
+    "paper": 0xEDE3C6,
+    "red":   0xE03028,
+    "wood":  0x9C6B3E,
+    "lapis": 0x3E6FD8,
+    "green": 0x5FD35A,
+}
+
+# letter -> (material, how many tones up or down its ramp the pixel sits). The offsets are the
+# hand-placed part: a capital at +2 is a glint and a lower-case at -2 is a recess, and neither is
+# something a rule about which way a pixel faces would ever have found.
+ZONES = {
+    "S": ("steel", 0), "s": ("steel", -1), "d": ("steel", -2), "X": ("steel", +2),
+    "C": ("cyan", 0),  "c": ("cyan", -1),  "E": ("cyan", +2),
+    "G": ("gold", 0),  "g": ("gold", -1),  "Z": ("gold", +2),
+    "P": ("paper", 0), "p": ("paper", -1), "Q": ("paper", +2),
+    "R": ("red", 0),   "r": ("red", -1),   "T": ("red", +2),
+    "W": ("wood", 0),  "w": ("wood", -1),
+    "B": ("lapis", 0), "b": ("lapis", -1),
+    "N": ("green", 0),
+}
+
+# Five tones and a rim, which is what the sprites in the references have. The rim is the material's
+# own colour taken nearly to black and then mixed *towards* black rather than multiplied to it: a
+# multiply leaves a navy rim on a blue object, and every good sprite in this game has a rim that is
+# very nearly the same near-black whatever it is drawing.
+TONES = [0.46, 0.66, 0.86, 1.06, 1.26]
+RIM = 0x0C0E13
+RIM_MIX = 0.82
+
+
+def tint(base, f):
+    """One tone off a material's colour, with the hue moved.
+
+    **A ramp made by multiplying is why a drawing looks flat.** A shadow in every sprite Neriya
+    sent is not the same hue darker -- it is pulled towards violet and made *more* saturated, and
+    a highlight is pulled towards yellow and washed out. Multiplying does neither, which is how
+    five tones end up reading as one colour at three brightnesses.
+    """
+    r, g, b = base >> 16 & 0xFF, base >> 8 & 0xFF, base & 0xFF
+    h, s, v = colorsys.rgb_to_hsv(r / 255.0, g / 255.0, b / 255.0)
+    if f <= 1.0:
+        t = 1.0 - f
+        v *= f
+        s = min(1.0, s * (1.0 + t * 0.75))
+        h = _towards(h, 0.72, t * 0.34)
+    else:
+        t = min(1.0, (f - 1.0) / 0.40)
+        v += (1.0 - v) * t
+        s *= 1.0 - t * 0.62
+        h = _towards(h, 0.13, t * 0.30)
+    r, g, b = colorsys.hsv_to_rgb(h, s, v)
+    return int(r * 255) << 16 | int(g * 255) << 8 | int(b * 255)
+
+
+def _towards(h, target, t):
+    """Hue interpolation the short way round the wheel."""
+    delta = (target - h + 0.5) % 1.0 - 0.5
+    return (h + delta * t) % 1.0
+
+
+def _mix(a, b, t):
+    out = 0
+    for shift in (16, 8, 0):
+        ca, cb = a >> shift & 0xFF, b >> shift & 0xFF
+        out |= int(ca + (cb - ca) * t) << shift
+    return out
+
+
+def ramp(material):
+    """[rim, ...five tones] for one material."""
+    base = MATERIALS[material]
+    return [_mix(tint(base, 0.34), RIM, RIM_MIX)] + [tint(base, f) for f in TONES]
+
+
+def _thick(rows, x, y, w, h):
+    """True where this edge pixel has a four-neighbour that is itself not an edge -- the same
+    question as whether the feature it belongs to has an inside. A rim needs something to be the
+    rim of; without this, a two-pixel stroke is all rim and disappears."""
+    def at(cx, cy):
+        return rows[cy][cx] if 0 <= cx < w and 0 <= cy < h else "."
+
+    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+        nx, ny = x + dx, y + dy
+        if at(nx, ny) == ".":
+            continue
+        if all(at(nx + ex, ny + ey) != "."
+               for ex, ey in ((1, 0), (-1, 0), (0, 1), (0, -1))):
+            return True
+    return False
+
+
+def shade(rows):
+    """A silhouette to an RGBA image. Light comes from the top left.
+
+      * every pixel on the silhouette's edge takes the rim, unless its whole feature is one pixel
+        thick, in which case it takes the base tone rather than vanishing;
+      * just inside the near edge, or where a different letter sits above or left, is lit;
+      * just inside the far edge is shadow;
+      * everything else is base.
+
+    Then the zone's own offset moves it, which is where a glint or a recess comes from.
+    """
+    h = len(rows)
+    w = max(len(r) for r in rows)
+    rows = [r.ljust(w, ".") for r in rows]
+
+    def at(x, y):
+        return rows[y][x] if 0 <= x < w and 0 <= y < h else "."
+
+    def rims(x, y):
+        return at(x, y) != "." and (at(x + 1, y) == "." or at(x, y + 1) == "."
+                                    or at(x - 1, y) == "." or at(x, y - 1) == ".")
+
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    for y in range(h):
+        for x in range(w):
+            z = at(x, y)
+            if z == ".":
+                continue
+            material, offset = ZONES[z]
+            bar = ramp(material)
+            edge = rims(x, y)
+            seam = at(x - 1, y) != z or at(x, y - 1) != z
+            near = at(x - 1, y) == "." or at(x, y - 1) == "."
+            if edge and _thick(rows, x, y, w, h):
+                level = 0
+            elif edge:
+                level = 3
+            elif seam or near or rims(x - 1, y) or rims(x, y - 1):
+                level = 4
+            elif rims(x + 1, y) or rims(x, y + 1):
+                level = 2
+            else:
+                level = 3
+            if level:
+                level = min(5, max(1, level + offset))
+            c = bar[level]
+            img.putpixel((x, y), (c >> 16 & 0xFF, c >> 8 & 0xFF, c & 0xFF, 255))
+    return img
+
+
+# The twelve icons that were somebody else's item sprite. What each has to read as is in ART.md;
+# what it must not be mistaken for is the icon beside it on its own screen.
+#
+# **They are objects, not symbols**, and they are lit from one place, and every one of them has a
+# protrusion breaking its outline -- a ring, a clip, a handle. That is what the sprites in the
+# references have in common and it is what three rounds of centred rectangles did not.
+ICONS = {
+    # The flow map: a chart with the routes drawn on it, a pin where they end, and a dog-eared
+    # corner so it is a sheet in a hand rather than a tile.
+    "MAP": ["................",
+            "................",
+            "..PPPPPPPPPPPP..",
+            "..PPPPPPPPPPPP..",
+            "..PPPCCPPPPPPP..",
+            "..PPCCPPPPPPPP..",
+            "..PPCPPPPCCCPP..",
+            "..PPCPPPCCPPPP..",
+            "..PPCCCCCPPPPP..",
+            "..PPPPPPPPPPPP..",
+            "..PPPPPPPRRPPP..",
+            "..PPPPPPPRRPPP..",
+            "..PPPPPPPPPPpp..",
+            "..PPPPPPPPPpp...",
+            "................",
+            "................"],
+
+    # The trip to a hosted machine: an arrow crossing a distance into a doorway. The arrowhead
+    # reaches furthest on its middle rows, or it points the other way.
+    "ENTER": ["................",
+              "..........SSSSS.",
+              "..........SsssS.",
+              ".....C....Ss..S.",
+              ".....CC...Ss..S.",
+              ".....CCC..Ss..S.",
+              ".CCCCCCCCSs..S..",
+              ".CEEEEEEECs..S..",
+              ".CCCCCCCCCs..S..",
+              ".CCCCCCCCSs..S..",
+              ".....CCC..Ss..S.",
+              ".....CC...Ss..S.",
+              ".....C....Ss..S.",
+              "..........Ss..S.",
+              "..........SSSSS.",
+              "................"],
+
+    # Eject: the symbol every machine in the world already uses for "give it back", on a plate.
+    "EJECT": ["................",
+              "................",
+              ".......GG.......",
+              "......GZZG......",
+              ".....GGZZGG.....",
+              "....GGGZZGGG....",
+              "...GGGGGGGGGG...",
+              "..GGGGGGGGGGGG..",
+              "................",
+              "................",
+              "..SSSSSSSSSSSS..",
+              "..SXXXXXXXXXXS..",
+              "..SSSSSSSSSSSS..",
+              "................",
+              "................",
+              "................"],
+
+    # Rename: a tag on a ring. The ring is the protrusion and the hole is the whole of what tells
+    # it from a sheet of paper.
+    "RENAME": ["................",
+               "................",
+               "......PPPPPPPPP.",
+               ".....PPPPPPPPPP.",
+               "....PPPppppppPP.",
+               "...PPGGPPPPPPPP.",
+               "..PPG..GPPPPPPP.",
+               "..PPG..GPPPPPPP.",
+               "...PPGGPPPPPPPP.",
+               "....PPPppppppPP.",
+               ".....PPPPPPPPPP.",
+               "......PPPPPPPPP.",
+               "................",
+               "................",
+               "................",
+               "................"],
+
+    # Rooms: a door in its frame, with a gold handle and a lit top light. Not a lit opening --
+    # that is the Workbay's own glass, and two icons in one tab strip may not be the same picture.
+    "DOOR": ["................",
+             "...WWWWWWWWWW...",
+             "..WWWWWWWWWWWW..",
+             "..WWwwwwwwWWWW..",
+             "..WWwwwwwwWWWW..",
+             "..WWwwwwwwWWWW..",
+             "..WWwwwwwwWWWW..",
+             "..WWWWWWWWWWWW..",
+             "..WWwwwwwwWGWW..",
+             "..WWwwwwwwWWWW..",
+             "..WWwwwwwwWWWW..",
+             "..WWwwwwwwWWWW..",
+             "..WWWWWWWWWWWW..",
+             "..WWWWWWWWWWWW..",
+             "...WWWWWWWWWW...",
+             "................"],
+
+    # Anchor: the thing itself, with a gold ring. Vanilla's respawn anchor is a block nobody reads
+    # small, and an anchor is the one shape that means "stays where it is while you are away".
+    "ANCHOR": ["................",
+               "......GGGG......",
+               ".....GG..GG.....",
+               ".....GG..GG.....",
+               "......GGGG......",
+               "..SSSSSSSSSSSS..",
+               "......SSSS......",
+               "......SSSS......",
+               "......SSSS......",
+               ".SS...SSSS...SS.",
+               ".SSS..SSSS..SSS.",
+               ".SSSS.SSSS.SSSS.",
+               "..SSSSSSSSSSSS..",
+               "...SSSSSSSSSS...",
+               ".....SSSSSS.....",
+               "................"],
+
+    # Guest: a person. The vanilla player head is a head with a face on it, which small is four
+    # dark pixels; a bust in a coloured collar is the shape the whole genre agreed on.
+    "GUEST": ["................",
+              "................",
+              ".....SSSSSS.....",
+              "....SSSSSSSS....",
+              "....SSXXSSSS....",
+              "....SSSSSSSS....",
+              "....SSSSSSSS....",
+              ".....SSSSSS.....",
+              "......SSSS......",
+              "....CCCCCCCC....",
+              "...CCCCCCCCCC...",
+              "..CCCCCCCCCCCC..",
+              "..CCCCCCCCCCCC..",
+              "..CCCCCCCCCCCC..",
+              "..CCCCCCCCCCCC..",
+              "................"],
+
+    # Copy: two sheets, the back one darker. One sheet is a document; two is the verb.
+    "COPY": ["................",
+             ".......ppppppp..",
+             ".......ppppppp..",
+             ".......ppppppp..",
+             ".......ppppppp..",
+             "..PPPPPPPPpppp..",
+             "..PQQQQQQPpppp..",
+             "..PPPPPPPPpppp..",
+             "..PQQQQQQPpppp..",
+             "..PPPPPPPPpppp..",
+             "..PQQQQQQP......",
+             "..PPPPPPPP......",
+             "..PPPPPPPP......",
+             "..PPPPPPPP......",
+             "................",
+             "................"],
+
+    # Paste: the board the sheet lands on, with the gold clip that says it landed.
+    "PASTE": ["................",
+              ".....GGGGGG.....",
+              "..SSSGZZZZGSSS..",
+              "..SSSGGGGGGSSS..",
+              "..SSPPPPPPPPSS..",
+              "..SSPQQQQQQPSS..",
+              "..SSPPPPPPPPSS..",
+              "..SSPQQQQQQPSS..",
+              "..SSPPPPPPPPSS..",
+              "..SSPQQQQQQPSS..",
+              "..SSPPPPPPPPSS..",
+              "..SSPPPPPPPPSS..",
+              "..SSSSSSSSSSSS..",
+              "................",
+              "................",
+              "................"],
+
+    # Lock and unlock. Vanilla has no padlock, and every candidate names something else -- an iron
+    # door is the rooms tab, a barrier is a refusal, a chest is a container. A shackle over a body
+    # is the shape the genre agreed on, and it sits in the same tab strip as the rooms door, so it
+    # has to be drawn to the same weight rather than left a flat grid.
+    "LOCK": ["................",
+             ".....XXXXXX.....",
+             "....XX....XX....",
+             "....XX....XX....",
+             "....XX....XX....",
+             "..GGXXGGGGXXGG..",
+             "..GGGGGGGGGGGG..",
+             "..GGGGddddGGGG..",
+             "..GGGGddddGGGG..",
+             "..GGGGGddGGGGG..",
+             "..GGGGGddGGGGG..",
+             "..GGGGGGGGGGGG..",
+             "..GGGGGGGGGGGG..",
+             "..GGGGGGGGGGGG..",
+             "................",
+             "................"],
+
+    "UNLOCK": ["................",
+               "........XXXX....",
+               ".......XX..XX...",
+               ".......XX..XX...",
+               "...........XX...",
+               "..GGGGGGGGGXXG..",
+               "..GGGGGGGGGGGG..",
+               "..GGGGddddGGGG..",
+               "..GGGGddddGGGG..",
+               "..GGGGGddGGGGG..",
+               "..GGGGGddGGGGG..",
+               "..GGGGGGGGGGGG..",
+               "..GGGGGGGGGGGG..",
+               "..GGGGGGGGGGGG..",
+               "................",
+               "................"],
+
+    # Filter: a funnel, one thing going in and one turned away at the rim. The vanilla hopper was
+    # tried and rejected: at this size it is a grey wedge, and a funnel alone says "narrows" rather
+    # than "chooses". The two pips are the whole idea and they sit on the rim, not in the cone.
+    "FILTER": ["................",
+               "...NN......RR...",
+               "...NN......RR...",
+               ".SSSSSSSSSSSSSS.",
+               ".SSSSSSSSSSSSSS.",
+               "..SSSSSSSSSSSS..",
+               "...SSSSSSSSSS...",
+               "....SSSSSSSS....",
+               ".....SSSSSS.....",
+               "......SSSS......",
+               "......SSSS......",
+               "......SSSS......",
+               "......SSSS......",
+               "......SSSS......",
+               "................",
+               "................"],
+
+    # Sort: three runs of different length. Three rows each rather than two, because a two-pixel
+    # bar is all edge and comes out flat.
+    "SORT": ["................",
+             "................",
+             "..SSSSSSSSSSSS..",
+             "..SSSSSSSSSSSS..",
+             "..SSSSSSSSSSSS..",
+             "................",
+             "..SSSSSSSSS.....",
+             "..SSSSSSSSS.....",
+             "..SSSSSSSSS.....",
+             "................",
+             "..SSSSSS........",
+             "..SSSSSS........",
+             "..SSSSSS........",
+             "................",
+             "................",
+             "................"],
+
+    # Upgrades: a plate with a plus on it. Mekanism's answer, and the right one -- the tab is the
+    # Expansion Plate and the page is about there being more of everything.
+    "UPGRADE": ["................",
+                "................",
+                "..SSSSSSSSSSSS..",
+                ".SSSSSSSSSSSSSS.",
+                ".SssssssssssssS.",
+                ".SSSSSSSSSSSSSS.",
+                ".SSSSSSCCSSSSSS.",
+                ".SSSSCCCCCCSSSS.",
+                ".SSSSCCCCCCSSSS.",
+                ".SSSSSSCCSSSSSS.",
+                ".SSSSSSSSSSSSSS.",
+                ".SssssssssssssS.",
+                ".SSSSSSSSSSSSSS.",
+                "..SSSSSSSSSSSS..",
+                "................",
+                "................"],
+
+    # Redstone, always: dust crossing, with the node vanilla draws where two runs meet. The mode
+    # where redstone is not part of the answer at all, so the caller draws it dim.
+    "REDSTONE_DUST": ["................",
+                      "................",
+                      ".......RR.......",
+                      ".......RR.......",
+                      "......RRRR......",
+                      ".....RRTTRR.....",
+                      "....RRTTTTRR....",
+                      ".RRRRRTTTTRRRRR.",
+                      ".RRRRRTTTTRRRRR.",
+                      "....RRTTTTRR....",
+                      ".....RRTTRR.....",
+                      "......RRRR......",
+                      ".......RR.......",
+                      ".......RR.......",
+                      "................",
+                      "................"],
+
+    # Redstone, with or without a signal: a torch, lit or not. The one object in the game that
+    # means "there is power here", and the only one here with a wooden handle.
+    "REDSTONE_TORCH": ["................",
+                       "................",
+                       "................",
+                       ".....RRRRRR.....",
+                       ".....RTTTTR.....",
+                       ".....RTTTTR.....",
+                       ".....RRRRRR.....",
+                       ".......WW.......",
+                       ".......WW.......",
+                       ".......Ww.......",
+                       ".......Ww.......",
+                       ".......Ww.......",
+                       ".......Ww.......",
+                       ".......Ww.......",
+                       "................",
+                       "................"],
+
+    # Redstone, pulse: a repeater. Two torches on a plate, offset -- which is a delay, and the only
+    # mode that spends an edge rather than reading a level.
+    "REDSTONE_PULSE": ["................",
+                       "................",
+                       "................",
+                       "..........RRR...",
+                       "..........RTR...",
+                       "....RRR...RRR...",
+                       "....RTR....W....",
+                       "....RRR....W....",
+                       ".....W.....W....",
+                       ".....W.....W....",
+                       ".ssssssssssssss.",
+                       ".sSSSSSSSSSSSSs.",
+                       ".ssssssssssssss.",
+                       "..ssssssssssss..",
+                       "................",
+                       "................"],
+}
+
+
+# The eight upgrade sprites, drawn in the same engine as the screen icons. **They were the last
+# thing in the mod still lit from a different direction**: five of them (the room ones) were drawn
+# outside this script and only their PNGs survived, so nobody could re-tune them, and the three
+# machine ones predate the hue-shifted ramp. Neriya: all of them, machine and rooms.
+#
+# They are 16x16 `item/generated` textures, which is what the screens draw a row's upgrade as -- so
+# a page of upgrades and the tab strip above it are now one set.
+ITEMS = {
+    # The Expansion Plate: a plate with a plus on it, stacked. Mekanism's answer to "what does an
+    # upgrade look like", and Neriya's.
+    "expansion_plate": ["................",
+                        "................",
+                        "...SSSSSSSSSS...",
+                        "..SSSSSSSSSSSS..",
+                        "..SSSSSCCSSSSS..",
+                        "..SSSCCCCCCSSS..",
+                        "..SSSCCCCCCSSS..",
+                        "..SSSSSCCSSSSS..",
+                        "..SSSSSSSSSSSS..",
+                        "..ssssssssssss..",
+                        "..SSSSSSSSSSSS..",
+                        "..ssssssssssss..",
+                        "..SSSSSSSSSSSS..",
+                        "...SSSSSSSSSS...",
+                        "................",
+                        "................"],
+
+    # The Resonator: a crystal in a collar on a handle, with two ticks of signal leaving it.
+    # SPEC.md section 7, and the one upgrade drawn on the diagonal -- an object held at an angle is
+    # the first thing every sprite in the references has.
+    "resonator": ["................",
+                  "..........CC....",
+                  "...C.....CCCC...",
+                  "........CCCCCC..",
+                  "..C....CCCCCC...",
+                  "........CCCC....",
+                  "........SS......",
+                  ".......SS.......",
+                  "......SS........",
+                  ".....SS.........",
+                  "....SS..........",
+                  "...SS...........",
+                  "..SS............",
+                  "..S.............",
+                  "................",
+                  "................"],
+
+    # The Impeller: one swept rotor. Four copies of one blade turned a quarter about the centre is
+    # what a rotor *is*, and a fan beside a pile would be two upgrades.
+    "impeller": ["................",
+                 "................",
+                 "...SS......SS...",
+                 "..SSSS....SSSS..",
+                 "..SSSSS..SSSSS..",
+                 "...SSSSSSSSSS...",
+                 "....SSSXXSSS....",
+                 "....SSSXXSSS....",
+                 "...SSSSSSSSSS...",
+                 "..SSSSS..SSSSS..",
+                 "..SSSS....SSSS..",
+                 "...SS......SS...",
+                 "................",
+                 "................",
+                 "................",
+                 "................"],
+
+    # Three room frames, and the whole of what tells them apart is how much room is inside. Same
+    # steel, same lit interior, three sizes -- which is the fact the row is reporting.
+    "room_frame": ["................",
+                   "................",
+                   "................",
+                   "................",
+                   "....SSSSSSSS....",
+                   "....SCCCCCCS....",
+                   "....SCCCCCCS....",
+                   "....SCCCCCCS....",
+                   "....SCCCCCCS....",
+                   "....SCCCCCCS....",
+                   "....SCCCCCCS....",
+                   "....SSSSSSSS....",
+                   "................",
+                   "................",
+                   "................",
+                   "................"],
+
+    "wide_room_frame": ["................",
+                        "................",
+                        "..SSSSSSSSSSSS..",
+                        "..SCCCCCCCCCCS..",
+                        "..SCCCCCCCCCCS..",
+                        "..SCCCCCCCCCCS..",
+                        "..SCCCCCCCCCCS..",
+                        "..SCCCCCCCCCCS..",
+                        "..SCCCCCCCCCCS..",
+                        "..SCCCCCCCCCCS..",
+                        "..SCCCCCCCCCCS..",
+                        "..SCCCCCCCCCCS..",
+                        "..SCCCCCCCCCCS..",
+                        "..SSSSSSSSSSSS..",
+                        "................",
+                        "................"],
+
+    "vast_room_frame": [".SSSSSSSSSSSSSS.",
+                        ".SCCCCCCCCCCCCS.",
+                        ".SCCCCCCCCCCCCS.",
+                        ".SCCCCCCCCCCCCS.",
+                        ".SCCCCCCCCCCCCS.",
+                        ".SCCCCCCCCCCCCS.",
+                        ".SCCCCCCCCCCCCS.",
+                        ".SCCCCCCCCCCCCS.",
+                        ".SCCCCCCCCCCCCS.",
+                        ".SCCCCCCCCCCCCS.",
+                        ".SCCCCCCCCCCCCS.",
+                        ".SCCCCCCCCCCCCS.",
+                        ".SCCCCCCCCCCCCS.",
+                        ".SCCCCCCCCCCCCS.",
+                        ".SSSSSSSSSSSSSS.",
+                        "................"],
+
+    # The Annex Plate: the same plate as the Expansion, carrying a room instead of a plus, because
+    # what it buys is one more room and not one more bay.
+    "annex_plate": ["................",
+                    "................",
+                    "...SSSSSSSSSS...",
+                    "..SSSSSSSSSSSS..",
+                    "..SSCCCCCCCCSS..",
+                    "..SSCSSSSSSCSS..",
+                    "..SSCSSSSSSCSS..",
+                    "..SSCCCCCCCCSS..",
+                    "..SSSSSSSSSSSS..",
+                    "..ssssssssssss..",
+                    "..SSSSSSSSSSSS..",
+                    "..ssssssssssss..",
+                    "..SSSSSSSSSSSS..",
+                    "...SSSSSSSSSS...",
+                    "................",
+                    "................"],
+}
+ITEMS["anchor"] = None       # the screen icon, drawn once and used in both places
+
+
+PANEL = (43, 46, 51, 255)
+BUTTON = (50, 54, 62, 255)      # Draw.PANEL_TOP, which is what a control is drawn on
+TAB_ON = (92, 135, 184, 255)    # Draw's active tab. The one that caught us out.
+GROUNDS = (PANEL, BUTTON, TAB_ON)
+
+
+def icon(name):
+    """One icon as an RGBA image, transparent where nothing is drawn."""
+    return shade(ICONS[name])
+
+
+def _on_panel(img, ground=PANEL):
+    out = Image.new("RGBA", img.size, ground)
+    out.alpha_composite(img)
+    return out
+
+
+def write_items(root):
+    """Every upgrade sprite into assets/workbay/textures/item."""
+    for name, rows in ITEMS.items():
+        art = icon("ANCHOR") if rows is None else shade(rows)
+        if art.size != (16, 16):
+            raise SystemExit("%s is %dx%d; every sprite is 16x16" % ((name,) + art.size))
+        art.save(os.path.join(root, name + ".png"))
+    return len(ITEMS)
+
+
+def write_icons(root):
+    """Every icon into assets/workbay/textures/gui/icon."""
+    if not os.path.isdir(root):
+        os.makedirs(root)
+    for name in ICONS:
+        art = icon(name)
+        # A silhouette one row long or short writes a 16x17 texture, and WBIcons#draw blits a
+        # 16x16 window out of it: the icon comes out cropped and nothing anywhere says why. Cost
+        # one round trip through the game.
+        if art.size != (16, 16):
+            raise SystemExit("%s is %dx%d; every icon is 16x16" % ((name,) + art.size))
+        art.save(os.path.join(root, name.lower() + ".png"))
+    return len(ICONS)
+
+
+def _old(name, old_dir):
+    """What ships today, at the size the screen draws it.
+
+    A flat item texture is sixteen pixels scaled to twelve, which is what the item renderer does;
+    the ones that are block models had to be cut out of a screenshot of the running game, because
+    nothing else knows what a piston looks like from the front."""
+    path = os.path.join(old_dir, name + ".png")
+    if not os.path.exists(path):
+        return None
+    src = Image.open(path).convert("RGBA")
+    if src.size != (16, 16):
+        src = src.resize((16, 16), Image.BILINEAR)
+    out = Image.new("RGBA", (16, 16), PANEL)
+    out.alpha_composite(src)
+    return out
+
+
+def candidates_sheet(path, old_dir, names=None):
+    """Old beside new, each at 1x, 3x and 8x on the panel grey, numbered, with the whole set as a
+    strip on top.
+
+    One sheet is the whole judgement. An icon is decided at 1x -- 8x is only where you find out
+    *why* it failed -- against the thing it replaces, which is why the sprite is on the same row
+    rather than in a second image nobody puts beside the first."""
+    names = names or list(ICONS)
+    scales = (1, 3, 8)
+    band = 16 * 8 + 16
+    label, gutter = 140, 34
+    group_w = sum(16 * s + 14 for s in scales)
+    strip_h = 3 * 52 + 26
+    width = max(label + 2 * group_w + gutter + 20, 20 + len(names) * 76)
+    sheet = Image.new("RGBA", (width, 34 + strip_h + band * len(names)), (24, 26, 30, 255))
+    d = ImageDraw.Draw(sheet)
+    x = 14
+    for name in names:
+        art = icon(name)
+        for row, ground in enumerate(GROUNDS):
+            img = _on_panel(art, ground)
+            sheet.paste(img.resize((48, 48), Image.NEAREST), (x, 14 + row * 52))
+            sheet.paste(img, (x + 52, 14 + row * 52 + 16))
+        x += 76
+    for group, x0 in (("OLD", label), ("NEW", label + group_w + gutter)):
+        d.text((x0, 12 + strip_h), group, fill=(150, 156, 166, 255))
+    for i, name in enumerate(names):
+        y = 34 + strip_h + i * band
+        d.text((10, y + 4), "%d. %s" % (i + 1, name), fill=(226, 230, 236, 255))
+        for group, img in (("OLD", _old(name, old_dir)), ("NEW", _on_panel(icon(name)))):
+            x = label if group == "OLD" else label + group_w + gutter
+            if img is None:
+                d.text((x, y + 40), "(3D block model)", fill=(120, 126, 136, 255))
+                continue
+            for s in scales:
+                sheet.paste(img.resize((16 * s, 16 * s), Image.NEAREST), (x, y + 20))
+                x += 16 * s + 14
+    sheet.save(path)
+    return path
+
+
 if __name__ == "__main__":
     here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     dest = os.path.join(here, "src", "main", "resources", "assets", "workbay",
@@ -889,6 +1628,13 @@ if __name__ == "__main__":
         print(preview(sys.argv[sys.argv.index("--sheet") + 1]))
     elif "--items-sheet" in sys.argv:
         print(items_preview(sys.argv[sys.argv.index("--items-sheet") + 1]))
+    elif "--candidates" in sys.argv:
+        at = sys.argv.index("--candidates")
+        print(candidates_sheet(sys.argv[at + 1], sys.argv[at + 2]))
+    elif "icons" in sys.argv:
+        icon_dest = os.path.join(here, "src", "main", "resources", "assets", "workbay",
+                                 "textures", "gui", "icon")
+        print("icons", write_icons(icon_dest), "sprites", write_items(items_dest))
     elif "--icons-sheet" in sys.argv:
         java = os.path.join(here, "src", "main", "java", "com", "neryos", "workbay",
                             "client", "screen", "WBIcons.java")

@@ -34,6 +34,30 @@ public final class WBIcons {
         return new String[] { "@" + id };
     }
 
+    /**
+     * <b>An icon that is one of the mod's own 16x16 textures.</b>
+     *
+     * <p>Twelve pixels in nine colours is a ceiling, not a style. {@link #draw}'s grids can carry
+     * nine palette entries and no more, and a twelve-pixel object has no room for a rim, a lit
+     * band, a shadow band and a glint -- so three rounds of them came back flat. A texture has the
+     * whole palette and four more pixels each way, which is exactly what the game's own item
+     * sprites have, and it is drawn by {@code tools/make-art.py} the same way every other texture
+     * this mod owns is.
+     *
+     * <p>The grids stay for the flat controls -- arrows, tick, cross, plus, power. Those are
+     * symbols, and a symbol wants to be flat.
+     *
+     * <p>Carried as a one-element {@code String[]} for the same reason {@link #item} is: a row of
+     * pixels can never begin with {@code ~}, so {@link #draw} tells the three apart in its first
+     * lines and not one call site has to change.
+     */
+    private static String[] texture(String name) {
+        return new String[] { "~" + name };
+    }
+
+    private static final java.util.Map<String, net.minecraft.resources.ResourceLocation> SHEETS =
+        new java.util.HashMap<>();
+
     private static final java.util.Map<String, net.minecraft.world.item.ItemStack> STACKS =
         new java.util.HashMap<>();
 
@@ -86,7 +110,7 @@ public final class WBIcons {
      * first row of the page the tab opens and the one upgrade every network buys, so the tab is
      * now a picture of what is behind it rather than of the idea of improvement.
      */
-    public static final String[] UPGRADE = item("workbay:expansion_plate");
+    public static final String[] UPGRADE = texture("upgrade");
 
     /**
      * <b>The flow map.</b> A filled map, because the page is a map and the game has one.
@@ -95,7 +119,7 @@ public final class WBIcons {
      * tab: at twelve pixels beside two item sprites it read as a fork, and a diagram of a map is
      * a longer way round than the map.
      */
-    public static final String[] MAP = item("minecraft:filled_map");
+    public static final String[] MAP = texture("map");
 
     // ------------------------------------------------------- what a link carries
 
@@ -183,35 +207,9 @@ public final class WBIcons {
      * chest is a container. A shackle over a body is the shape the genre agreed on, and it is
      * only ever drawn next to other drawn controls.
      */
-    public static final String[] LOCK = {
-        "............",
-        "....####....",
-        "...##..##...",
-        "...##..##...",
-        "...##..##...",
-        "..########..",
-        "..########..",
-        "..###..###..",
-        "..###..###..",
-        "..########..",
-        "..########..",
-        "............",
-    };
+    public static final String[] LOCK = texture("lock");
 
-    public static final String[] UNLOCK = {
-        "............",
-        "......####..",
-        ".....##..##.",
-        ".....##..##.",
-        ".....##..##.",
-        "..########..",
-        "..########..",
-        "..###..###..",
-        "..###..###..",
-        "..########..",
-        "..########..",
-        "............",
-    };
+    public static final String[] UNLOCK = texture("unlock");
 
     /**
      * <b>The trip to a hosted machine.</b> An ender pearl: the one object in the game whose whole
@@ -222,7 +220,7 @@ public final class WBIcons {
      * (SPEC.md §5) -- and a pearl is the half of that pair a player already owns a word for. It
      * was the last drawn glyph in a button row of five sprites.
      */
-    public static final String[] ENTER = item("minecraft:ender_pearl");
+    public static final String[] ENTER = texture("enter");
 
     /**
      * <b>Eject.</b> A piston: the one object in the game whose entire meaning is "push this back
@@ -232,12 +230,12 @@ public final class WBIcons {
      * sprites -- rename, redstone, copy, paste -- and one drawing among five renders is the
      * inconsistency you see before you read any of them.
      */
-    public static final String[] EJECT = item("minecraft:piston");
+    public static final String[] EJECT = texture("eject");
 
     /**
      * <b>Rename.</b> The thing you rename with, and the one object in the game that means exactly that.
      */
-    public static final String[] RENAME = item("minecraft:name_tag");
+    public static final String[] RENAME = texture("rename");
 
     /**
      * <b>Redstone, and which of its four modes this bay is on.</b>
@@ -276,19 +274,19 @@ public final class WBIcons {
      */
     public static final String[] BAYS = item("workbay:workbay");
 
-    private static final String[] REDSTONE_DUST = item("minecraft:redstone");
-    private static final String[] REDSTONE_TORCH = item("minecraft:redstone_torch");
-    private static final String[] REDSTONE_PULSE = item("minecraft:repeater");
+    private static final String[] REDSTONE_DUST = texture("redstone_dust");
+    private static final String[] REDSTONE_TORCH = texture("redstone_torch");
+    private static final String[] REDSTONE_PULSE = texture("redstone_pulse");
 
     /**
      * <b>Copy.</b> Book and quill: the pair reads as copy/paste the way a floppy disk reads as save, and the quill is what tells it from PASTE on the button beside it.
      */
-    public static final String[] COPY = item("minecraft:writable_book");
+    public static final String[] COPY = texture("copy");
 
     /**
      * <b>Paste.</b> The written half of that pair.
      */
-    public static final String[] PASTE = item("minecraft:written_book");
+    public static final String[] PASTE = texture("paste");
 
     /** Into the machine: the arrow passes through the wall of the box, which is the only part of
      *  the picture that separates it from {@link #EXTRACT}. */
@@ -419,25 +417,9 @@ public static final String[] EXTRACT = {
      * over the mouth, red bouncing off the lip -- and they are the only part that has to survive
      * being small, which is why they sit on the rim rather than inside the cone.
      */
-    public static final String[] FILTER = {
-        "....4..5....",
-        "............",
-        "111111111111",
-        "211111111113",
-        ".2111111113.",
-        "..21111113..",
-        "...211113...",
-        "....2113....",
-        "....2113....",
-        "....2113....",
-        ".....44.....",
-        "............",
-    };
+    public static final String[] FILTER = texture("filter");
 
-    public static final int[] FILTER_COLOURS =
-        { 0xFF7C8698, 0xFFA8B2C4, 0xFF3A4150, 0xFF6ED06A, 0xFFC9483C };
-
-    /**
+        /**
      * <b>A sheet of paper, drawn in whatever colour the caller asks for.</b> White is a whitelist
      * and near-black is a blacklist, which is one icon for a control that used to spend a hundred
      * and ten pixels on the word.
@@ -460,38 +442,25 @@ public static final String[] EXTRACT = {
     /** Only the fold and the ruled lines are palette; the sheet itself takes the row's colour. */
     public static final int[] PAPER_COLOURS = { 0xFF000000, 0xFF000000, 0xFF6A7383 };
 
-    public static final String[] SORT = {
-        "............",
-        ".##########.",
-        ".##########.",
-        "............",
-        ".########...",
-        ".########...",
-        "............",
-        ".######.....",
-        ".######.....",
-        "............",
-        ".####.......",
-        ".####.......",
-    };
+    public static final String[] SORT = texture("sort");
 
 
     /**
      * <b>Door.</b> The rooms tab, and a room's way out is a door.
      */
-    public static final String[] DOOR = item("minecraft:iron_door");
+    public static final String[] DOOR = texture("door");
 
     /**
      * <b>Anchor.</b> A respawn anchor -- vanilla's own block called an anchor, and the only one
      * that means "this place stays real while you are not in it", which is the whole of what the
      * upgrade buys.
      */
-    public static final String[] ANCHOR = item("minecraft:respawn_anchor");
+    public static final String[] ANCHOR = texture("anchor");
 
     /**
      * <b>Guest.</b> Rendered as the block model, which is a head: the one icon here that is 3D and is better for it.
      */
-    public static final String[] GUEST = item("minecraft:player_head");
+    public static final String[] GUEST = texture("guest");
 
     /** The other half of a stepper. Same bar as PLUS, so the pair reads as one control. */
     public static final String[] MINUS = {
@@ -500,8 +469,8 @@ public static final String[] EXTRACT = {
         "............",
         "............",
         "............",
-        "..########..",
-        "..########..",
+        "...######...",
+        "...######...",
         "............",
         "............",
         "............",
@@ -512,14 +481,14 @@ public static final String[] EXTRACT = {
     public static final String[] PLUS = {
         "............",
         "............",
+        "............",
         ".....##.....",
         ".....##.....",
-        ".....##.....",
-        "..########..",
-        "..########..",
-        ".....##.....",
+        "...######...",
+        "...######...",
         ".....##.....",
         ".....##.....",
+        "............",
         "............",
         "............",
     };
@@ -566,7 +535,7 @@ public static final String[] EXTRACT = {
      * the one control that recolours itself.
      */
     private static final java.util.Map<String[], int[]> PALETTES = java.util.Map.of(
-        FILTER, FILTER_COLOURS, PAPER, PAPER_COLOURS,
+        PAPER, PAPER_COLOURS,
         FLUID, FLUID_COLOURS, ENERGY, ENERGY_COLOURS, CHEMICAL, CHEMICAL_COLOURS);
 
     public static void draw(GuiGraphics graphics, String[] icon, int x, int y, int argb,
@@ -575,6 +544,23 @@ public static final String[] EXTRACT = {
             palette = PALETTES.getOrDefault(icon, palette);
         }
         int lit = Math.max(argb >> 16 & 0xFF, Math.max(argb >> 8 & 0xFF, argb & 0xFF));
+        // A row of pixels cannot start with '~'; one of the mod's own icon textures is nothing
+        // else. Sixteen pixels drawn centred on the twelve the call site asked for, so a set of
+        // textures and a set of grids sit on the same centre line and no call site moved.
+        if (icon.length == 1 && icon[0].charAt(0) == '~') {
+            float tint = Math.min(1.0F, lit / 240.0F);
+            if (tint < 1.0F) {
+                graphics.setColor(tint, tint, tint, 1.0F);
+            }
+            graphics.blit(SHEETS.computeIfAbsent(icon[0], id ->
+                    net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(
+                        "workbay", "textures/gui/icon/" + id.substring(1) + ".png")),
+                x - 2, y - 2, 0, 0, 16, 16, 16, 16);
+            if (tint < 1.0F) {
+                graphics.setColor(1.0F, 1.0F, 1.0F, 1.0F);
+            }
+            return;
+        }
         // A row of pixels cannot start with '@'; an item icon is nothing else. See #item.
         if (icon.length == 1 && icon[0].startsWith("@")) {
             sprite(graphics, STACKS.computeIfAbsent(icon[0], id ->
