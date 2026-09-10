@@ -195,6 +195,36 @@ public class WorkbayBlockEntity extends BlockEntity {
         setChanged();
     }
 
+    /**
+     * Lets go of whatever network this block was holding, leaving the block standing there empty.
+     *
+     * <p>The other half of a Transfer: a network moves into one block by leaving another, and the
+     * one it left has to stop being a front door to it — stop ticking its links, stop answering for
+     * its bays, and <b>let go of the Backshop chunks it was mirroring</b>. That last part is the
+     * one a bare {@code workbayId = null} gets wrong: {@link #mirror} works out what to hold from
+     * {@link #record()}, so with no record it returns early and the old column stays forced for as
+     * long as the empty block stands there.
+     */
+    public void unbind() {
+        if (level instanceof ServerLevel server) {
+            ServerLevel backshop = server.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            if (backshop != null) {
+                mirrored.forEach(chunk ->
+                    WorkbayTickets.release(backshop, ticketOwner(server, worldPosition), chunk));
+            }
+            mirrored.clear();
+            if (holdingOwnChunk) {
+                WorkbayTickets.release(server, ticketOwner(server, worldPosition),
+                    new net.minecraft.world.level.ChunkPos(worldPosition));
+                holdingOwnChunk = false;
+            }
+        }
+        // Every endpoint cache in the runner belongs to the network that just left.
+        runner.invalidate();
+        workbayId = null;
+        setChanged();
+    }
+
     /** The record this block is a handle for, or empty if it has not been bound yet. */
     public Optional<WorkbayRecord> record() {
         if (workbayId == null || !(level instanceof ServerLevel server)) {

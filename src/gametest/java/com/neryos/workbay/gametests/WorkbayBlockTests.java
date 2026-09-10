@@ -132,25 +132,19 @@ public class WorkbayBlockTests {
     }
 
     /**
-     * SPEC.md §14, and the question the config's own comment leaves open: what happens when a
-     * network has <b>two</b> Workbay blocks and both are broken — which one does re-placing bring
-     * back?
+     * SPEC.md §0 and §14: <b>a Workbay block is a handle, not a container.</b> The bays, the
+     * machines in them, the links, the upgrades and the lock all live on the
+     * {@code WorkbayRecord}, so breaking the block puts the network to sleep and losing nothing,
+     * and putting one back wakes it whole.
      *
-     * <p>The answer is that there is nothing to choose between. A Workbay block is a handle, not a
-     * container: the bays, the links, the upgrades and the lock all live on the
-     * {@code WorkbayRecord}, {@code deployedCount} is a count and not an identity, and both dropped
-     * items carry the same {@link WorkbayBinding}. Re-placing either one rebinds to the same record
-     * and everything comes back. This test is what says so, because "obviously equivalent" is how a
-     * player loses a factory.
-     *
-     * <p>Both are placed by one player on purpose, which is what makes them one network (§14). The
-     * item path refuses that by default — {@code maxDeployedWorkbaysPerNetwork} is 1 — but
-     * {@code setPlacedBy} is what a pack that raises it would run, so that is what is tested.
-     * OPEN_ISSUES #40 is the other half: what is still wrong when a pack does raise it.
+     * <p>It used to place <b>two</b> blocks on one network and ask which one to put back. That
+     * model is gone — one Workbay block is one network — so the second block here is a second
+     * <em>network</em>, which is what makes the assertion about {@code registry.size()} worth
+     * making: re-placing must wake the sleeping one rather than mint a third.
      */
     @GameTest
-    @TestHolder(description = "Two Workbays on one network are two handles to it, and either one alone brings it back.")
-    public static void bothWorkbaysBrokenAndEitherOnePlacedBackRestoresTheNetwork(final DynamicTest test) {
+    @TestHolder(description = "A broken Workbay's network sleeps, and placing one back wakes it whole.")
+    public static void aBrokenWorkbaysNetworkSleepsAndWakesWhole(final DynamicTest test) {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 3, 5));
 
         test.onGameTest(ExtendedGameTestHelper.class, helper -> {
@@ -161,22 +155,17 @@ public class WorkbayBlockTests {
             int before = registry.size();
             BlockPos left = place(helper, level, helper.absolutePos(new BlockPos(0, 1, 0)), player,
                 new ItemStack(WBBlocks.WORKBAY.get()));
-            BlockPos right = place(helper, level, helper.absolutePos(new BlockPos(4, 1, 4)), player,
-                new ItemStack(WBBlocks.WORKBAY.get()));
 
-            if (!(level.getBlockEntity(left) instanceof WorkbayBlockEntity one)
-                || !(level.getBlockEntity(right) instanceof WorkbayBlockEntity two)) {
-                helper.fail("placing two Workbays produced fewer than two block entities");
+            if (!(level.getBlockEntity(left) instanceof WorkbayBlockEntity one)) {
+                helper.fail("placing a Workbay produced no block entity");
                 return;
             }
             UUID id = one.workbayId().orElse(null);
             helper.assertNotNull(id, "a placed Workbay was never bound to a registry record");
-            helper.assertValueEqual(two.workbayId().orElse(null), id,
-                "the id of the second Workbay placed by the same player");
             helper.assertValueEqual(registry.size(), before + 1,
-                "records after placing two Workbays for one player");
-            helper.assertValueEqual(registry.byId(id).orElseThrow().deployedCount(), 2,
-                "deployed blocks on the network");
+                "records after placing one Workbay");
+            helper.assertValueEqual(registry.byId(id).orElseThrow().deployedCount(), 1,
+                "blocks on the network");
 
             // Something on the record worth losing, so "it came back" means more than "an id
             // matched". A bay-to-bay link needs no Connector, so nothing here depends on a block
@@ -190,50 +179,44 @@ public class WorkbayBlockTests {
                 GlobalPos.of(WorkbayDimensions.BACKSHOP,
                     BayGeometry.machinePos(record.bayColumn(), 1))));
             helper.assertValueEqual(registry.byId(id).orElseThrow().buses().size(), 1,
-                "links on the network before either block is broken");
+                "links on the network before the block is broken");
 
-            // Broken the way the world breaks them, through the real loot table.
-            ItemStack fromLeft = dropOf(helper, level, left, player);
+            // Broken the way the world breaks it, through the real loot table.
+            ItemStack dropped = dropOf(helper, level, left, player);
             level.setBlock(left, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
-            helper.assertValueEqual(registry.byId(id).orElseThrow().deployedCount(), 1,
-                "deployed blocks after breaking the first of two");
+            helper.assertValueEqual(registry.byId(id).orElseThrow().live(), false,
+                "whether the network is still live after its only block was broken");
 
-            ItemStack fromRight = dropOf(helper, level, right, player);
-            level.setBlock(right, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
-            helper.assertValueEqual(registry.byId(id).orElseThrow().deployedCount(), 0,
-                "deployed blocks after breaking both");
-
-            WorkbayBinding leftBinding = fromLeft.get(WBDataComponents.BINDING.get());
-            WorkbayBinding rightBinding = fromRight.get(WBDataComponents.BINDING.get());
-            if (leftBinding == null || rightBinding == null) {
+            WorkbayBinding binding = dropped.get(WBDataComponents.BINDING.get());
+            if (binding == null) {
                 helper.fail("a broken Workbay dropped an item with no binding, so its bays are "
                     + "unreachable forever");
                 return;
             }
-            helper.assertValueEqual(leftBinding.id(), rightBinding.id(),
-                "the id both dropped Workbays carry -- if these differ there really is a choice "
-                    + "to make about which one to place back, and nothing makes it");
+            helper.assertValueEqual(binding.id(), id,
+                "the network the dropped Workbay remembers");
 
-            // The second one alone, and the whole network is back: same record, same bay, same link.
+            // Placed back somewhere else entirely, and the whole network wakes: same record, same
+            // bay, same link.
             BlockPos again = place(helper, level, helper.absolutePos(new BlockPos(2, 1, 2)), player,
-                fromRight);
+                dropped);
             if (!(level.getBlockEntity(again) instanceof WorkbayBlockEntity back)) {
-                helper.fail("re-placing one of the two broken Workbays produced no block entity");
+                helper.fail("re-placing the broken Workbay produced no block entity");
                 return;
             }
-            helper.assertValueEqual(back.workbayId().orElse(null), id, "id after re-placing one");
+            helper.assertValueEqual(back.workbayId().orElse(null), id, "id after re-placing it");
             helper.assertValueEqual(registry.size(), before + 1,
-                "records after re-placing one of two -- a second record here means the other block "
-                    + "would have minted a network of its own");
+                "records after re-placing it -- a second record here means the block minted a "
+                    + "network of its own instead of waking the one it remembered");
             helper.assertValueEqual(registry.byId(id).orElseThrow().deployedCount(), 1,
-                "deployed blocks after re-placing one of two");
-            helper.assertValueEqual(back.buses().size(), 1, "links after both were broken");
+                "blocks on the network after re-placing it");
+            helper.assertValueEqual(back.buses().size(), 1, "links after the block was broken");
             // Read from the Backshop, not from the record: BayHosting.rack is what puts the block
             // in the bay, and the block standing there is SPEC.md §14's actual claim -- a hosted
             // machine keeps running while its Workbay is in somebody's pocket.
             helper.assertTrue(backshop.getBlockState(BayGeometry.machinePos(
                     registry.byId(id).orElseThrow().bayColumn(), 0)).is(Blocks.CHEST),
-                "the machine in bay 1 is still in its bay after both Workbays were broken");
+                "the machine in bay 1 is still in its bay while the network slept");
 
             BayHosting.eject(backshop, registry.byId(id).orElseThrow().bayColumn(), 0, null);
             level.setBlock(again, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);

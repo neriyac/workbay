@@ -267,8 +267,17 @@ class FlowPage extends WorkbayPage {
             int sh = Math.round(NODE_H * zoom);
             if (sx + sw > viewLeft() && sx < viewLeft() + viewW()
                 && sy + sh > viewTop() && sy < viewTop() + canvasH) {
-                screen.hit(sx, sy, sw, sh, () -> { },
-                    node.tip().toArray(new Component[0]));
+                // <b>Clamped to the canvas, not merely tested against it.</b> The map itself is
+                // scissored, so a node hanging off the edge is cut -- but its hit region was the
+                // node's full size, and the hover ring is drawn from the hit region. A box half
+                // off the right edge lit a blue outline out across the world behind the screen,
+                // and its tooltip was raised by pointing at nothing. Found by Neriya, in play.
+                int hx = Math.max(sx, viewLeft() + 1);
+                int hy = Math.max(sy, viewTop() + 1);
+                screen.hit(hx, hy,
+                    Math.min(sx + sw, viewLeft() + viewW() - 1) - hx,
+                    Math.min(sy + sh, viewTop() + canvasH - 1) - hy,
+                    () -> { }, node.tip().toArray(new Component[0]));
             }
         }
         legend(g);

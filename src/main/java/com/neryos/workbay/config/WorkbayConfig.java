@@ -84,7 +84,6 @@ public class WorkbayConfig {
         public final ModConfigSpec.IntValue maxRoomsPerNetwork;
         public final ModConfigSpec.BooleanValue allowCrossDimensionLinks;
         public final ModConfigSpec.IntValue maxNetworksPerPlayer;
-        public final ModConfigSpec.IntValue maxDeployedWorkbaysPerNetwork;
 
         public final ModConfigSpec.IntValue linkDefaultRate;
         public final ModConfigSpec.IntValue linkMaxRate;
@@ -211,20 +210,13 @@ public class WorkbayConfig {
                 .define("allowCrossDimensionLinks", true);
 
             maxNetworksPerPlayer = builder
-                .comment("How many separate Workbay networks one player may own. An unbound Workbay",
-                    "item placed once a player already owns this many mints no new one and refuses.")
-                .defineInRange("maxNetworksPerPlayer", 1, 1, 64);
-
-            maxDeployedWorkbaysPerNetwork = builder
-                .comment("How many Workbay blocks may be bound to one network at once. Placing an",
-                    "unbound item reuses the player's existing network's bays, upgrades and links -",
-                    "there is no code to lose - but only up to this many live at the same time.",
-                    "Raising this above 1 is not fully load-bearing yet: each deployed Workbay still",
-                    "keeps its own energy buffer and its own bus tick timing rather than sharing one,",
-                    "so two entrances to the same network do not yet split one energy pool or agree",
-                    "on redstone/pulse timing. Left adjustable for packs that accept that; default 1",
-                    "sidesteps it entirely.")
-                .defineInRange("maxDeployedWorkbaysPerNetwork", 1, 1, 64);
+                .comment("How many separate Workbay networks one player may own. One Workbay block",
+                    "is one network: its own bays, machines, Connectors and energy, sharing nothing",
+                    "with any other. Placing a Workbay is never refused - a block placed while every",
+                    "network this player owns already has one opens on a list of them, and Transfer",
+                    "moves the chosen network into it, leaving the block it came from empty.",
+                    "A network with no block sleeps: everything is kept and nothing ticks.")
+                .defineInRange("maxNetworksPerPlayer", 2, 1, 64);
 
             // ------------------------------------------------------------------ throughput
             //

@@ -44,10 +44,25 @@ $script:MCPostShotH = 0
 
 function MC-Window {
   # javaw too: a launcher-installed instance runs javaw, runClient runs java.
-  $p = Get-Process java, javaw -ErrorAction SilentlyContinue |
-       Where-Object { $_.MainWindowTitle -like 'Minecraft*' } | Select-Object -First 1
-  if (-not $p) { throw "no Minecraft window" }
-  return $p.MainWindowHandle
+  $all = @(Get-Process java, javaw -ErrorAction SilentlyContinue |
+           Where-Object { $_.MainWindowTitle -like 'Minecraft*' })
+  if (-not $all) { throw "no Minecraft window" }
+  # <b>The client belonging to THIS checkout, not whichever one Windows lists first.</b> A second
+  # session working in .claude/worktrees/<name> runs its own runClient off its own classes, and
+  # -First 1 handed it over -- so every shot came back from somebody else's game, showing the
+  # code under test nowhere. Matched on the -Dfml.modFolders path, which is the only thing on the
+  # command line that says which build directory a client is running.
+  $here = Join-Path (Split-Path $PSScriptRoot -Parent) 'build\classes'
+  $mine = @($all | Where-Object {
+    $cmd = (Get-CimInstance Win32_Process -Filter "ProcessId=$($_.Id)").CommandLine
+    $cmd -and $cmd.Contains($here)
+  })
+  if ($mine.Count -eq 1) { return $mine[0].MainWindowHandle }
+  if ($mine.Count -gt 1) { throw "two clients are running off $here - quit one with CloseMainWindow()" }
+  if ($all.Count -gt 1) {
+    throw "$($all.Count) Minecraft windows are up and none of them is running $here"
+  }
+  return $all[0].MainWindowHandle
 }
 
 function MC-Shots {

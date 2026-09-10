@@ -40,12 +40,18 @@ public class WBLanguageProvider extends LanguageProvider {
         // placed it, not to the specific item, so there is no code to lose.
         add(WorkbayLang.messageKey("room_created"), "Workbay network created and bound to your "
             + "account. Lose the block and a fresh, uncrafted Workbay picks it straight back up.");
+        add(WorkbayLang.messageKey("network_created"), "%s created. Everything in it is yours; "
+            + "break the block and it sleeps here until you put one back.");
         add(WorkbayLang.messageKey("network_reused"), "Workbay reconnected \u2014 same bays, same "
             + "links, same upgrades as before.");
         add(WorkbayLang.messageKey("network_cap_reached"), "You already own the maximum of %s "
             + "Workbay network(s). Break one before starting another.");
-        add(WorkbayLang.messageKey("network_deployed_full"), "This network already has %s Workbay(s) "
-            + "placed. Break one of them before placing another.");
+        // <b>Not a refusal.</b> The block is standing where it was put; it simply holds nothing
+        // yet, and the message says where to go and settle that.
+        add(WorkbayLang.messageKey("network_quota"), "This Workbay holds no network yet \u2014 "
+            + "every one you own already has a block. Open it to move one here.");
+        add(WorkbayLang.messageKey("network_transferred"), "%s moved here. The block it came from "
+            + "is standing empty.");
         add(WorkbayLang.messageKey("break_warning"), "Breaking this Workbay leaves its bays behind. "
             + "The machines keep running \u2014 place any fresh Workbay to get back in.");
         add(WorkbayLang.messageKey("locked"), "This Workbay is locked.");
@@ -128,6 +134,9 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("button.upgrades"), "Upgrades");
         add(WorkbayLang.guiKey("button.upgrades.tip"), "Install Expansion Plates, a Resonator or "
             + "an Impeller.");
+        add(WorkbayLang.guiKey("button.networks"), "Networks");
+        add(WorkbayLang.guiKey("button.networks.tip"), "Which network this Workbay is, and every "
+            + "other one you own. Move one here, or rename it.");
         add(WorkbayLang.guiKey("button.flow"), "Flow map");
         add(WorkbayLang.guiKey("button.flow.tip"), "See what every link moves, and which flows never "
             + "leave this block.");
@@ -416,16 +425,46 @@ public class WBLanguageProvider extends LanguageProvider {
         // Both of these are drawn in a 96-pixel column, so both are written to fit one. The
         // sentence each is short for is the tooltip beside it.
         add(WorkbayLang.guiKey("upgrades.rate"), "Up to %s FE/t");
-        add(WorkbayLang.guiKey("upgrades.deployed"), "Workbays placed: %s / %s");
-        add(WorkbayLang.guiKey("upgrades.deployed.short"), "Placed: %s / %s");
-        add(WorkbayLang.guiKey("upgrades.deployed.tip"), "How many Workbay blocks of this network stand in the world.");
-        add(WorkbayLang.guiKey("upgrades.deployed.full"), "This network is at its limit. Placing "
-            + "another Workbay is refused and the item stays in your hand — break this one "
-            + "first, or raise maxDeployedWorkbaysPerNetwork in the server config.");
-        // 3 of 1 is a real state: the cap was lowered after those blocks went down, and
-        // nothing re-checks it. OPEN_ISSUES #49 -- the screen names it rather than hiding it.
-        add(WorkbayLang.guiKey("upgrades.deployed.over"), "%s more than this server allows. They "
-            + "were placed before the cap was lowered; break one to get back under it.");
+        // ---------------------------------------------------------------- NETWORKS
+        //
+        // One Workbay block is one network. Everything here is written for a player who has just
+        // placed a second or a third Workbay and wants to know what happened, so nothing on this
+        // page uses the word "refused" and nothing prints a network code.
+        add(WorkbayLang.guiKey("networks.quota"), "Workbay quota reached");
+        // The other reason a Workbay holds nothing: its network was moved into another block. Not
+        // amber and not called a quota - the player is under the limit and this is one click from
+        // being a working Workbay.
+        add(WorkbayLang.guiKey("networks.empty"), "This Workbay holds no network");
+        add(WorkbayLang.guiKey("networks.empty.tip"), "Start one here, or move one of yours in.");
+        add(WorkbayLang.guiKey("networks.new"), "New network");
+        add(WorkbayLang.guiKey("networks.new.tip"), "Makes a fresh network in this Workbay: two "
+            + "empty bays, no Connectors, nothing racked. It counts against the number of networks "
+            + "you may own.");
+        add(WorkbayLang.guiKey("networks.quota.tip"), "Every network you own already has a block. "
+            + "Pick one and press Transfer to move it here.");
+        add(WorkbayLang.guiKey("networks.none"), "You do not own a network yet.");
+        add(WorkbayLang.guiKey("networks.footer"), "%s of %s networks");
+        add(WorkbayLang.guiKey("networks.footer.tip"), "One Workbay block is one network, and this "
+            + "server lets you own this many. Placing more Workbays is never refused: one placed "
+            + "with no network left to take stands there empty until you move a network into it. "
+            + "A network with no block sleeps and keeps everything - bays, machines, Connectors "
+            + "and channels - until a block is pointed at it again.");
+        add(WorkbayLang.guiKey("networks.here"), "This one");
+        add(WorkbayLang.guiKey("networks.live"), "Placed");
+        add(WorkbayLang.guiKey("networks.asleep"), "Asleep");
+        add(WorkbayLang.guiKey("networks.nowhere"), "No block placed");
+        add(WorkbayLang.guiKey("networks.holding"), "%s bays \u00b7 %s Connectors");
+        add(WorkbayLang.guiKey("networks.rename"), "Rename this network");
+        add(WorkbayLang.guiKey("networks.rename.tip"), "One network, one name \u2014 it changes "
+            + "everywhere this network is named at once.");
+        add(WorkbayLang.guiKey("networks.transfer"), "Transfer here");
+        add(WorkbayLang.guiKey("networks.transfer.asleep.tip"), "Moves %s into this Workbay whole: "
+            + "its bays, the machines in them, its Connectors, its channels and its upgrades.");
+        add(WorkbayLang.guiKey("networks.transfer.live.tip"), "Moves %s into this Workbay whole. "
+            + "The block it is in now is left standing and empty; nothing in the network is lost.");
+        add(WorkbayLang.guiKey("networks.transfer.here.tip"), "This Workbay is already this "
+            + "network.");
+
         add(WorkbayLang.guiKey("upgrades.add"), "Install one %s");
         add(WorkbayLang.guiKey("upgrades.maxed"), "You have as many of these as a Workbay takes.");
         // The three descriptions have 74 pixels each.

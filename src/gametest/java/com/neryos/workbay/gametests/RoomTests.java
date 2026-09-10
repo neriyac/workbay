@@ -1240,7 +1240,7 @@ public class RoomTests {
                     GameTestPlayer back =
                         helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
                     WorkbayRecord was = registry.byId(site.record().id()).orElseThrow();
-                    registry.put(new WorkbayRecord(was.id(), was.code(), back.getUUID(),
+                    registry.put(new WorkbayRecord(was.id(), was.code(), was.name(), back.getUUID(),
                         back.getGameProfile().getName(), was.locked(), was.bayColumn(),
                         was.upgrades(), was.lastKnownPos(), was.bays(), was.rooms(), was.buses(),
                         was.deployedCount(), was.connectors()));

@@ -6,7 +6,6 @@ import com.neryos.workbay.content.connector.ConnectorItem;
 import com.neryos.workbay.content.port.PortBlock;
 import com.neryos.workbay.content.room.RoomWallBlock;
 import com.neryos.workbay.content.workbay.WorkbayBlock;
-import com.neryos.workbay.content.workbay.WorkbayItem;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.SoundType;
@@ -70,9 +69,12 @@ public class WBBlocks {
             .isValidSpawn((state, level, pos, type) -> false)));
 
     /**
-     * Its BlockItem is custom (not {@code registerWithItem}) so it can refuse a placement that
-     * would exceed {@code maxDeployedWorkbaysPerNetwork} before the block ever goes down, rather
-     * than placing it and then having to take it back.
+     * <b>A plain BlockItem, because placing a Workbay is never refused.</b> It used to be a
+     * {@code WorkbayItem} whose whole job was to say no on {@code useOn} — before the block went
+     * down, since {@code setPlacedBy} only ever sees a placement that already happened. One block
+     * is one network now (SPEC.md §0), and a player at their network limit gets a block that
+     * stands there holding nothing and opens on the list of their networks with a Transfer beside
+     * each. Nothing is left to refuse, so nothing is left of the class.
      */
     private static DeferredBlock<WorkbayBlock> registerWorkbay() {
         var holder = BLOCKS.registerBlock("workbay", WorkbayBlock::new,
@@ -91,7 +93,8 @@ public class WBBlocks {
                     case STUCK -> 8;
                 })
                 .noOcclusion());
-        ITEMS.register("workbay", () -> new WorkbayItem(holder.get(), new net.minecraft.world.item.Item.Properties()));
+        ITEMS.register("workbay", () -> new net.minecraft.world.item.BlockItem(holder.get(),
+            new net.minecraft.world.item.Item.Properties()));
         return holder;
     }
 

@@ -90,12 +90,19 @@ abstract class WorkbayPage {
         g.pose().scale(1.6F, 1.6F, 1.0F);
         // Room is in the scaled frame, so it is the gap to the first header button divided by the
         // scale — otherwise a title box drawn at 1.6x claims 1.6x the pixels it was told it had.
-        Draw.text(g, screen.font(), title, 0, 0, (int) ((width() - 96 - 8) / 1.6F), Draw.TEXT);
+        Draw.text(g, screen.font(), title, 0, 0, (int) ((width() - 118 - 8) / 1.6F), Draw.TEXT);
         g.pose().popPose();
 
         WorkbaySnapshot snap = snapshot();
 
-        // Five 18x18 buttons, top right. The lock is the only one that changes what it draws.
+        // <b>A Workbay holding no network draws no strip at all.</b> Every one of these leads
+        // somewhere that does not exist for it -- bays it has none of, upgrades on nothing, a lock
+        // over nobody's factory -- and a tab that opens an empty page is worse than no tab.
+        if (!snap.bound()) {
+            return;
+        }
+
+        // Six 18x18 buttons, top right. The lock is the only one that changes what it draws.
         // ROOMS is always here, never hidden until a Frame is installed: the Frames are bought on
         // that page, so hiding it until you own one is a door locked from the inside.
         //
@@ -103,11 +110,15 @@ abstract class WorkbayPage {
         // lit tab drops you back there -- which it does, and which is in that tab's tooltip, and
         // which nobody found. A page you can reach from every other page but cannot see is a page
         // with no way back. Found by Neriya, looking for an X.
-        tab(g, mouseX, mouseY, width() - 110, WBIcons.BAYS, WorkbayScreen.Page.BAYS, "bays");
-        tab(g, mouseX, mouseY, width() - 88, WBIcons.DOOR, WorkbayScreen.Page.ROOMS, "rooms");
-        tab(g, mouseX, mouseY, width() - 66, WBIcons.UPGRADE, WorkbayScreen.Page.UPGRADES,
+        tab(g, mouseX, mouseY, width() - 132, WBIcons.BAYS, WorkbayScreen.Page.BAYS, "bays");
+        tab(g, mouseX, mouseY, width() - 110, WBIcons.DOOR, WorkbayScreen.Page.ROOMS, "rooms");
+        tab(g, mouseX, mouseY, width() - 88, WBIcons.UPGRADE, WorkbayScreen.Page.UPGRADES,
             "upgrades");
-        tab(g, mouseX, mouseY, width() - 44, WBIcons.MAP, WorkbayScreen.Page.FLOW, "flow");
+        tab(g, mouseX, mouseY, width() - 66, WBIcons.MAP, WorkbayScreen.Page.FLOW, "flow");
+        // <b>Which network this block is.</b> Last before the lock, because it is the question a
+        // player asks least often and the one whose answer changes everything else on the screen.
+        tab(g, mouseX, mouseY, width() - 44, WBIcons.PAPER, WorkbayScreen.Page.NETWORKS,
+            "networks");
         iconButton(g, mouseX, mouseY, x(width() - 22), y(6),
             snap.locked() ? WBIcons.LOCK : WBIcons.UNLOCK, snap.locked(),
             () -> screen.send(WorkbayAction.TOGGLE_LOCK),

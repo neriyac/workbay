@@ -207,7 +207,7 @@ public final class BayVisit {
             : net.minecraft.network.chat.Component.literal(named);
         player.connection.send(
             new net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket(
-                com.neryos.workbay.WorkbayLang.gui("bay.here", bay + 1, what, record.code())));
+                com.neryos.workbay.WorkbayLang.gui("bay.here", bay + 1, what, record.label())));
     }
 
     /** Puts a visitor back where they came from. Silent and harmless if they are not one. */

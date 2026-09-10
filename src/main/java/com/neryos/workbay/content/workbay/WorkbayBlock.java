@@ -7,6 +7,7 @@ import com.neryos.workbay.content.connector.ConnectorPairing;
 import com.neryos.workbay.init.WBBlockEntities;
 import com.neryos.workbay.init.WBBlocks;
 import com.neryos.workbay.init.WBDataComponents;
+import com.neryos.workbay.config.WorkbayConfig;
 import com.neryos.workbay.world.RoomRegistry;
 import com.neryos.workbay.world.WorkbayRecord;
 import net.minecraft.ChatFormatting;
@@ -96,13 +97,18 @@ public class WorkbayBlock extends BaseEntityBlock {
      * Binding happens here, not in the block entity's constructor, because it is the only point that
      * knows both who placed the block and what the item they placed remembered.
      *
-     * <p>A stack with no binding — freshly crafted, or one that lost its component — does not
-     * always mint a new network any more (SPEC.md §14). A player already owns at most
-     * {@code maxNetworksPerPlayer}; placing an unbound Workbay reuses the first of those instead,
-     * so losing the physical block is never the end of a base. {@link WorkbayItem} is what refuses
-     * the placement outright when the target network is already at
-     * {@code maxDeployedWorkbaysPerNetwork} — by the time this runs the block already exists, too
-     * late to say no.
+     * <p><b>A placement is never refused, and this is where that is true.</b> One Workbay block is
+     * one network (SPEC.md §0), so the three things that can happen are: the item names a network
+     * with no block on it and takes it; the player owns a <em>sleeping</em> network and this block
+     * wakes it; or the player is at {@code maxNetworksPerPlayer} and the block stands there
+     * <em>holding nothing</em> — which is a real, openable state, not a failure. Opening it lists
+     * the player's networks with a Transfer beside each.
+     *
+     * <p>The old model refused instead, from the item's {@code useOn} so the block never went down.
+     * Two knobs said no: a cap on networks per player, and {@code maxDeployedWorkbaysPerNetwork},
+     * which let several blocks be doors onto one network. The doors are gone — a second door meant
+     * two blocks ticking one set of links, two energy buffers and two answers to every question,
+     * and every one of those was a bug before it was a feature.
      */
     @Override
     public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack) {
@@ -113,36 +119,50 @@ public class WorkbayBlock extends BaseEntityBlock {
         }
 
         RoomRegistry registry = RoomRegistry.get(server.getServer());
-        WorkbayBinding binding = stack.get(WBDataComponents.BINDING.get());
-        WorkbayRecord existing = binding != null ? registry.byId(binding.id()).orElse(null) : null;
+        UUID ownerId = placer instanceof Player player ? player.getUUID() : UUID.randomUUID();
+        String ownerName = placer instanceof Player player
+            ? player.getGameProfile().getName() : "unknown";
 
-        if (existing != null) {
-            registry.put(existing.withDeployedCount(existing.deployedCount() + 1));
-            workbay.bindTo(existing.id());
-            workbay.rememberPosition();
+        // 1. What the item remembers, if that network has no block on it. A Workbay broken and put
+        //    back down is the whole reason the binding component exists.
+        WorkbayBinding binding = stack.get(WBDataComponents.BINDING.get());
+        WorkbayRecord record = binding == null ? null
+            : registry.byId(binding.id()).filter(r -> !r.live()).orElse(null);
+        boolean minted = false;
+
+        // 2. Otherwise a network of this player's that is asleep -- what makes a freshly crafted
+        //    Workbay find its way home rather than mint a second empty one beside a full base.
+        if (record == null) {
+            record = registry.ownedBy(ownerId).stream().filter(r -> !r.live()).findFirst()
+                .orElse(null);
+        }
+
+        // 3. Otherwise a new one, if they are under the limit.
+        if (record == null
+            && registry.ownedBy(ownerId).size() < WorkbayConfig.SERVER.maxNetworksPerPlayer.get()) {
+            record = registry.create(ownerId, ownerName, server.getRandom());
+            minted = true;
+        }
+
+        // 4. Otherwise nothing at all, and the block says so when it is opened.
+        if (record == null) {
+            if (placer instanceof Player player) {
+                WorkbaySounds.confirm(player, WorkbayLang.message("network_quota"),
+                    net.minecraft.sounds.SoundEvents.COMPARATOR_CLICK, 0.8F);
+            }
             return;
         }
 
-        UUID ownerId = placer instanceof Player player ? player.getUUID() : UUID.randomUUID();
-        String ownerName = placer instanceof Player player ? player.getGameProfile().getName() : "unknown";
-        WorkbayRecord reused = registry.ownedBy(ownerId).stream().findFirst().orElse(null);
-
-        WorkbayRecord record = reused != null ? reused
-            : registry.create(ownerId, ownerName, server.getRandom());
         registry.put(record.withDeployedCount(record.deployedCount() + 1));
         workbay.bindTo(record.id());
         workbay.rememberPosition();
 
         if (placer instanceof Player player) {
-            // No code in the message. SPEC.md §14: the network is found by owner, so a code is
-            // something for a player to write down, mistype and ask about, and nothing else.
-            // Which one, by code. "Joined your network" is fine for a player with one and is the
-            // whole of OPEN_ISSUES #63's complaint for a player with two: a message that does not
-            // name the network is a message that cannot be checked. Stamping the item beforehand
-            // is how a player chooses; this is how they find out what they got.
-            player.sendSystemMessage(reused != null
-                ? WorkbayLang.message("network_reused_named", record.code())
-                : WorkbayLang.message("room_created"));
+            // The network's <b>name</b>, never its code. SPEC.md §0 mints a code so a lost network
+            // can be recovered by typing one to an operator, and shows it nowhere else: a message
+            // that names nothing cannot be checked, and one naming a code cannot be read.
+            player.sendSystemMessage(WorkbayLang.message(
+                minted ? "network_created" : "network_reused_named", record.label()));
         }
     }
 
@@ -201,7 +221,7 @@ public class WorkbayBlock extends BaseEntityBlock {
         pair(stack, record, GlobalPos.of(level.dimension(), pos));
         // Which network, because that is the whole of what pairing decides now: a Connector is
         // owned by a network and used from whichever bays the player picks later.
-        WorkbaySounds.confirm(player, WorkbayLang.message("connector_paired", record.code()),
+        WorkbaySounds.confirm(player, WorkbayLang.message("connector_paired", record.label()),
             net.minecraft.sounds.SoundEvents.COMPARATOR_CLICK, 1.6F);
         return net.minecraft.world.ItemInteractionResult.CONSUME;
     }
@@ -235,7 +255,7 @@ public class WorkbayBlock extends BaseEntityBlock {
             // The code, here and nowhere else. SPEC.md §14 keeps codes off the screens because a
             // network is found by owner -- but this is the one moment a player is choosing between
             // two networks, and a name is what a choice needs.
-            WorkbaySounds.confirm(player, WorkbayLang.message("workbay_stamped", record.code()),
+            WorkbaySounds.confirm(player, WorkbayLang.message("workbay_stamped", record.label()),
                 net.minecraft.sounds.SoundEvents.COMPARATOR_CLICK, 1.2F);
         }
         return net.minecraft.world.ItemInteractionResult.CONSUME;
@@ -255,9 +275,9 @@ public class WorkbayBlock extends BaseEntityBlock {
             || !(player instanceof net.minecraft.server.level.ServerPlayer serverPlayer)) {
             return net.minecraft.world.InteractionResult.PASS;
         }
-        if (workbay.record().isEmpty()) {
-            return net.minecraft.world.InteractionResult.PASS;
-        }
+        // <b>No guard on having a network.</b> A block holding nothing is exactly the block that
+        // has something to say: it opens on NETWORKS, listing the player's own with a Transfer
+        // beside each. Refusing to open it was the old model's last refusal.
         com.neryos.workbay.menu.WorkbayMenu.open(serverPlayer, workbay, 0);
         return net.minecraft.world.InteractionResult.CONSUME;
     }
@@ -265,7 +285,7 @@ public class WorkbayBlock extends BaseEntityBlock {
     /** Stamps a Connector item with the Workbay and bay its link will land on. */
     public static void pair(ItemStack stack, WorkbayRecord record, GlobalPos workbayPos) {
         stack.set(WBDataComponents.PAIRING.get(),
-            new ConnectorPairing(record.id(), workbayPos, record.code()));
+            new ConnectorPairing(record.id(), workbayPos, record.label()));
     }
 
 

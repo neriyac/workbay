@@ -195,5 +195,36 @@ public enum WorkbayAction {
      * <p>Last in the enum, for the reason every action before it was appended: an action travels
      * as its ordinal.
      */
-    SET_CONNECTOR_NAME
+    SET_CONNECTOR_NAME,
+    /**
+     * <b>Moves a whole network into this block.</b> {@code link} names the network — the id, out of
+     * {@link WorkbaySnapshot#networks}, which only ever lists the ones the player asking owns.
+     *
+     * <p>The network arrives with everything it had: its bays and the machines in them, its
+     * Connectors, its channels, its upgrades and its energy. The block it came from is left
+     * standing and holding nothing, which is the same state a Workbay placed at the quota is in —
+     * so nothing is destroyed and the move is undone by walking back and pressing Transfer there.
+     * Whatever <em>this</em> block was holding is put to sleep, not lost.
+     *
+     * <p>Last in the enum, for the reason every action before it was appended: an action travels
+     * as its ordinal, so inserting one silently renames every action after it on the wire.
+     */
+    TRANSFER_NETWORK,
+    /**
+     * What to call a network. {@code link} names it and {@code text} is the name; blank is refused
+     * rather than cleared, because a network with no name is a row a player cannot point at and
+     * SPEC.md §0 will not fall back to the code.
+     */
+    SET_NETWORK_NAME,
+    /**
+     * <b>Starts a new network in this block</b>, when the player is under
+     * {@code maxNetworksPerPlayer} and this Workbay is holding nothing.
+     *
+     * <p>Without it an empty Workbay is a dead end for everybody except a player at the quota: a
+     * Transfer leaves the block it moved a network out of standing empty, and that player is now
+     * <em>under</em> the limit with a block that has no way to become anything but by being broken
+     * and placed again. Refused, silently, when the network would exceed the limit -- the screen
+     * does not draw the button in that state, and a packet is not a promise.
+     */
+    NEW_NETWORK
 }

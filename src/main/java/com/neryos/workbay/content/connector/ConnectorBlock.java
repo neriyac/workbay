@@ -237,7 +237,7 @@ public class ConnectorBlock extends BaseEntityBlock {
                     level.getBlockState(targetPos).getBlock()))));
         if (player != null) {
             WorkbaySounds.confirm(player, WorkbayLang.message("connector_linked",
-                level.getBlockState(targetPos).getBlock().getName(), pairing.code()),
+                level.getBlockState(targetPos).getBlock().getName(), pairing.network()),
                 net.minecraft.sounds.SoundEvents.COPPER_BULB_TURN_ON, 1.0F);
         }
     }

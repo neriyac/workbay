@@ -193,11 +193,19 @@ public class RoomRegistry extends SavedData {
 
     // ---------------------------------------------------------------- writing
 
-    /** Mints a Workbay: a fresh id, a code nobody else has, and a bay column nobody else uses. */
+    /**
+     * Mints a Workbay: a fresh id, a code nobody else has, a bay column nobody else uses, and a
+     * <b>name</b> — "Workbay 1" for this owner's first, "Workbay 2" for their second.
+     *
+     * <p>Stamped at mint rather than derived on read. A name derived from a position in a list
+     * renumbers itself the moment another network is created or the map iterates in a different
+     * order, and a network that answers to a different name each session is not a name at all.
+     */
     public WorkbayRecord create(UUID owner, String ownerName, RandomSource random) {
         UUID id = UUID.randomUUID();
         ChunkPos column = allocateBayColumn();
-        WorkbayRecord record = new WorkbayRecord(id, mintCode(random), owner, ownerName, false,
+        WorkbayRecord record = new WorkbayRecord(id, mintCode(random),
+            defaultName(ownedBy(owner).size() + 1), owner, ownerName, false,
             column, WorkbayRecord.Upgrades.NONE, Optional.empty(), List.of(), List.of(), List.of(),
             0, List.of());
         byId.put(id, record);
@@ -228,6 +236,38 @@ public class RoomRegistry extends SavedData {
     /** Replaces a room in place. Every room mutation goes through here so setDirty is never missed. */
     public void putRoom(RoomRecord room) {
         rooms.put(room.id(), room);
+        setDirty();
+    }
+
+    /**
+     * The name a network is born with. Not translated: it is written into the save the moment the
+     * network is minted, so a server that changes language would otherwise have its networks
+     * change name — and the player may rename it to anything in one gesture.
+     */
+    public static String defaultName(int ordinal) {
+        return "Workbay " + ordinal;
+    }
+
+    /**
+     * Gives a name to every record written before networks had one, numbering each owner's from 1
+     * in code order so the same world names the same networks the same way every time it loads.
+     * Runs once, on the load that finds them; {@link #create} stamps every one after that.
+     */
+    private void nameTheUnnamed() {
+        List<WorkbayRecord> unnamed = byId.values().stream()
+            .filter(record -> record.name().isBlank())
+            .sorted(java.util.Comparator.comparing(WorkbayRecord::code))
+            .toList();
+        if (unnamed.isEmpty()) {
+            return;
+        }
+        // Seeded with what each owner already has named, so a half-migrated registry cannot mint a
+        // second "Workbay 1" beside the first.
+        Map<UUID, Integer> next = new HashMap<>();
+        byId.values().stream().filter(record -> !record.name().isBlank())
+            .forEach(record -> next.merge(record.owner(), 1, Integer::sum));
+        unnamed.forEach(record -> byId.put(record.id(), record.withName(defaultName(
+            next.merge(record.owner(), 1, Integer::sum)))));
         setDirty();
     }
 
@@ -305,6 +345,7 @@ public class RoomRegistry extends SavedData {
                 registry.byCode.put(normalise(record.code()), record.id());
             }
         }
+        registry.nameTheUnnamed();
         return registry;
     }
 

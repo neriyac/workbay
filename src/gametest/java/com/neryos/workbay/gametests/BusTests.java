@@ -860,15 +860,14 @@ public class BusTests {
      * <p>OPEN_ISSUES #54 was measured in a live world: 126 items in 61 s from a link the panel
      * printed as one item every twenty ticks. The wheel was right and the rate was right --
      * <b>two Workbay blocks were standing on one network, and each of them ran every link on it</b>
-     * (#40). The scratch world had three, six chunks apart, from before the deployed cap existed.
-     * So the number the panel prints is only a promise the mod can keep if exactly one block per
-     * network runs the buses, which is what this asserts and what the single-Workbay case could
-     * never have caught.
+     * (#40). That is now impossible by construction: one Workbay block is one network (SPEC.md §0),
+     * and the second block a player places is a second network with its own links. So this places
+     * one and asserts the number the panel prints is the number that arrives -- the
+     * {@code takeBusTurn} election behind it is kept as the guard that made #54 unrepeatable.
      */
     @GameTest(timeoutTicks = 900)
-    @TestHolder(description = "Two Workbays on one network deliver a link's printed rate once "
-        + "between them, not once each.")
-    public static void twoWorkbaysOnOneNetworkStillDeliverThePrintedRate(final DynamicTest test) {
+    @TestHolder(description = "A link delivers the rate its panel prints, over two hundred ticks.")
+    public static void aLinkDeliversThePrintedRateOverTime(final DynamicTest test) {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(7, 5, 7));
 
         test.onGameTest(ExtendedGameTestHelper.class, helper -> {
@@ -889,17 +888,6 @@ public class BusTests {
 
             BusConfig link = connect(helper, workbay, targetPos.above(), Direction.DOWN, player);
             workbay.addBus(link.withMode(BusConfig.Mode.EXTRACT).withRate(1).withSpeed(20));
-
-            // A second block on the same network, placed the way the worlds that have one got it:
-            // straight through setPlacedBy, which is where an unbound Workbay joins the placer's
-            // existing record. WorkbayItem's cap refuses this to a player now; it did not always,
-            // and a config may raise it, so the runner cannot rely on there being only one.
-            level.setBlock(secondPos, WBBlocks.WORKBAY.get().defaultBlockState(), Block.UPDATE_ALL);
-            WBBlocks.WORKBAY.get().setPlacedBy(level, secondPos, level.getBlockState(secondPos),
-                player, new ItemStack(WBBlocks.WORKBAY.get()));
-            helper.assertValueEqual(
-                ((WorkbayBlockEntity) level.getBlockEntity(secondPos)).workbayId().orElse(null),
-                record.id(), "the second Workbay's network");
 
             int[] atStart = new int[1];
             helper.startSequence()

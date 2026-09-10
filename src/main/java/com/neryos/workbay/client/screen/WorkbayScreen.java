@@ -31,8 +31,11 @@ import java.util.UUID;
  */
 public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
 
-    /** Which screen is showing. All three share one menu; there is nothing to re-bind between them. */
-    public enum Page { BAYS, FLOW, UPGRADES, ROOMS }
+    /** Which screen is showing. They share one menu; there is nothing to re-bind between them. */
+    public enum Page { BAYS, FLOW, UPGRADES, ROOMS, NETWORKS }
+
+    /** Whether the snapshot the current page was built for had a network. See containerTick. */
+    private boolean builtBound = true;
 
     private final List<Hit> hits = new ArrayList<>();
     private final List<Ghost> ghosts = new ArrayList<>();
@@ -100,11 +103,19 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
 
     @Override
     protected void init() {
+        // A Workbay holding no network has no bays, no energy and no upgrades to draw, so NETWORKS
+        // is not merely where it opens -- it is the only page there is, and the tab strip is not
+        // drawn at all. This is the "Workbay quota reached" state, and it is a state, not an error.
+        builtBound = menu.snapshot().bound();
+        if (!builtBound) {
+            page = Page.NETWORKS;
+        }
         current = switch (page) {
             case BAYS -> new BaysPage(this);
             case FLOW -> new FlowPage(this);
             case UPGRADES -> new UpgradesPage(this);
             case ROOMS -> new RoomsPage(this);
+            case NETWORKS -> new NetworksPage(this);
         };
         imageWidth = current.width();
         imageHeight = current.height();
@@ -130,6 +141,11 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
             filter.tick();
         }
         if (current != null && current.height() != imageHeight) {
+            init(minecraft, width, height);
+        }
+        // A Transfer turns an empty Workbay into a working one, or the other way round, while the
+        // screen is open -- and which pages exist at all changes with it.
+        if (menu.snapshot().bound() != builtBound) {
             init(minecraft, width, height);
         }
     }

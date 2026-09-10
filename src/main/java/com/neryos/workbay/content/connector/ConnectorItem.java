@@ -29,7 +29,7 @@ public class ConnectorItem extends BlockItem {
         ConnectorPairing pairing = stack.get(WBDataComponents.PAIRING.get());
         lines.add(pairing == null
             ? WorkbayLang.tooltip("connector_unpaired").withStyle(ChatFormatting.GRAY)
-            : WorkbayLang.tooltip("connector_paired", pairing.code())
+            : WorkbayLang.tooltip("connector_paired", pairing.network())
                 .withStyle(ChatFormatting.AQUA));
     }
 }

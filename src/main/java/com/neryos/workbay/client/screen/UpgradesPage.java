@@ -108,25 +108,11 @@ class UpgradesPage extends WorkbayPage {
                     com.neryos.workbay.content.workbay.WorkbayBlockEntity.MAX_FE_PER_TICK),
                 x(WELL_X), y(WELL_Y + WELL_H + 44), WELL_W, Draw.TEXT_FAINT);
         }
-        // The deployed line closes the gap the three of them leave rather than floating below it.
-        int deployedY = WELL_H + (charged ? 56 : 18);
-
-        // How many of this network's Workbays are standing, out of how many the server allows.
-        // Drawn on the first one a player builds, because the cap is otherwise invisible until they
-        // have crafted a second, carried it somewhere and had the placement refused.
-        boolean full = snap.deployed() >= snap.maxDeployed();
-        // Over is not full. "3 / 1" is honest -- the three went down while the cap was higher and
-        // nothing ever re-checks it -- and reading "you have reached the maximum" over it is the
-        // screen refusing to say what it is showing. OPEN_ISSUES #49.
-        boolean over = snap.deployed() > snap.maxDeployed();
-        // The short form on the line, the sentence in the tooltip: this column is 96 wide.
-        text(g, WorkbayScreen.gui("upgrades.deployed.short", snap.deployed(), snap.maxDeployed()),
-            x(WELL_X), y(WELL_Y + deployedY), WELL_W, full ? Draw.AMBER : Draw.TEXT_FAINT);
-        screen.hit(x(WELL_X), y(WELL_Y + deployedY - 2), WELL_W, 12, () -> { },
-            WorkbayScreen.gui("upgrades.deployed", snap.deployed(), snap.maxDeployed()),
-            over ? WorkbayScreen.gui("upgrades.deployed.over",
-                    snap.deployed() - snap.maxDeployed())
-                : WorkbayScreen.gui(full ? "upgrades.deployed.full" : "upgrades.deployed.tip"));
+        // <b>"Placed: 1 / 1" is gone, and so is the model it counted.</b> It said how many Workbay
+        // blocks could be doors onto one network, drawn amber -- this mod's colour for a problem --
+        // on the ordinary state of every network that has ever existed (OPEN_ISSUES #88). One
+        // block is one network now, and which network this block is belongs on NETWORKS, beside
+        // the others, where it can be changed.
     }
 
     @Override

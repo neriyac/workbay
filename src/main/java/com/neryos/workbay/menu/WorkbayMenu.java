@@ -176,6 +176,23 @@ public class WorkbayMenu extends AbstractContainerMenu {
             || player.isSpectator() || !stillValid(player)) {
             return;
         }
+        // Before the record check, and deliberately: these two are the only things a Workbay
+        // holding <em>no</em> network can do, and they are the whole of what its screen offers.
+        switch (action) {
+            case TRANSFER_NETWORK -> {
+                transfer(serverPlayer, linkId);
+                return;
+            }
+            case SET_NETWORK_NAME -> {
+                renameNetwork(serverPlayer, linkId, text.orElse("").strip());
+                return;
+            }
+            case NEW_NETWORK -> {
+                newNetwork(serverPlayer);
+                return;
+            }
+            default -> { }
+        }
         WorkbayRecord record = workbay.record().orElse(null);
         if (record == null) {
             return;
@@ -668,7 +685,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
         WorkbayBlock.pair(held, record,
             GlobalPos.of(serverPlayer.level().dimension(), workbay.getBlockPos()));
         WorkbaySounds.confirm(serverPlayer,
-            com.neryos.workbay.WorkbayLang.message("connector_paired", record.code()));
+            com.neryos.workbay.WorkbayLang.message("connector_paired", record.label()));
     }
 
     /**
@@ -1069,6 +1086,105 @@ public class WorkbayMenu extends AbstractContainerMenu {
      * that drags a chunk in synchronously on the server thread (SPEC.md §9).
      */
     /**
+     * Moves the named network into this block, and leaves the one it came from empty.
+     *
+     * <p>Three writes, in an order chosen so no tick can ever see two blocks on one network: the
+     * block that had this network lets go first, then this block lets go of whatever it was
+     * holding, then it takes the new one. A crash between any two leaves a sleeping network, which
+     * is a state the mod already has and loses nothing.
+     *
+     * <p>Ownership is re-checked here rather than trusted from the list. The list is built from the
+     * viewer's own networks, but a packet is a thing anybody can send, and the one thing this must
+     * not become is a way to take somebody else's factory.
+     */
+    private void transfer(ServerPlayer player, Optional<UUID> networkId) {
+        if (workbay == null || networkId.isEmpty()) {
+            return;
+        }
+        com.neryos.workbay.world.RoomRegistry registry =
+            com.neryos.workbay.world.RoomRegistry.get(player.server);
+        WorkbayRecord target = registry.byId(networkId.get()).orElse(null);
+        if (target == null || !target.owner().equals(player.getUUID())) {
+            return;
+        }
+        if (workbay.workbayId().map(id -> id.equals(target.id())).orElse(false)) {
+            return; // already here
+        }
+
+        // 1. The block the network is leaving, if it has one. Loaded or not: the record is the
+        //    registry's, and the block finds out it is empty the next time it ticks or is opened.
+        target.lastKnownPos().ifPresent(where -> {
+            ServerLevel level = player.server.getLevel(where.dimension());
+            if (level != null && level.isLoaded(where.pos())
+                && level.getBlockEntity(where.pos()) instanceof WorkbayBlockEntity was
+                && was != workbay) {
+                was.unbind();
+            }
+        });
+        registry.put(target.withDeployedCount(0));
+
+        // 2. Whatever this block was holding goes to sleep, keeping everything it has.
+        workbay.record().ifPresent(leaving ->
+            registry.put(leaving.withDeployedCount(leaving.deployedCount() - 1)));
+        workbay.unbind();
+
+        // 3. And this block becomes that network.
+        workbay.bindTo(target.id());
+        registry.put(registry.byId(target.id()).orElseThrow().withDeployedCount(1));
+        workbay.rememberPosition();
+        com.neryos.workbay.WorkbaySounds.confirm(player,
+            com.neryos.workbay.WorkbayLang.message("network_transferred", target.label()),
+            net.minecraft.sounds.SoundEvents.BEACON_ACTIVATE, 1.4F);
+        refreshNow();
+    }
+
+    /**
+     * Mints a network and binds this block to it. Only for a Workbay holding nothing, and only
+     * under {@code maxNetworksPerPlayer} -- both re-checked here, because the screen's decision not
+     * to draw the button is a decision about pixels and this is the one about the save.
+     */
+    private void newNetwork(ServerPlayer player) {
+        if (workbay == null || workbay.record().isPresent()) {
+            return;
+        }
+        com.neryos.workbay.world.RoomRegistry registry =
+            com.neryos.workbay.world.RoomRegistry.get(player.server);
+        if (registry.ownedBy(player.getUUID()).size()
+            >= com.neryos.workbay.config.WorkbayConfig.SERVER.maxNetworksPerPlayer.get()) {
+            return;
+        }
+        WorkbayRecord made = registry.create(player.getUUID(),
+            player.getGameProfile().getName(), player.serverLevel().getRandom());
+        workbay.bindTo(made.id());
+        registry.put(made.withDeployedCount(1));
+        workbay.rememberPosition();
+        com.neryos.workbay.WorkbaySounds.confirm(player,
+            com.neryos.workbay.WorkbayLang.message("network_created", made.label()),
+            net.minecraft.sounds.SoundEvents.BEACON_ACTIVATE, 1.2F);
+        refreshNow();
+    }
+
+    /**
+     * Renames a network, everywhere. One object, one name — the rule a Connector already lives by
+     * (SPEC.md §0): the list, the chat line when a Workbay joins it, the Connector tooltip stamped
+     * on the next pairing, all read this one string.
+     */
+    private void renameNetwork(ServerPlayer player, Optional<UUID> networkId, String name) {
+        if (networkId.isEmpty() || name.isBlank()) {
+            return;
+        }
+        com.neryos.workbay.world.RoomRegistry registry =
+            com.neryos.workbay.world.RoomRegistry.get(player.server);
+        registry.byId(networkId.get())
+            .filter(record -> record.owner().equals(player.getUUID()))
+            // Bounded for the same reason every other name in the mod is: a name is drawn in a
+            // column, and a thousand-character one is a row nothing else fits beside.
+            .ifPresent(record -> registry.put(record.withName(
+                name.length() > 32 ? name.substring(0, 32) : name)));
+        refreshNow();
+    }
+
+    /**
      * Opens the Workbay screen on one bay. <b>The only place that knows how</b>: the block's
      * right-click and {@link com.neryos.workbay.world.BayVisit}'s return trip both come here, so a
      * player who entered a bay from this screen gets <em>this screen</em> back rather than an empty
@@ -1084,8 +1200,14 @@ public class WorkbayMenu extends AbstractContainerMenu {
 
     public static WorkbaySnapshot build(WorkbayBlockEntity workbay, ServerPlayer player, int selected) {
         WorkbayRecord record = workbay.record().orElse(null);
+        // <b>A Workbay holding no network still has a screen.</b> EMPTY here meant a block placed
+        // at the quota opened on nothing at all -- no bays, and no list either, so the only way to
+        // find out what had happened was the chat line. It gets the list and nothing else.
         if (record == null) {
-            return WorkbaySnapshot.EMPTY;
+            return new WorkbaySnapshot("", false, 1, 0, 0, 1, List.of(), List.of(),
+                WorkbayRecord.Upgrades.NONE, networksOf(workbay, player),
+                com.neryos.workbay.config.WorkbayConfig.SERVER.maxNetworksPerPlayer.get(),
+                false, List.of(), false, List.of());
         }
         ServerLevel backshop = player.server.getLevel(WorkbayDimensions.BACKSHOP);
 
@@ -1121,14 +1243,36 @@ public class WorkbayMenu extends AbstractContainerMenu {
         // that has something to learn is still nothing next to a write per poll.
         backfill.forEach(workbay::addBus);
 
-        return new WorkbaySnapshot(record.code(), record.locked(), record.bayCapacity(), selected,
+        return new WorkbaySnapshot(record.label(), record.locked(), record.bayCapacity(), selected,
             workbay.energy().getEnergyStored(), workbay.energy().getMaxEnergyStored(),
-            bays, links, record.upgrades(), record.deployedCount(),
-            com.neryos.workbay.config.WorkbayConfig.SERVER.maxDeployedWorkbaysPerNetwork.get(),
+            bays, links, record.upgrades(), networksOf(workbay, player),
+            com.neryos.workbay.config.WorkbayConfig.SERVER.maxNetworksPerPlayer.get(),
             com.neryos.workbay.remote.RemoteConfig.remoteScreensEnabled(),
             readRooms(player, record),
             com.neryos.workbay.config.WorkbayConfig.SERVER.chargesForRunning(),
             workbay.connectors());
+    }
+
+    /**
+     * The viewer's own networks, in a stable order, saying which one this block is holding.
+     *
+     * <p>Sorted by name so the list does not reshuffle between two polls of a {@code HashMap} —
+     * rows that move under the cursor is the fault OPEN_ISSUES #74 already paid for once.
+     * {@code where} is the network's block, and only when one is actually standing on it: a
+     * {@code lastKnownPos} left over from a broken Workbay would draw a sleeping network as live
+     * and point the player at a hole in the ground.
+     */
+    private static List<WorkbaySnapshot.Net> networksOf(WorkbayBlockEntity workbay,
+        ServerPlayer player) {
+        UUID here = workbay.workbayId().orElse(null);
+        return com.neryos.workbay.world.RoomRegistry.get(player.server)
+            .ownedBy(player.getUUID()).stream()
+            .sorted(java.util.Comparator.comparing(WorkbayRecord::label))
+            .map(record -> new WorkbaySnapshot.Net(record.id(), record.label(),
+                record.id().equals(here), record.live() ? record.lastKnownPos() : Optional.empty(),
+                (int) record.bays().stream().filter(b -> b.hosted().isPresent()).count(),
+                record.connectors().size()))
+            .toList();
     }
 
     /**

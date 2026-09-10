@@ -275,7 +275,7 @@ public class ConnectorTests {
                 BusConfig.createInternal(java.util.UUID.randomUUID(), 0, anchor, target),
                 BusConfig.createInternal(java.util.UUID.randomUUID(), 1, anchor, target));
 
-            WorkbayRecord record = new WorkbayRecord(java.util.UUID.randomUUID(), "TEST-CODE-0000",
+            WorkbayRecord record = new WorkbayRecord(java.util.UUID.randomUUID(), "TEST-CODE-0000", "Workbay 1",
                 java.util.UUID.randomUUID(), "tester", false,
                 new net.minecraft.world.level.ChunkPos(0, 0),
                 com.neryos.workbay.world.WorkbayRecord.Upgrades.NONE,

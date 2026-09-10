@@ -473,8 +473,8 @@ public class MenuTests {
                     + "still unreachable with anything in it");
                 return;
             }
-            helper.assertValueEqual(pairing.code(), workbay.record().orElseThrow().code(),
-                "the network code the Pair button stamped on it");
+            helper.assertValueEqual(pairing.network(), workbay.record().orElseThrow().label(),
+                "the network name the Pair button stamped on it");
             helper.assertValueEqual(pairing.workbayId(), workbay.record().orElseThrow().id(),
                 "the network the Connector was paired to");
             helper.succeed();

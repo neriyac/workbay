@@ -28,6 +28,18 @@ import java.util.UUID;
 public record WorkbayRecord(
     UUID id,
     String code,
+    /**
+     * What the player calls this network, and <b>the only thing they are ever shown</b>. The code
+     * is still minted, still unique and still what {@code /workbay recover} takes, because typing
+     * one to an operator is the whole reason it exists (SPEC.md §0) -- but nothing on a screen, in
+     * chat or on a tooltip prints it any more. A network is one object the player points at, so it
+     * has one name, the way a Connector does.
+     *
+     * <p>Never blank in practice: {@link RoomRegistry#create} stamps "Workbay 1", "Workbay 2" per
+     * owner at mint time and {@link RoomRegistry#load} fills one in for every record written before
+     * this field existed. {@link #label()} is the fallback of last resort.
+     */
+    String name,
     UUID owner,
     String ownerName,
     boolean locked,
@@ -51,6 +63,9 @@ public record WorkbayRecord(
     public static final Codec<WorkbayRecord> CODEC = RecordCodecBuilder.create(i -> i.group(
         UUIDUtil.CODEC.fieldOf("Id").forGetter(WorkbayRecord::id),
         Codec.STRING.fieldOf("Code").forGetter(WorkbayRecord::code),
+        // Optional: every world written before networks had names reads back blank, and load()
+        // stamps one on before anything can draw it.
+        Codec.STRING.optionalFieldOf("Name", "").forGetter(WorkbayRecord::name),
         UUIDUtil.CODEC.fieldOf("Owner").forGetter(WorkbayRecord::owner),
         Codec.STRING.fieldOf("OwnerName").forGetter(WorkbayRecord::ownerName),
         Codec.BOOL.fieldOf("Locked").forGetter(WorkbayRecord::locked),
@@ -106,49 +121,77 @@ public record WorkbayRecord(
     }
 
     public WorkbayRecord withConnectors(List<Connector> newConnectors) {
-        return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
+        return new WorkbayRecord(id, code, name, owner, ownerName, locked, bayColumn, upgrades,
             lastKnownPos, bays, rooms, buses, deployedCount, List.copyOf(newConnectors));
     }
 
     public WorkbayRecord withUpgrades(Upgrades newUpgrades) {
-        return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, newUpgrades,
+        return new WorkbayRecord(id, code, name, owner, ownerName, locked, bayColumn, newUpgrades,
             lastKnownPos, bays, rooms, buses, deployedCount, connectors);
     }
 
     public WorkbayRecord withLastKnownPos(GlobalPos pos) {
-        return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
+        return new WorkbayRecord(id, code, name, owner, ownerName, locked, bayColumn, upgrades,
             Optional.of(pos), bays, rooms, buses, deployedCount, connectors);
     }
 
     public WorkbayRecord withLocked(boolean nowLocked) {
-        return new WorkbayRecord(id, code, owner, ownerName, nowLocked, bayColumn, upgrades,
+        return new WorkbayRecord(id, code, name, owner, ownerName, nowLocked, bayColumn, upgrades,
             lastKnownPos, bays, rooms, buses, deployedCount, connectors);
     }
 
     public WorkbayRecord withBays(List<Bay> newBays) {
-        return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
+        return new WorkbayRecord(id, code, name, owner, ownerName, locked, bayColumn, upgrades,
             lastKnownPos, List.copyOf(newBays), rooms, buses, deployedCount, connectors);
     }
 
     public WorkbayRecord withRooms(List<UUID> newRooms) {
-        return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
+        return new WorkbayRecord(id, code, name, owner, ownerName, locked, bayColumn, upgrades,
             lastKnownPos, bays, List.copyOf(newRooms), buses, deployedCount, connectors);
     }
 
     public WorkbayRecord withBuses(List<com.neryos.workbay.bus.BusConfig> newBuses) {
-        return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
+        return new WorkbayRecord(id, code, name, owner, ownerName, locked, bayColumn, upgrades,
             lastKnownPos, bays, rooms, List.copyOf(newBuses), deployedCount, connectors);
     }
 
+    /** This network's own name, and never the code. */
+    public WorkbayRecord withName(String nowName) {
+        return new WorkbayRecord(id, code, nowName, owner, ownerName, locked, bayColumn, upgrades,
+            lastKnownPos, bays, rooms, buses, deployedCount, connectors);
+    }
+
     /**
-     * Incremented when a Workbay block genuinely binds to this record and decremented when that
-     * block is genuinely broken (not merely unloaded — {@code WorkbayBlock#onRemove}, not
-     * {@code BlockEntity#setRemoved}). What placement checks before letting an unbound item reuse
-     * this network instead of refusing: {@code maxDeployedWorkbaysPerNetwork} bounds how many
-     * physical front doors may stand open onto the same bays at once.
+     * What to print when this network has to be named and {@link #name()} is somehow blank.
+     *
+     * <p>Only reachable by a record minted outside {@link RoomRegistry#create} — a gametest, or a
+     * hand-built one. Never the code: SPEC.md §0 keeps codes off everything a player reads, and a
+     * screen that falls back to one is a screen that shows a player a code.
+     */
+    public String label() {
+        return name.isBlank() ? "Workbay" : name;
+    }
+
+    /**
+     * <b>A network is awake exactly while a Workbay block stands on it.</b> One block, one network
+     * (SPEC.md §0); with no block, nothing ticks it, nothing holds a chunk for it and its bays,
+     * machines, Connectors and channels are all still there waiting — which is what makes placing
+     * a Workbay something that never has to be refused.
+     */
+    public boolean live() {
+        return deployedCount > 0;
+    }
+
+    /**
+     * Incremented when a Workbay block binds to this record and decremented when that block is
+     * broken or transferred away (not merely unloaded — {@code WorkbayBlock#onRemove}, not
+     * {@code BlockEntity#setRemoved}). One block per network now, so this is 0 or 1 and
+     * {@link #live()} is the question anything actually asks; it stays a count because every saved
+     * world already has one, and because a count that drifts to 2 reads as a bug rather than
+     * silently looking correct.
      */
     public WorkbayRecord withDeployedCount(int nowDeployedCount) {
-        return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
+        return new WorkbayRecord(id, code, name, owner, ownerName, locked, bayColumn, upgrades,
             lastKnownPos, bays, rooms, buses, Math.max(0, nowDeployedCount), connectors);
     }
 

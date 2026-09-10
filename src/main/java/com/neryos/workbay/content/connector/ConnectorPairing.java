@@ -25,14 +25,17 @@ import java.util.UUID;
  * block entity without walking the registry every time; the id is what it verifies against, because
  * a Workbay can be broken and re-placed somewhere else.
  *
- * <p>{@code code} is for the tooltip. A tooltip renders on the client, which has no registry to ask.
+ * <p>{@code network} is the network's <b>name</b>, carried for the tooltip and the placement
+ * message: both render on the client, which has no registry to ask. It was the network's code, and
+ * SPEC.md §0 shows a code nowhere a player reads — the codec key is still {@code Code} so a
+ * Connector paired before this still says something, and re-pairing replaces it with the name.
  */
-public record ConnectorPairing(UUID workbayId, GlobalPos workbayPos, String code) {
+public record ConnectorPairing(UUID workbayId, GlobalPos workbayPos, String network) {
 
     public static final Codec<ConnectorPairing> CODEC = RecordCodecBuilder.create(i -> i.group(
         UUIDUtil.CODEC.fieldOf("WorkbayId").forGetter(ConnectorPairing::workbayId),
         GlobalPos.CODEC.fieldOf("WorkbayPos").forGetter(ConnectorPairing::workbayPos),
-        Codec.STRING.fieldOf("Code").forGetter(ConnectorPairing::code)
+        Codec.STRING.fieldOf("Code").forGetter(ConnectorPairing::network)
     ).apply(i, ConnectorPairing::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, ConnectorPairing> STREAM_CODEC =

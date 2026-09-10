@@ -26,7 +26,12 @@ import java.util.Optional;
  * is where the language file lives, so a snapshot is the same size whatever language is loaded.
  */
 public record WorkbaySnapshot(
-    String code,
+    /**
+     * What this block's network is called. Empty when the block holds no network at all, which is
+     * the one thing every page has to check before drawing anything: there are no bays, no energy
+     * and no upgrades to draw, and NETWORKS is the only page there is.
+     */
+    String network,
     boolean locked,
     int bayCapacity,
     int selectedBay,
@@ -36,12 +41,23 @@ public record WorkbaySnapshot(
     List<Link> links,
     WorkbayRecord.Upgrades upgrades,
     /**
-     * How many Workbay blocks of this network stand in the world, and how many the server allows.
-     * On the screen because the cap is invisible otherwise: a player finds out by crafting a second
-     * Workbay, carrying it somewhere and having the placement refused. SPEC.md §14.
+     * <b>Every network the player looking at this block owns</b>, and which of them this block is.
+     *
+     * <p>It replaced a pair of counters reading "Placed: 1 / 1" — the cap on how many blocks could
+     * be doors onto one network, drawn amber on the perfectly normal state of every network there
+     * has ever been (OPEN_ISSUES #88). One block is one network now, so the only question left is
+     * <em>which</em> one, and that is a list.
+     *
+     * <p>The viewer's own, not the owner's: the list is what a Transfer picks from, and a player
+     * can only ever move a network they own.
      */
-    int deployed,
-    int maxDeployed,
+    List<Net> networks,
+    /**
+     * How many networks this server lets one player own. On the snapshot because it is the only
+     * number that explains why a Workbay would ever stand there holding nothing, and a rule a
+     * player meets only as a surprise is a rule nobody can plan around.
+     */
+    int maxNetworks,
     /**
      * Whether <b>this server</b> will open a hosted machine's own screen where the player stands
      * (SPEC.md §0). On the snapshot rather than read from the client's own config file because the
@@ -73,11 +89,38 @@ public record WorkbaySnapshot(
     List<WorkbayRecord.Connector> connectors) {
 
     public static final WorkbaySnapshot EMPTY = new WorkbaySnapshot("", false, 1, 0, 0, 1,
-        List.of(), List.of(), WorkbayRecord.Upgrades.NONE, 1, 1, false, List.of(), false,
+        List.of(), List.of(), WorkbayRecord.Upgrades.NONE, List.of(), 1, false, List.of(), false,
         List.of());
 
+    /**
+     * One network in the list. {@code here} is the one this block is holding, if any; {@code where}
+     * is where its own block stands, and its absence is what <b>asleep</b> means — everything kept,
+     * nothing ticking, until a block is pointed at it again.
+     */
+    public record Net(java.util.UUID id, String name, boolean here,
+        Optional<net.minecraft.core.GlobalPos> where, int bays, int connectors) {
+        public static final Codec<Net> CODEC = RecordCodecBuilder.create(i -> i.group(
+            net.minecraft.core.UUIDUtil.CODEC.fieldOf("Id").forGetter(Net::id),
+            Codec.STRING.fieldOf("Name").forGetter(Net::name),
+            Codec.BOOL.fieldOf("Here").forGetter(Net::here),
+            net.minecraft.core.GlobalPos.CODEC.optionalFieldOf("Where").forGetter(Net::where),
+            Codec.INT.fieldOf("Bays").forGetter(Net::bays),
+            Codec.INT.fieldOf("Connectors").forGetter(Net::connectors)
+        ).apply(i, Net::new));
+
+        /** Awake exactly while a block stands on it. SPEC.md §0. */
+        public boolean asleep() {
+            return where.isEmpty();
+        }
+    }
+
+    /** Whether this block holds a network at all. False is the "Workbay quota reached" state. */
+    public boolean bound() {
+        return !network.isBlank();
+    }
+
     public static final Codec<WorkbaySnapshot> CODEC = RecordCodecBuilder.create(i -> i.group(
-        Codec.STRING.fieldOf("Code").forGetter(WorkbaySnapshot::code),
+        Codec.STRING.fieldOf("Network").forGetter(WorkbaySnapshot::network),
         Codec.BOOL.fieldOf("Locked").forGetter(WorkbaySnapshot::locked),
         Codec.INT.fieldOf("BayCapacity").forGetter(WorkbaySnapshot::bayCapacity),
         Codec.INT.fieldOf("SelectedBay").forGetter(WorkbaySnapshot::selectedBay),
@@ -86,8 +129,8 @@ public record WorkbaySnapshot(
         Bay.CODEC.listOf().fieldOf("Bays").forGetter(WorkbaySnapshot::bays),
         Link.CODEC.listOf().fieldOf("Links").forGetter(WorkbaySnapshot::links),
         WorkbayRecord.Upgrades.CODEC.fieldOf("Upgrades").forGetter(WorkbaySnapshot::upgrades),
-        Codec.INT.fieldOf("Deployed").forGetter(WorkbaySnapshot::deployed),
-        Codec.INT.fieldOf("MaxDeployed").forGetter(WorkbaySnapshot::maxDeployed),
+        Net.CODEC.listOf().fieldOf("Networks").forGetter(WorkbaySnapshot::networks),
+        Codec.INT.fieldOf("MaxNetworks").forGetter(WorkbaySnapshot::maxNetworks),
         Codec.BOOL.optionalFieldOf("RemoteScreens", false).forGetter(WorkbaySnapshot::remoteScreens),
         Room.CODEC.listOf().optionalFieldOf("Rooms", List.of()).forGetter(WorkbaySnapshot::rooms),
         Codec.BOOL.optionalFieldOf("Charged", false).forGetter(WorkbaySnapshot::charged),
