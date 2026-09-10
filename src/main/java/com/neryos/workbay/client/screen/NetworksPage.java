@@ -100,14 +100,22 @@ class NetworksPage extends WorkbayPage {
      */
     private void banner(GuiGraphics g, int mouseX, int mouseY) {
         WorkbaySnapshot snap = snapshot();
-        boolean full = snap.networks().size() >= snap.maxNetworks();
+        // <b>Two independent facts, not one.</b> Whether a network can be *minted* here is the
+        // limit; whether one can be *moved* here is whether any of yours is asleep. The banner was
+        // amber whenever the count reached the limit, which called a block "quota reached" while a
+        // sleeping network sat in the list one row below waiting to be transferred into it. Amber
+        // is this mod's colour for a problem, and the only real problem is having neither.
+        boolean canMint = snap.networks().size() < snap.maxNetworks();
+        boolean canTake = snap.networks().stream().anyMatch(WorkbaySnapshot.Net::asleep);
+        boolean stuck = !canMint && !canTake;
+        int room = ROW_W - 16 - (canMint ? NEW_W + 6 : 0);
         Draw.notice(g, x(ROW_X), y(HEADER_H + 5), ROW_W, BANNER_H);
-        text(g, WorkbayScreen.gui(full ? "networks.quota" : "networks.empty"),
-            x(ROW_X + 8), y(HEADER_H + 11), ROW_W - 16 - (full ? 0 : NEW_W + 6),
-            full ? Draw.AMBER : Draw.TEXT);
-        wrapped(g, WorkbayScreen.gui(full ? "networks.quota.tip" : "networks.empty.tip"),
-            x(ROW_X + 8), y(HEADER_H + 22), ROW_W - 16 - (full ? 0 : NEW_W + 6), Draw.TEXT_DIM);
-        if (full) {
+        text(g, WorkbayScreen.gui(stuck ? "networks.quota" : "networks.empty"),
+            x(ROW_X + 8), y(HEADER_H + 11), room, stuck ? Draw.AMBER : Draw.TEXT);
+        wrapped(g, WorkbayScreen.gui(stuck ? "networks.quota.tip"
+                : canMint ? "networks.empty.tip" : "networks.empty.take.tip"),
+            x(ROW_X + 8), y(HEADER_H + 22), room, Draw.TEXT_DIM);
+        if (!canMint) {
             return;
         }
         int bx = x(ROW_X + ROW_W - NEW_W - 6);

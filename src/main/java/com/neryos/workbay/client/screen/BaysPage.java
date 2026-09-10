@@ -1057,6 +1057,12 @@ class BaysPage extends WorkbayPage {
             WorkbayScreen.gui("links.type." + config.resource().getSerializedName()),
             WorkbayScreen.gui("links.type.tip"));
 
+        // A hairline between the selector and the two ends. Four twelve-pixel icons in a row read
+        // as one run of decoration, and the first of them is the odd one out: it says what the row
+        // *carries*, where the three to its right say where it goes. Faint, and only as tall as the
+        // icons, so it divides without becoming a fifth thing to look at. Neriya's call.
+        g.fill(px + 30, py + 4, px + 31, py + 15, Draw.alpha(Draw.EDGE_LIGHT, 0.35F));
+
         // INSERT moves out of the bay into the target, EXTRACT the other way round, so which end
         // is which is the mode and nothing else.
         Optional<ResourceLocation> here = snapshot().bay(config.bay()).hosted();

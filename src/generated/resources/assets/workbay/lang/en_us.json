@@ -207,7 +207,7 @@
   "gui.workbay.networks.footer": "%s of %s networks",
   "gui.workbay.networks.footer.tip": "One Workbay block is one network, and this server lets you own this many. Placing more Workbays is never refused: one placed with no network left to take stands there empty until you move a network into it. A network with no block sleeps and keeps everything - bays, machines, Connectors and channels - until a block is pointed at it again.",
   "gui.workbay.networks.here": "This one",
-  "gui.workbay.networks.holding": "%s bays · %s Connectors",
+  "gui.workbay.networks.holding": "Bays %s · Connectors %s",
   "gui.workbay.networks.live": "Placed",
   "gui.workbay.networks.new": "New network",
   "gui.workbay.networks.new.tip": "Makes a fresh network in this Workbay: two empty bays, no Connectors, nothing racked. It counts against the number of networks you may own.",

@@ -464,7 +464,9 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("networks.live"), "Placed");
         add(WorkbayLang.guiKey("networks.asleep"), "Asleep");
         add(WorkbayLang.guiKey("networks.nowhere"), "No block placed");
-        add(WorkbayLang.guiKey("networks.holding"), "%s bays \u00b7 %s Connectors");
+        // The number after the word: a lang file has no plural forms, and "1 bays" was on the
+        // screen. Photographed.
+        add(WorkbayLang.guiKey("networks.holding"), "Bays %s \u00b7 Connectors %s");
         add(WorkbayLang.guiKey("networks.rename"), "Rename this network");
         add(WorkbayLang.guiKey("networks.rename.tip"), "One network, one name \u2014 it changes "
             + "everywhere this network is named at once.");
