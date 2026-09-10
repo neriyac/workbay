@@ -1039,30 +1039,39 @@ class BaysPage extends WorkbayPage {
         // <b>The arrow never turns round; the two ends swap around it.</b> A row that reads right
         // to left half the time is a row the player has to re-read to know which end is which, and
         // "which way is it going" was being asked of a twelve-pixel glyph that changes shape.
-        // Left is always where it comes from and right always where it goes -- so an extracting
-        // link draws the target first and the resource second, and an inserting one the other way
-        // round. The colour still says which mode it is in. Neriya's call; OPEN_ISSUES #75.
+        // Left is always where it comes from and right always where it goes. The colour still says
+        // which mode it is in. Neriya's call; OPEN_ISSUES #75.
         //
-        // Two slots, filled in order rather than two fixed x's, so the hit boxes travel with the
-        // icons they belong to and neither can be clicked where it is not drawn.
+        // <b>And the two ends are both blocks now.</b> One of them used to be the *resource* icon
+        // standing in for the bay -- so a row read "iron ingot -> chest", which names what is
+        // moving where a place should be, and left the resource with no control of its own that
+        // said what it was. The bay end draws the machine racked in that bay, the far end draws
+        // the block out in the world (or the other bay's machine, for a bay-to-bay row), and the
+        // resource moves out in front as its own selector: power, type, from, arrow, into.
+        // Neriya's call.
         boolean insert = config.mode() == BusConfig.Mode.INSERT;
-        Optional<ResourceLocation> icon = targetIcon(link);
-        int fromX = px + 16;
-        int toX = px + 48;
-        int resourceX = insert ? fromX : toX;
-        int targetX = insert ? toX : fromX;
-
-        resourceIcon(g, config.resource(), resourceX, py + 3);
-        screen.hit(resourceX, py + 3, 12, 12,
+        int typeX = px + 16;
+        resourceIcon(g, config.resource(), typeX, py + 3);
+        screen.hit(typeX, py + 3, 12, 12,
             () -> screen.send(WorkbayAction.LINK_CYCLE_RESOURCE, config.id()),
             WorkbayScreen.gui("links.type." + config.resource().getSerializedName()),
             WorkbayScreen.gui("links.type.tip"));
 
-        WBIcons.draw(g, WBIcons.ARROW_RIGHT, px + 32, py + 3, insert ? Draw.BLUE : Draw.GREEN);
-        screen.hit(px + 32, py + 3, 12, 12,
+        // INSERT moves out of the bay into the target, EXTRACT the other way round, so which end
+        // is which is the mode and nothing else.
+        Optional<ResourceLocation> here = snapshot().bay(config.bay()).hosted();
+        Optional<ResourceLocation> far = config.internal()
+            ? link.targetBay().flatMap(b -> snapshot().bay(b).hosted())
+            : targetIcon(link);
+        end(g, px + 32, py + 3, insert ? here : far, insert ? config.bay() : -1,
+            link, true);
+        WBIcons.draw(g, WBIcons.ARROW_RIGHT, px + 48, py + 3, insert ? Draw.BLUE : Draw.GREEN);
+        screen.hit(px + 48, py + 3, 12, 12,
             () -> screen.send(WorkbayAction.LINK_FLIP_MODE, config.id()),
             WorkbayScreen.gui("links.mode." + config.mode().getSerializedName()),
             WorkbayScreen.gui("links.mode.tip"));
+        end(g, px + 64, py + 3, insert ? far : here, insert ? -1 : config.bay(),
+            link, false);
 
         // Which bay — <b>only when the list is actually showing more than one.</b> Scoped to this
         // bay, which is the default, every row carried the same "B1" under a heading that already
@@ -1070,28 +1079,9 @@ class BaysPage extends WorkbayPage {
         // name column was too narrow to finish the word "Connector". A column that answers the
         // same for every row is not a column.
         boolean showBay = filter != Filter.THIS_BAY;
-        // What the link is pointed at, as the block itself. A name answers "which one" only if you
-        // read it; a chest reads as a chest before you have finished the row. It sits in one of the
-        // two end slots above rather than in a column of its own because the row is at SPEC.md §4's
-        // ceiling and this is the same fact as the name, not a new one.
-        //
-        // And it only takes the twelve pixels when there is something to draw: a link with nothing
-        // remembered falls back to a *position* for its name, which is the longest label the column
-        // ever carries and the one that needed fifty-six in the first place. So the column gives up
-        // width exactly when the label got shorter, and never otherwise.
-        boolean drewTarget = false;
-        if (icon.isPresent()) {
-            var item = BuiltInRegistries.ITEM.get(icon.get());
-            if (item != net.minecraft.world.item.Items.AIR) {
-                WBIcons.sprite(g, new ItemStack(item), targetX, py + 3, 12, true);
-                screen.hit(targetX, py + 3, 12, 12, () -> { },
-                    displayName(icon.get()), WorkbayScreen.gui("links.target.tip"));
-                drewTarget = true;
-            }
-        }
-        // The name starts after whichever slot the far end used, and reclaims the second slot when
-        // nothing was drawn in it.
-        int cursor = drewTarget || !insert ? px + 62 : px + 48;
+        // Both ends are always drawn now, so the name starts at a fixed place and the column can
+        // no longer change width row by row.
+        int cursor = px + 80;
         if (showBay) {
             text(g, bayBadge(config), cursor, py + 5, 14, Draw.TEXT_DIM);
             screen.hit(cursor, py + 3, 14, 12, () -> { },
@@ -1178,29 +1168,57 @@ class BaysPage extends WorkbayPage {
     }
 
     /**
+     * One end of a link's arrow: the block that is actually there.
+     *
+     * <p>A <b>bay</b> end draws the machine racked in it, which is the thing the player put there
+     * and the thing they think of the row as being about; an empty bay draws an empty slot, which
+     * is the same picture the rack itself uses for one. A <b>world</b> end draws the block the
+     * Connector is on. Either way the row reads as two places with an arrow between them, which is
+     * what it is.
+     */
+    private void end(GuiGraphics g, int px, int py, Optional<ResourceLocation> block, int bay,
+        WorkbaySnapshot.Link link, boolean from) {
+        var item = block.map(BuiltInRegistries.ITEM::get)
+            .filter(i -> i != net.minecraft.world.item.Items.AIR).orElse(null);
+        if (item == null) {
+            Draw.slot(g, px, py, 12, 12);
+            screen.hit(px, py, 12, 12, () -> { },
+                WorkbayScreen.gui(from ? "links.from" : "links.into"),
+                WorkbayScreen.gui(bay >= 0 ? "links.end.emptybay" : "links.end.unknown"));
+            return;
+        }
+        WBIcons.sprite(g, new ItemStack(item), px, py, 12, true);
+        screen.hit(px, py, 12, 12, () -> { },
+            WorkbayScreen.gui(from ? "links.from" : "links.into"),
+            bay >= 0 ? WorkbayScreen.gui("links.end.bay", bay + 1,
+                    displayName(block.orElseThrow()))
+                : displayName(block.orElseThrow()));
+    }
+
+    /**
      * Which face of the target block this link reaches into.
      *
      * <p>The runner has honoured a pinned face since buses existed; nothing ever let a player set
      * one. A machine with a separate input and output face is unusable without it — the link takes
      * whichever face answers first, which is the wrong one about half the time.
      *
-     * <p>Compass letters here, unlike on the preview cube: the target is a block out in the world
-     * standing at an orientation the mod did not choose, so "north side of it" is the only thing
-     * that means anything to somebody looking at their own base.
+     * <p><b>The cube's letters, not the compass's.</b> It read N/S/E/W/U/D on the argument that a
+     * block out in the world stands at an orientation the mod did not choose — but the player sets
+     * a bay's faces on a cube two panels away that says F, B, L, R, T, and one screen naming the
+     * same six directions two ways is one of them being wrong. Neriya's call. {@link BlockPreview}
+     * owns the mapping so the two can never drift.
      */
     private void faceButton(GuiGraphics g, int mouseX, int mouseY, int px, int py,
         BusConfig config) {
         Optional<net.minecraft.core.Direction> face = config.targetFace();
-        String letter = face
-            .map(d -> String.valueOf(Character.toUpperCase(d.getName().charAt(0))))
-            .orElse("-");
+        String letter = face.map(BlockPreview::label).orElse("-");
         boolean hover = screen.hovered(px, py, 12, 12, mouseX, mouseY);
         Draw.slot(g, px, py, 12, 12);
         textCentre(g, letter, px + 6, py + 2, 10,
             face.isPresent() ? (hover ? Draw.TEXT : Draw.AMBER) : Draw.TEXT_FAINT);
         screen.hit(px, py, 12, 12,
             () -> screen.send(WorkbayAction.LINK_CYCLE_TARGET_FACE, config.id()),
-            face.map(d -> WorkbayScreen.gui("links.face." + d.getSerializedName()))
+            face.map(d -> WorkbayScreen.gui("links.face." + BlockPreview.faceKey(d)))
                 .orElse(WorkbayScreen.gui("links.face.any")),
             WorkbayScreen.gui("links.face.tip"));
     }

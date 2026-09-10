@@ -275,13 +275,24 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("links.add.bay.tip"), "Makes a link straight to that bay. No "
             + "Connector, no block in the world.");
         add(WorkbayLang.guiKey("links.add.nowire"), "no wire");
+        // <b>The same six words the face cube uses</b>, not the compass's. One screen naming the
+        // same six directions two ways is one of them being wrong; BlockPreview owns the mapping.
         add(WorkbayLang.guiKey("links.face.any"), "Any face");
-        add(WorkbayLang.guiKey("links.face.down"), "Bottom face");
-        add(WorkbayLang.guiKey("links.face.up"), "Top face");
-        add(WorkbayLang.guiKey("links.face.north"), "North face");
-        add(WorkbayLang.guiKey("links.face.south"), "South face");
-        add(WorkbayLang.guiKey("links.face.west"), "West face");
-        add(WorkbayLang.guiKey("links.face.east"), "East face");
+        add(WorkbayLang.guiKey("links.face.bottom"), "Bottom face");
+        add(WorkbayLang.guiKey("links.face.top"), "Top face");
+        add(WorkbayLang.guiKey("links.face.front"), "Front face");
+        add(WorkbayLang.guiKey("links.face.back"), "Back face");
+        add(WorkbayLang.guiKey("links.face.left"), "Left face");
+        add(WorkbayLang.guiKey("links.face.right"), "Right face");
+
+        // The two ends of a row's arrow, which are places now and not resources.
+        add(WorkbayLang.guiKey("links.from"), "From");
+        add(WorkbayLang.guiKey("links.into"), "Into");
+        add(WorkbayLang.guiKey("links.end.bay"), "Bay %s · %s");
+        add(WorkbayLang.guiKey("links.end.emptybay"), "This bay has nothing racked in it, so this "
+            + "end of the link reaches nothing.");
+        add(WorkbayLang.guiKey("links.end.unknown"), "Nothing is remembered about the block at "
+            + "this end yet.");
         add(WorkbayLang.guiKey("links.face.tip"), "Which side of the target to reach into. Pin one when in and out are on "
             + "different faces; right-click steps back.");
         add(WorkbayLang.guiKey("links.mode.insert"), "Sends into the target");

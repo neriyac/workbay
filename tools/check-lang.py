@@ -40,9 +40,11 @@ BUILT = {
     "gui.workbay.colour.": ("content/room/RoomColour.java", "RoomColour", "serial"),
 }
 
-# Direction is vanilla's, and "any" is this mod's word for a face nobody pinned.
+# <b>The face cube's six words, not the compass's six.</b> A row's face button and the "Drag to
+# turn" cube name the same six directions, so they use one set of words, mapped in
+# BlockPreview#faceKey; "any" is this mod's word for a face nobody pinned.
 BUILT_LITERAL = {
-    "gui.workbay.links.face.": "up down north south east west any".split(),
+    "gui.workbay.links.face.": "top bottom front back left right any".split(),
 }
 
 

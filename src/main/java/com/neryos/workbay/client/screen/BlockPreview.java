@@ -124,7 +124,7 @@ public class BlockPreview {
      * renders as a featureless box in {@code renderSingleBlock}, so there is no latch or panel to
      * orient by either. Front and back are the two the player is actually choosing between.
      */
-    private static String label(Direction face) {
+    static String label(Direction face) {
         return switch (face) {
             case NORTH -> "F";
             case SOUTH -> "B";
@@ -132,6 +132,22 @@ public class BlockPreview {
             case EAST -> "R";
             case UP -> "T";
             case DOWN -> "D";
+        };
+    }
+
+    /**
+     * The lang suffix for a face, in the same words as {@link #label}. Here rather than beside the
+     * one control that spells it out, so a second control naming the same six directions cannot
+     * choose a different set of six words.
+     */
+    static String faceKey(Direction face) {
+        return switch (face) {
+            case NORTH -> "front";
+            case SOUTH -> "back";
+            case WEST -> "left";
+            case EAST -> "right";
+            case UP -> "top";
+            case DOWN -> "bottom";
         };
     }
 
