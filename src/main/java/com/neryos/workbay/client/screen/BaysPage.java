@@ -753,6 +753,13 @@ class BaysPage extends WorkbayPage {
             // rather than pinned to its top edge with an empty half underneath.
             wrapped(g, WorkbayScreen.gui("faces.empty"), x(WELL_X + 4), y(WELL_Y + 20),
                 WELL_W - 8, Draw.TEXT_FAINT);
+        } else if (editingFilter != null) {
+            // <b>Not while the filter panel is open.</b> The cube is a real block model rendered
+            // at z=200 with its markers at 400, and the panel is drawn flat at z=0 -- so a panel
+            // standing over this well had the cube and two of its letters poking up through its
+            // title band. Photographed by Neriya. Lifting the panel instead would put it over the
+            // tooltips (400), the hover ring (0) and the carried item, so the cube simply waits:
+            // nobody is turning it while they are listing items in a filter.
         } else {
             // A face marker projects to wherever its face's centre lands on screen, which at a
             // steep enough drag angle is genuinely outside the well - the marker is correct, the
@@ -780,7 +787,11 @@ class BaysPage extends WorkbayPage {
     }
 
     private boolean inWell(double mx, double my) {
-        return mx >= x(WELL_X) && mx < x(WELL_X + WELL_W)
+        // The cube is not drawn while a filter panel is open, so it must not take the press
+        // either: the panel stands over this well, and a click on one of its controls there would
+        // otherwise start a turn of a cube nobody can see.
+        return editingFilter == null
+            && mx >= x(WELL_X) && mx < x(WELL_X + WELL_W)
             && my >= y(WELL_Y) && my < y(WELL_Y + WELL_H);
     }
 
