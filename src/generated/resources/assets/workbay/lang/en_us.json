@@ -101,7 +101,7 @@
   "gui.workbay.filter.energy": "Energy has nothing to filter",
   "gui.workbay.filter.energy.tip": "Energy is a number, so there is nothing here to name.",
   "gui.workbay.filter.entry.tag.tip": "Everything in this tag, not just this one thing. Shift-click for the next tag, or round to the item itself.",
-  "gui.workbay.filter.entry.tip": "Click to lift it off. Right-click to drop it.",
+  "gui.workbay.filter.entry.tip": "Click to take it off the list. Shift-click to step it through the tags this item belongs to.",
   "gui.workbay.filter.inventory": "Your inventory",
   "gui.workbay.filter.inventory.putback.tip": "Click to put down what is on the cursor.",
   "gui.workbay.filter.inventory.tip": "Click to put a copy on the cursor, then click a filter slot to list it. Nothing leaves your inventory - a filter names an item, it does not hold one.",

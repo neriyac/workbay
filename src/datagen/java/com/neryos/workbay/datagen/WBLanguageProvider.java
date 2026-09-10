@@ -356,7 +356,8 @@ public class WBLanguageProvider extends LanguageProvider {
             + "With empty hands it lists what you are holding, and a recipe-list drag works too.");
         add(WorkbayLang.guiKey("filter.slot.tip.fluid"), "Click to drop what you are carrying here. "
             + "A bucket or tank lists the fluid inside it; a recipe-list drag works too.");
-        add(WorkbayLang.guiKey("filter.entry.tip"), "Click to lift it off. Right-click to drop it.");
+        add(WorkbayLang.guiKey("filter.entry.tip"), "Click to take it off the list. Shift-click to "
+            + "step it through the tags this item belongs to.");
         add(WorkbayLang.guiKey("filter.carrying"), "Click a slot to list it, anywhere else to drop it.");
         add(WorkbayLang.guiKey("filter.listed.allow"), "Only what is listed goes through.");
         add(WorkbayLang.guiKey("filter.listed.deny"), "Everything except what is listed goes through.");

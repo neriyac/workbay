@@ -1393,8 +1393,8 @@ class BaysPage extends WorkbayPage {
         inventory(g, mouseX, mouseY, sentenceY + 14);
     }
 
-    /** Four rows of nine at eighteen pixels, the hotbar's own gap, and the line above them. */
-    private static final int INVENTORY_H = 12 + 4 * 18 + 3;
+    /** The caption, four rows of nine at the filter row's own pitch, the hotbar's gap, and padding. */
+    private static final int INVENTORY_H = 13 + 4 * SLOT_PITCH + 4 + 8;
 
     /**
      * <b>The player's own inventory, inside the filter panel.</b>
@@ -1417,25 +1417,32 @@ class BaysPage extends WorkbayPage {
         if (player == null) {
             return;
         }
-        text(g, WorkbayScreen.gui("filter.inventory"), x(LIST_X + 8), py, LIST_W - 16,
-            Draw.TEXT_FAINT);
-        int gridW = 9 * 18;
+        // <b>Its own box, at the filter row's own pitch.</b> Thirty-six cells at eighteen pixels
+        // with no gap between them merged into one grey mesh on the panel's flat well -- the cells
+        // were there and none of them read as a cell. Two pixels apart, on a well of their own,
+        // they read the way the nine slots above them do. Photographed.
+        int gridW = 9 * SLOT_PITCH - 2;
         int gridX = LIST_X + (LIST_W - gridW) / 2;
-        int gridY = py + 12;
+        int gridY = py + 13;
+        int gridH = 4 * SLOT_PITCH + 4 - 2;
+        // The caption starts where the grid does, not where the panel does: left-aligned against
+        // the panel's edge it sat a long way out on its own, pointing at nothing.
+        text(g, WorkbayScreen.gui("filter.inventory"), x(gridX), py, gridW, Draw.TEXT_FAINT);
+        Draw.well(g, x(gridX) - 3, gridY - 3, gridW + 6, gridH + 6);
+        boolean carrying = !screen.carried().isEmpty();
         for (int index = 0; index < 36; index++) {
             // The hotbar last, drawn where a player looks for it: vanilla's slot 0..8 is the
             // hotbar and 9..35 the three rows above it, and drawing them in index order would put
             // the hotbar on top.
             int slot = index < 27 ? index + 9 : index - 27;
-            int cx = x(gridX + (index % 9) * 18);
-            int cy = gridY + (index / 9) * 18 + (index >= 27 ? 3 : 0);
+            int cx = x(gridX + (index % 9) * SLOT_PITCH);
+            int cy = gridY + (index / 9) * SLOT_PITCH + (index >= 27 ? 4 : 0);
             Draw.slot(g, cx, cy, 18, 18);
             ItemStack stack = player.getInventory().getItem(slot);
             if (stack.isEmpty()) {
                 continue;
             }
             WBIcons.sprite(g, stack, cx + 1, cy + 1, 16, false);
-            boolean carrying = !screen.carried().isEmpty();
             screen.hit(cx, cy, 18, 18,
                 () -> screen.carry(carrying ? ItemStack.EMPTY : stack),
                 stack.getHoverName(),
@@ -1583,7 +1590,6 @@ class BaysPage extends WorkbayPage {
         }
         if (entry.isPresent()) {
             entryIcon(g, config.resource(), entry.get(), px + 1, py + 1);
-            ItemStack lifted = new ItemStack(BuiltInRegistries.ITEM.get(entry.get()));
             // A row matching by tag keeps its sprite and wears a corner mark, because the picture
             // is now standing for a whole shelf rather than for itself. The tooltip is the tag.
             boolean tagged = row.get().tag().isPresent();
@@ -1596,19 +1602,18 @@ class BaysPage extends WorkbayPage {
                     screen.send(WorkbayAction.CYCLE_FILTER_TAG, slot, config.id());
                     return;
                 }
-                boolean lift = !carrying && !screen.back();
                 if (carrying) {
                     dropCarried(config, slot);
                     return;
                 }
+                // <b>Clicking a full slot empties it, and that is all.</b> It used to clear the
+                // slot *and* stick the entry to the cursor, so "take this off the list" left
+                // something following the pointer that had to be put somewhere before anything
+                // else could be clicked -- and it looked like the icon had been picked up out of
+                // the filter, which is the one thing a ghost slot must never look like. Moving an
+                // entry between slots was what the lift was for; the inventory below is a better
+                // way to do that and does not surprise anybody clearing a slot. Neriya's call.
                 screen.send(WorkbayAction.SET_FILTER, (long) slot << 32, config.id());
-                if (lift) {
-                    // The slot is cleared and the thing follows the cursor. What the cursor draws
-                    // is the item even for a fluid entry, because a fluid on a filter is named by
-                    // the container it arrived in (SPEC.md section 5) and there is nothing else to
-                    // draw there.
-                    screen.carry(lifted);
-                }
             }, tagged
                 ? Component.literal("#" + row.get().tag().get())
                 : entryName(config.resource(), entry.get()),
