@@ -99,7 +99,11 @@ public final class RoomGeometry {
      * screen prints this now, because the number a host is paying is the one that is loaded.
      */
     public static int anchorChunks(int footprintChunks) {
-        int side = (int) Math.round(Math.sqrt(footprintChunks)) + 4;
+        // Every footprint chunk gets its own ticket, and a ticket reaches chunkTicketRadius
+        // further on all four sides -- so the loaded square is the footprint's side plus twice
+        // the radius. Read from the knob, not written down: 25/36/49 at radius 2, 9/16/25 at the
+        // shipped 1. OPEN_ISSUES #60.
+        int side = (int) Math.round(Math.sqrt(footprintChunks)) + 2 * WorkbayTickets.radius();
         return footprintChunks == 0 ? 0 : side * side;
     }
 

@@ -17,11 +17,45 @@ import org.apache.commons.lang3.tuple.Pair;
  * scalars below.
  *
  * <p><b>Nothing new joined the datapack side, on purpose.</b> What was left in Java was
- * <em>scalars</em> — a rising cost ladder, a conversion rate, a throughput ceiling — and a scalar
- * in a datapack registry buys a pack nothing that a shipped {@code defaultconfigs/} TOML does not
+ * <em>scalars</em> — a conversion rate, a throughput ceiling, a chunk radius — and a scalar in a
+ * datapack registry buys a pack nothing that a shipped {@code defaultconfigs/} TOML does not
  * already give it, while costing a reload listener, a sync packet, and a second place the same
- * ladder can be written down and disagree with itself. SPEC.md §0 settled "everything else is a
- * tag or a recipe" against <em>a config section per subsystem</em>; the ladder is the one case
+ * number can be written down and disagree with itself. SPEC.md §0 settled "everything else is a
+ * tag or a recipe" against <em>a config section per subsystem</em>, which is why there is one
+ * section here and not five: the root holds the caps and the chunk bill, and
+ * {@code throughput} holds what a link is worth to run.
+ *
+ * <h2>What is deliberately not a knob, and where the answer is instead</h2>
+ *
+ * <p>Every one of these was asked and answered "no", so the next person does not have to ask again.
+ * <ul>
+ *   <li><b>The buffer's size (100,000 FE) and how fast it fills (10,000 FE/t).</b> The capacity is
+ *       saved per block and restored off the item a Workbay was broken into, so lowering it mid-world
+ *       leaves blocks holding more than they can hold; and at any fee a pack would plausibly set,
+ *       100,000 is minutes of running. The fees below are the knob that makes the buffer mean
+ *       something.</li>
+ *   <li><b>What one rate step is worth per resource</b> ({@code MB_PER_RATE} 100,
+ *       {@code FE_PER_RATE} 1000). Constants, because changing one <em>rescales every saved
+ *       link</em> in every existing world.</li>
+ *   <li><b>The speeds a link may run at.</b> Fixed, because each has to divide the 1200-tick
+ *       transfer wheel; a free number does not.</li>
+ *   <li><b>How many resources a Multichannel Connector carries.</b> It is every resource that
+ *       exists in this install — three without Mekanism, four with it. A knob would only let a host
+ *       pick a number smaller than "all of them", which names no setting anyone wants.</li>
+ *   <li><b>Room sizes, room biomes, and what may be hosted.</b> Datapack, all three: the Frames are
+ *       recipes ({@code data/workbay/recipe/}), biomes are {@code #workbay:room_biomes}, hostability
+ *       is §11's tags. A pack drops the Vast Room Frame recipe to cap room size.</li>
+ *   <li><b>Rooms as a feature.</b> {@code maxRoomsPerNetwork} stops at 1 rather than 0. A host who
+ *       is worried about the <em>chunk</em> cost of rooms sets {@code maxAnchoredRoomsPerNetwork}
+ *       to 0, which is the whole bill; a host who wants no private dimensions at all drops the Room
+ *       Frame recipe, which is the datapack side of the same line.</li>
+ *   <li><b>Bay and room geometry</b> — the 8-block bay pitch, the 8-chunk column spacing, the
+ *       512-block room region spacing. Baked into every saved world: changing one moves bays and
+ *       rooms that already exist.</li>
+ *   <li><b>Whether the mod patches vanilla classes at all.</b> That one <em>is</em> a host's switch
+ *       and it cannot live here: {@code config/workbay-mixins.properties} is read before class
+ *       transformation, which is earlier than any {@code ModConfigSpec} exists.</li>
+ * </ul>
  */
 public class WorkbayConfig {
 
@@ -46,7 +80,10 @@ public class WorkbayConfig {
         public final ModConfigSpec.IntValue maxAnchoredWorkbaysPerPlayer;
         public final ModConfigSpec.IntValue maxAnchoredRoomsPerNetwork;
         public final ModConfigSpec.IntValue anchorGraceMinutes;
+        public final ModConfigSpec.IntValue chunkTicketRadius;
         public final ModConfigSpec.IntValue maxBaysPerWorkbay;
+        public final ModConfigSpec.IntValue maxRoomsPerNetwork;
+        public final ModConfigSpec.BooleanValue allowCrossDimensionLinks;
         public final ModConfigSpec.IntValue maxNetworksPerPlayer;
         public final ModConfigSpec.IntValue maxDeployedWorkbaysPerNetwork;
 
@@ -62,9 +99,17 @@ public class WorkbayConfig {
 
 
         Server(ModConfigSpec.Builder builder) {
+            // The one knob a host who distrusts chunkloaders is looking for. It does not switch
+            // off every ticket this mod holds -- mirroring holds the bay column exactly while the
+            // Workbay's own chunk is loaded by something else, so it is never a chunk a player is
+            // not already paying for. What this switches off is every ticket nobody is standing
+            // next to, which is the whole of what an Anchor buys.
             allowAnchors = builder
                 .comment("Controls whether the Anchor upgrade does anything. With this disabled the",
-                    "Anchor can still be crafted and installed, but no chunk is ever force-loaded.")
+                    "Anchor can still be crafted and installed, but nothing is ever kept loaded",
+                    "while nobody is there: no anchored room, and no Workbay running while its",
+                    "owner is away. The bay column is still mirrored, which costs no chunk a",
+                    "player is not already loading by standing at the Workbay.")
                 .define("allowAnchors", true);
 
             maxAnchoredWorkbaysPerPlayer = builder
@@ -75,13 +120,47 @@ public class WorkbayConfig {
             maxAnchoredRoomsPerNetwork = builder
                 .comment("How many of a network's rooms may be anchored at once.",
                     "This is the number a host actually pays: an occupied room costs no ticket at",
-                    "all, and an anchored one holds 1, 4 or 9 chunks depending on its Room Frame.",
-                    "One anchored vast room is nine ticking chunks; four of them is thirty-six.")
+                    "all, and an anchored one has a footprint of 1, 4 or 9 chunks depending on its",
+                    "Room Frame - each of which reaches chunkTicketRadius further, so at the",
+                    "shipped radius of 1 an anchored room holds 9, 16 or 25 chunks. The room",
+                    "screen prints the real number beside each room.")
                 .defineInRange("maxAnchoredRoomsPerNetwork", 1, 0, 64);
 
+            // The ceiling is thirty days rather than one, because "offline chunk loading" is a
+            // knob every chunkloader mod in the genre has and a small friends' server wants it
+            // long: FTB-Chunks measures the same thing in days. Zero is the strictest setting
+            // there is -- tickets drop on the logout tick -- and five is the shipped middle.
             anchorGraceMinutes = builder
-                .comment("How long a player's anchored Workbays keep running after they log out.")
-                .defineInRange("anchorGraceMinutes", 5, 0, 1440);
+                .comment("How long a player's anchored Workbays and rooms keep running after they",
+                    "log out. This is the offline chunk-loading knob: 0 drops every ticket the",
+                    "moment they disconnect, and a large number is how a small server lets a",
+                    "friend's base keep running. Nothing is ever lost either way - a released",
+                    "chunk is a chain standing still, not a chain dropping a batch.")
+                .defineInRange("anchorGraceMinutes", 5, 0, 43_200);
+
+            // The number behind every chunk count this mod prints, and the one worth reading
+            // first: a ticket is a square, not a chunk. NeoForge's own controller always asks for
+            // radius 2 -- ticket level 31, a 5x5 square, 25 chunks for one bay column -- which is
+            // why this mod registers its own TicketType and asks directly (OPEN_ISSUES #60).
+            //
+            // <b>One is the shipped default and it is a quarter of the bill.</b> Radius 1 is
+            // level 32: block entities still tick and random ticks still happen, which is
+            // everything a hosted machine needs, and only entities freeze. What a host loses at 1
+            // is entity ticking in the Backshop -- a mob farm in an *anchored, empty* room stops
+            // while nobody is in it. Standing in the room gives entity ticking back for free,
+            // because a player loads their own chunks.
+            chunkTicketRadius = builder
+                .comment("How far every ticket this mod holds reaches, in chunks. The cost of one",
+                    "ticket is (2*r+1)^2 chunks, so 1 holds 9 and 2 holds 25 - this is the single",
+                    "biggest number in the mod's chunk bill.",
+                    "  1 (default): block entities and random ticks run, entities freeze.",
+                    "  2: entities tick too, at nearly three times the chunks.",
+                    "Hosted machines only ever needed 1. Raise it if your pack expects mobs or",
+                    "item entities to keep moving inside an anchored room nobody is standing in.")
+                .defineInRange("chunkTicketRadius",
+                    com.neryos.workbay.world.WorkbayTickets.MIN_RADIUS,
+                    com.neryos.workbay.world.WorkbayTickets.MIN_RADIUS,
+                    com.neryos.workbay.world.WorkbayTickets.MAX_RADIUS);
 
             // Also the length of the Expansion Plate ladder: the plate's maximum is this minus the
             // two bays a base Workbay already grants (WorkbayUpgrade.EXPANSION_PLATE). One number,
@@ -95,6 +174,32 @@ public class WorkbayConfig {
                     "installed: this minus two.")
                 .defineInRange("maxBaysPerWorkbay", 8, com.neryos.workbay.world.WorkbayRecord.BASE_BAYS,
                     com.neryos.workbay.world.BayGeometry.MAX_BAYS);
+
+            // The same shape as maxBaysPerWorkbay one line up, and for the same reason: the
+            // Annex Plate ladder is this minus the one room a Room Frame already grants, so the
+            // ceiling and the ladder cannot disagree about where the top is. Here rather than only
+            // in the recipes because a room is a chunk bill: four rooms at the Vast Frame is
+            // 4 x 9 chunks of footprint, and every one of them anchorable.
+            maxRoomsPerNetwork = builder
+                .comment("How many rooms one network may own. A Room Frame grants the first, so",
+                    "this also sets how many Annex Plates can be installed: this minus one.",
+                    "Lowering it never destroys a Plate somebody already spent - the cap is",
+                    "applied where the rooms are counted, not where one is installed.")
+                .defineInRange("maxRoomsPerNetwork",
+                    com.neryos.workbay.world.RoomGeometry.MAX_ROOMS, 1,
+                    com.neryos.workbay.world.RoomGeometry.MAX_ROOMS);
+
+            // The Resonator's switch, the same shape as allowAnchors: always register the item and
+            // gate its behaviour, never the registry (SPEC.md §13). A host who does not want a
+            // network reaching into the Nether or into somebody's End base sets this false and the
+            // upgrade cannot be installed; every cross-dimension link then reads "Needs Resonator"
+            // for ever, which is the refusal already drawn on the row.
+            allowCrossDimensionLinks = builder
+                .comment("Whether the Resonator upgrade does anything. With this disabled the",
+                    "Resonator cannot be installed and no link may cross a dimension boundary;",
+                    "links inside one dimension, and links into this network's own bays and",
+                    "rooms, are unaffected.")
+                .define("allowCrossDimensionLinks", true);
 
             maxNetworksPerPlayer = builder
                 .comment("How many separate Workbay networks one player may own. An unbound Workbay",
@@ -153,21 +258,30 @@ public class WorkbayConfig {
 
             // ------------------------------------------------------------------ running cost
             //
-            // SPEC.md §9's three layers, and the two that are not zero. <b>Knobs rather than
-            // constants, and shipped at XNet's own numbers</b>, because §9 calls them "a
-            // calibration start": what a link is worth to run depends on the pack it is in, and
-            // the first person to disagree with these should not have to fork the mod. Setting
-            // both to zero gives back exactly the behaviour that shipped, where the buffer was
-            // drawn, saved and spent by nothing at all -- OPEN_ISSUES #72.
+            // SPEC.md §9's three layers, as knobs rather than constants -- what a link is worth to
+            // run depends on the pack it is in, and §9 calls its own numbers "a calibration start".
+            //
+            // <b>Both ship at zero, and that is the decision, not the knob.</b> The buffer is
+            // spent now (OPEN_ISSUES #72), so a non-zero fee means an unpowered Workbay moves
+            // nothing -- and a player running vanilla plus this mod has no source of FE in the
+            // world at all. XNet has the same shape and its players prime a network by touching a
+            // generator to it and taking it away again, which is an implementation detail escaping
+            // into the game; there is an open request asking XNet for exactly the switch below.
+            // A pack author knows whether energy mods are present. A solo player does not, and
+            // must never install this and find it inert. So the cost is opt-in: a pack that ships
+            // energy turns it on, at XNet's own numbers (1 and 2), which is what these were.
             feePerLinkPerTick = builder
                 .comment("FE per tick for each link that is switched on, whether or not it moves",
-                    "anything. The standing cost of having automation at all.")
-                .defineInRange("feePerLinkPerTick", 1, 0, 10_000);
+                    "anything - the standing cost of having automation at all. ZERO BY DEFAULT:",
+                    "a mod that needs FE to do anything is inert in an install with no energy mod,",
+                    "and only a pack author knows whether there is one. XNet's own number is 1.")
+                .defineInRange("feePerLinkPerTick", 0, 0, 10_000);
 
             feePerOperation = builder
                 .comment("FE for one move by one link. Taken before the move, so a link that",
-                    "cannot pay does not move and says so; nothing is ever half-moved.")
-                .defineInRange("feePerOperation", 2, 0, 10_000);
+                    "cannot pay does not move and says so; nothing is ever half-moved.",
+                    "Zero by default, for the reason above. XNet's own number is 2.")
+                .defineInRange("feePerOperation", 0, 0, 10_000);
 
             builder.pop();
 

@@ -1132,11 +1132,15 @@ public class RoomTests {
     /**
      * The room screen prints what anchoring costs, and it was printing the wrong number.
      *
-     * <p>"Holding 1 chunk loaded" is the count of <b>tickets</b>. A forced chunk is held at the
-     * entity-ticking level and drags its neighbours up to loaded two chunks out, so one ticket is a
-     * five-by-five square: measured in the Backshop, a tier-1 room really held twenty-five and a
-     * Vast room forty-nine against a printed nine. The footprint is still on the line above; this
-     * is the line that says what a server owner is paying.
+     * <p>"Holding 1 chunk loaded" is the count of <b>tickets</b>. A forced chunk drags its
+     * neighbours up to loaded as far as the ticket reaches, so one ticket is a square: the
+     * footprint is still on the line above, and this is the line that says what a server owner is
+     * paying.
+     *
+     * <p><b>And it is now nine and not twenty-five</b>, because {@code chunkTicketRadius} ships at
+     * 1 rather than the 2 NeoForge's controller always asked for (OPEN_ISSUES #60). The shipped
+     * radius is asserted first, so a change back to 2 fails here rather than quietly tripling
+     * every host's bill, and the formula is checked against the one number nobody can argue with.
      *
      * <p>Counted in the world rather than computed, so the assertion is over what the chunk source
      * answers and not over the formula restated.
@@ -1147,6 +1151,11 @@ public class RoomTests {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
 
         test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            helper.assertValueEqual(com.neryos.workbay.world.WorkbayTickets.radius(), 1,
+                "the shipped chunkTicketRadius");
+            helper.assertValueEqual(RoomGeometry.anchorChunks(1), 9,
+                "chunks one ticket at the shipped radius holds around a one-chunk room");
+
             Site site = site(helper, 1, 0, 1);
             helper.assertTrue(RoomVisit.enter(site.player(), site.record(), 0), "room refused");
             RoomVisit.leave(site.player());

@@ -31,7 +31,16 @@ public enum WorkbayUpgrade implements StringRepresentable {
     EXPANSION_PLATE("expansion_plate",
         () -> WorkbayConfig.SERVER.maxBaysPerWorkbay.get() - WorkbayRecord.BASE_BAYS,
         () -> WBItems.EXPANSION_PLATE.get()),
-    RESONATOR("resonator", () -> 1,
+    /**
+     * Cross-dimension reach, and a host's switch over it. Its max is
+     * {@code allowCrossDimensionLinks} for the same reason the Anchor's is {@code allowAnchors}:
+     * a host who does not want one network reaching into somebody else's End base gets an upgrade
+     * that cannot be installed, rather than a registry that changes shape (SPEC.md §13). Every
+     * cross-dimension link then reads "Needs Resonator" for ever, which is a refusal the row
+     * already draws.
+     */
+    RESONATOR("resonator",
+        () -> WorkbayConfig.SERVER.allowCrossDimensionLinks.get() ? 1 : 0,
         () -> WBItems.RESONATOR.get()),
     MULTICHANNEL("multichannel", () -> 1,
         () -> WBItems.MULTICHANNEL.get()),
@@ -79,9 +88,15 @@ public enum WorkbayUpgrade implements StringRepresentable {
     ANCHOR("anchor", () -> WorkbayConfig.SERVER.allowAnchors.get() ? 1 : 0,
         () -> WBItems.ANCHOR.get()),
 
-    /** +1 room each, at whatever size the Frame says. Three, so the ceiling is four rooms. */
+    /**
+     * +1 room each, at whatever size the Frame says. The ceiling is {@code maxRoomsPerNetwork}
+     * minus the one room a Room Frame already grants — derived from that knob rather than being a
+     * second one, exactly as the Expansion Plate is derived from {@code maxBaysPerWorkbay}: two
+     * numbers that can disagree about the same ceiling is how a player ends up holding a plate
+     * that installs and does nothing. A room is a chunk bill, so it is a number a host owns.
+     */
     ANNEX_PLATE("annex_plate",
-        () -> com.neryos.workbay.world.RoomGeometry.MAX_ROOMS - 1,
+        () -> WorkbayConfig.SERVER.maxRoomsPerNetwork.get() - 1,
         () -> WBItems.ANNEX_PLATE.get());
 
     /**

@@ -163,15 +163,31 @@ public class ConnectorBlock extends BaseEntityBlock {
         // have been a second screen, a second packet and a second place for "what is this called"
         // to live; renaming an item is the game's own answer to the same question. Empty custom
         // name leaves the link deriving its name from its target, exactly as before.
-        addLink(level, pos, state, connector, BusConfig.Resource.ITEM,
+        addLink(level, pos, state, connector,
+            connector.pairing().map(ConnectorPairing::bay).orElse(0), BusConfig.Resource.ITEM,
             placer instanceof Player player ? player : null,
             nameOn(stack));
     }
 
     /**
-     * Right-clicking a placed Connector with an empty hand adds the next resource type it does not
-     * already carry. Base is one type per Connector; Multichannel is what buys the other two, and
-     * the refusal names it rather than doing nothing.
+     * Right-clicking a placed Connector with an empty hand adds <b>the next link this Connector
+     * could carry</b>, and the chat line says where it landed.
+     *
+     * <p>The ladder runs over resources first and bays second: every resource this install has
+     * that the Connector's own bay does not already carry -- one without a Multichannel, all of
+     * them with -- and then the same again on the next bay of the network. <b>That second half is
+     * OPEN_ISSUES #77.</b> A chest feeding bay 1 could not also feed bay 2, and nothing in the
+     * storage was stopping it: a {@code BusConfig} carries its own bay and its own Connector
+     * position, and nothing keys a link by Connector, so two links on one Connector pointing at
+     * two bays persisted and ran already. What refused them was this method counting
+     * {@code linksAt(pos)} per <em>Connector</em> instead of per bay.
+     *
+     * <p>Making the second click do something is the whole gesture. A placed Connector has no way
+     * to be told a bay -- this method cannot see the screen's selection -- and the alternatives
+     * were a re-stamp from the Pair button or a third list on the Add picker, both of which are a
+     * screen for a question the world already answers: a link can be handed to any bay afterwards
+     * ({@code LINK_ASSIGN_BAY}), so the click only has to <em>make</em> one. The refusal that is
+     * left is "every bay is served", which is the true one.
      */
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
@@ -186,7 +202,7 @@ public class ConnectorBlock extends BaseEntityBlock {
             WorkbaySounds.refuse(player, WorkbayLang.message("connector_unpaired"));
             return InteractionResult.CONSUME;
         }
-        BusConfig.Resource next = nextFreeResource(level, pos, connector);
+        Slot next = nextFree(level, pos, connector);
         if (next == null) {
             WorkbaySounds.refuse(player, WorkbayLang.message("connector_full"));
             return InteractionResult.CONSUME;
@@ -194,7 +210,7 @@ public class ConnectorBlock extends BaseEntityBlock {
         // The second and third resources on one Connector take the name the first one was given,
         // because they are the same Connector and the player named the Connector, not the row.
         String named = workbayNameAt(level, pos, connector);
-        addLink(level, pos, state, connector, next, player, named);
+        addLink(level, pos, state, connector, next.bay(), next.resource(), player, named);
         return InteractionResult.CONSUME;
     }
 
@@ -213,22 +229,40 @@ public class ConnectorBlock extends BaseEntityBlock {
         super.onRemove(state, level, pos, newState, movedByPiston);
     }
 
+    /** One link this Connector does not carry yet: which bay it lands on, and what it moves. */
+    private record Slot(int bay, BusConfig.Resource resource) {}
+
+    /**
+     * The next link this Connector could carry, or null when every bay of the network is served.
+     *
+     * <p>Bays are walked from the Connector's own pairing and round, so the first click after
+     * placing always lands where the tooltip on the item said it would, and only a Connector whose
+     * own bay is full reaches for another. The cap is per <b>bay</b>: one resource, or every
+     * resource this install has once a Multichannel is in.
+     */
     @Nullable
-    private static BusConfig.Resource nextFreeResource(Level level, BlockPos pos, ConnectorBlockEntity connector) {
+    private static Slot nextFree(Level level, BlockPos pos, ConnectorBlockEntity connector) {
         WorkbayBlockEntity workbay = connector.workbay().orElse(null);
-        if (workbay == null) {
+        com.neryos.workbay.world.WorkbayRecord record =
+            workbay == null ? null : workbay.record().orElse(null);
+        if (record == null) {
             return null;
         }
         List<BusConfig> here = workbay.linksAt(GlobalPos.of(level.dimension(), pos));
-        int cap = workbay.record().map(r -> r.upgrades().multichannel() > 0
-            ? multichannelLinks() : BASE_LINKS).orElse(BASE_LINKS);
-        if (here.size() >= cap) {
-            return null;
-        }
-        for (BusConfig.Resource resource : BusConfig.Resource.values()) {
-            if (resource.available()
-                && here.stream().noneMatch(link -> link.resource() == resource)) {
-                return resource;
+        int cap = record.upgrades().multichannel() > 0 ? multichannelLinks() : BASE_LINKS;
+        int bays = record.bayCapacity();
+        int from = connector.pairing().map(ConnectorPairing::bay).orElse(0);
+        for (int step = 0; step < bays; step++) {
+            int bay = (from + step) % bays;
+            List<BusConfig> onBay = here.stream().filter(link -> link.bay() == bay).toList();
+            if (onBay.size() >= cap) {
+                continue;
+            }
+            for (BusConfig.Resource resource : BusConfig.Resource.values()) {
+                if (resource.available()
+                    && onBay.stream().noneMatch(link -> link.resource() == resource)) {
+                    return new Slot(bay, resource);
+                }
             }
         }
         return null;
@@ -252,8 +286,8 @@ public class ConnectorBlock extends BaseEntityBlock {
     }
 
     private static void addLink(Level level, BlockPos pos, BlockState state,
-        ConnectorBlockEntity connector, BusConfig.Resource resource, @Nullable Player player,
-        String name) {
+        ConnectorBlockEntity connector, int bay, BusConfig.Resource resource,
+        @Nullable Player player, String name) {
         WorkbayBlockEntity workbay = connector.workbay().orElse(null);
         if (workbay == null) {
             if (player != null) {
@@ -266,7 +300,7 @@ public class ConnectorBlock extends BaseEntityBlock {
         // Stamped here and nowhere else: this is the one moment the block at the far end is known
         // to be loaded, and from now on the screen can say "Chest" rather than two coordinates and
         // the flow map can draw the chest. See BusConfig#targetBlock.
-        workbay.addBus(BusConfig.create(UUID.randomUUID(), pairing.bay(), resource,
+        workbay.addBus(BusConfig.create(UUID.randomUUID(), bay, resource,
             BusConfig.Mode.INSERT,
             GlobalPos.of(level.dimension(), pos),
             GlobalPos.of(level.dimension(), targetPos))
@@ -276,7 +310,8 @@ public class ConnectorBlock extends BaseEntityBlock {
             .withName(name));
         if (player != null) {
             WorkbaySounds.confirm(player, WorkbayLang.message("connector_linked",
-                level.getBlockState(target(state, pos)).getBlock().getName(), pairing.code()),
+                level.getBlockState(target(state, pos)).getBlock().getName(), bay + 1,
+                pairing.code()),
                 net.minecraft.sounds.SoundEvents.COPPER_BULB_TURN_ON, 1.0F);
         }
     }

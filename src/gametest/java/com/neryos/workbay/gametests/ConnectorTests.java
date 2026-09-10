@@ -189,11 +189,15 @@ public class ConnectorTests {
     }
 
     /**
-     * Base behaviour is one resource type per Connector, and Multichannel is what buys the other
+     * Base behaviour is one resource type <b>per bay</b>, and Multichannel is what buys the other
      * two. If the cap stops being enforced, the upgrade stops meaning anything.
+     *
+     * <p>Per bay and not per Connector since OPEN_ISSUES #77. The counts here are therefore
+     * {@code cap * bays}, and the assertion that matters is the per-bay one: a Connector that
+     * carried four item links on one bay would satisfy a total and be nonsense.
      */
     @GameTest
-    @TestHolder(description = "A Connector carries one resource type, or all three with Multichannel.")
+    @TestHolder(description = "A Connector carries one resource type per bay, or all of them with Multichannel.")
     public static void multichannelRaisesTheOneTypeCap(final DynamicTest test) {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
 
@@ -207,11 +211,22 @@ public class ConnectorTests {
             level.setBlock(chestPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
             WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
             place(level, connectorPos, Direction.DOWN, paired(level, workbay), player);
+            int bays = workbay.record().orElseThrow().bayCapacity();
+            helper.assertTrue(bays >= 2, "a base Workbay is supposed to have two bays, not " + bays);
 
-            // Base: asking for a second type does nothing at all.
-            poke(level, connectorPos, player);
-            helper.assertValueEqual(workbay.buses().size(), 1,
-                "links on a base Connector after asking for a second type");
+            // Base: one item link on every bay, and then nothing. Poked twice past the ceiling so
+            // a cap that is off by one is a failure rather than a coincidence.
+            for (int attempt = 0; attempt < bays + 2; attempt++) {
+                poke(level, connectorPos, player);
+            }
+            helper.assertValueEqual(workbay.buses().size(), bays,
+                "links on a base Connector poked past every bay it can feed");
+            for (int bay = 0; bay < bays; bay++) {
+                int on = bay;
+                helper.assertValueEqual(
+                    workbay.buses().stream().filter(link -> link.bay() == on).count(), 1L,
+                    "links a base Connector holds on bay " + (bay + 1));
+            }
 
             // With Multichannel it carries every resource that exists in this install, and no
             // more. Four here, because the gametest server has Mekanism and therefore chemicals;
@@ -222,15 +237,101 @@ public class ConnectorTests {
             registry.put(record.withUpgrades(record.upgrades()
                 .plus(com.neryos.workbay.content.workbay.WorkbayUpgrade.MULTICHANNEL)));
 
-            for (int attempt = 0; attempt < all + 1; attempt++) {
+            for (int attempt = 0; attempt < all * bays + 1; attempt++) {
                 poke(level, connectorPos, player);
             }
-            helper.assertValueEqual(workbay.buses().size(), all,
+            helper.assertValueEqual(workbay.buses().size(), all * bays,
                 "links on a Multichannel Connector after one more attempt than it can hold");
-            helper.assertValueEqual(
-                workbay.buses().stream().map(BusConfig::resource).distinct().count(), (long) all,
-                "distinct resource types on one Multichannel Connector");
+            for (int bay = 0; bay < bays; bay++) {
+                int on = bay;
+                helper.assertValueEqual(workbay.buses().stream()
+                    .filter(link -> link.bay() == on)
+                    .map(BusConfig::resource).distinct().count(), (long) all,
+                    "distinct resource types one Multichannel Connector holds on bay " + (bay + 1));
+            }
             helper.succeed();
+        });
+    }
+
+    /**
+     * OPEN_ISSUES #77. <b>One chest, two bays.</b> A Connector paired to bay 1 could not also feed
+     * bay 2 — and nothing in the storage was stopping it, which is why this is a regression test
+     * over behaviour rather than over a count: a {@code BusConfig} always carried its own bay and
+     * its own Connector position, so the pair of links this makes would have persisted and run in
+     * every version. What refused to <em>make</em> them was one cap counted per Connector instead
+     * of per bay.
+     *
+     * <p>Both links pull the same chest into a different bay, so the assertion is that iron
+     * arrives in <em>both</em> racked chests. A test that only counted rows would pass against a
+     * runner that quietly ran one of them.
+     */
+    @GameTest(timeoutTicks = 600)
+    @TestHolder(description = "One Connector on one chest feeds two different bays.")
+    public static void oneConnectorFeedsTwoBays(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos chestPos = helper.absolutePos(new BlockPos(4, 1, 4));
+            BlockPos connectorPos = chestPos.above();
+
+            level.setBlock(chestPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer()
+                .getLevel(com.neryos.workbay.world.WorkbayDimensions.BACKSHOP);
+            com.neryos.workbay.world.BayHosting.rack(backshop, record.bayColumn(), 0,
+                new ItemStack(Blocks.CHEST), player, Direction.NORTH);
+            com.neryos.workbay.world.BayHosting.rack(backshop, record.bayColumn(), 1,
+                new ItemStack(Blocks.CHEST), player, Direction.NORTH);
+
+            // Placing the Connector makes the link on the bay it was stamped with; the second
+            // right-click is the whole of the new gesture and lands on the next bay.
+            place(level, connectorPos, Direction.DOWN, paired(level, workbay), player);
+            poke(level, connectorPos, player);
+
+            GlobalPos here = GlobalPos.of(level.dimension(), connectorPos);
+            java.util.List<BusConfig> links = workbay.linksAt(here);
+            helper.assertValueEqual(links.size(), 2,
+                "links one Connector holds after being asked for a second bay");
+            helper.assertValueEqual(links.stream().map(BusConfig::bay).distinct().count(), 2L,
+                "distinct bays two links on one Connector point at");
+
+            // Pulling, not pushing: the chest is the source and each bay is a sink, so both links
+            // are EXTRACT and both are switched on. The chest holds enough for both.
+            if (level.getBlockEntity(chestPos) instanceof net.minecraft.world.Container chest) {
+                chest.setItem(0, new ItemStack(net.minecraft.world.item.Items.IRON_INGOT, 64));
+            }
+            for (BusConfig link : links) {
+                workbay.addBus(link.withMode(BusConfig.Mode.EXTRACT).withEnabled(true)
+                    .withRate(4).withSpeed(20));
+            }
+
+            helper.startSequence()
+                .thenIdle(160)
+                .thenExecute(() -> {
+                    for (int bay = 0; bay < 2; bay++) {
+                        BlockPos machine = com.neryos.workbay.world.BayGeometry
+                            .machinePos(record.bayColumn(), bay);
+                        int got = 0;
+                        if (backshop.getBlockEntity(machine)
+                            instanceof net.minecraft.world.Container hosted) {
+                            for (int slot = 0; slot < hosted.getContainerSize(); slot++) {
+                                if (hosted.getItem(slot)
+                                    .is(net.minecraft.world.item.Items.IRON_INGOT)) {
+                                    got += hosted.getItem(slot).getCount();
+                                }
+                            }
+                        }
+                        if (got <= 0) {
+                            helper.fail("bay " + (bay + 1) + " got no iron: one Connector is still"
+                                + " only feeding one bay");
+                        }
+                    }
+                })
+                .thenSucceed();
         });
     }
 

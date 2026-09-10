@@ -725,6 +725,13 @@ public class BusTests {
      * moves <b>nothing</b> and every link says why, and the same rig with the buffer full moves
      * what it always did. Without the second half this test passes just as well against a mod
      * where links never work at all.
+     *
+     * <p><b>The fees ship at zero, so this test turns them on and says so.</b> A mod that needs FE
+     * before it does anything is inert in an install with no energy mod, and only a pack author
+     * knows whether there is one -- so the cost is opt-in and the default is free. It asserts the
+     * shipped zeros before writing XNet's own numbers over them, which is what stops it going
+     * vacuous in either direction: a mod that started charging by default would fail here, and so
+     * would one that stopped charging when asked to.
      */
     @GameTest(timeoutTicks = 900)
     @TestHolder(description = "A link with an empty buffer moves nothing, and moves again once it is fed.")
@@ -748,6 +755,14 @@ public class BusTests {
             BusConfig link = connect(helper, workbay, targetPos.above(), Direction.DOWN, player);
             workbay.addBus(link.withRate(4).withSpeed(20));
 
+            var config = com.neryos.workbay.config.WorkbayConfig.SERVER;
+            int wasStanding = config.feePerLinkPerTick.get();
+            int wasMove = config.feePerOperation.get();
+            helper.assertValueEqual(wasStanding, 0, "the shipped standing fee per link per tick");
+            helper.assertValueEqual(wasMove, 0, "the shipped fee per move");
+            config.feePerLinkPerTick.set(1);
+            config.feePerOperation.set(2);
+
             // setUp pays the bill for every other test here. This one is the bill.
             workbay.energy().deserializeNBT(null, net.minecraft.nbt.IntTag.valueOf(0));
 
@@ -770,6 +785,12 @@ public class BusTests {
                         throw new GameTestAssertException("the link never started again after the "
                             + "buffer was filled, so the fee is not a fee but a wall");
                     }
+                })
+                // Put the shipped free-to-run defaults back, or every test that follows this one
+                // in the same server pays a bill it never asked for.
+                .thenExecute(() -> {
+                    config.feePerLinkPerTick.set(wasStanding);
+                    config.feePerOperation.set(wasMove);
                 })
                 .thenExecute(() -> tearDown(helper, workbayPos))
                 .thenSucceed();

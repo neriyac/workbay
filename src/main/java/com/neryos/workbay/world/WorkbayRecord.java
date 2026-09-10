@@ -127,7 +127,12 @@ public record WorkbayRecord(
         if (upgrades.roomTier() <= 0) {
             return 0;
         }
-        return Math.min(1 + upgrades.annexPlates(), RoomGeometry.MAX_ROOMS);
+        // Capped here rather than at install time, the way bayCapacity is, so lowering
+        // maxRoomsPerNetwork never destroys an Annex Plate somebody already spent. MAX_ROOMS is
+        // still the hard ceiling: the region allocator reserves a footprint per slot.
+        return Math.min(Math.min(1 + upgrades.annexPlates(),
+            com.neryos.workbay.config.WorkbayConfig.SERVER.maxRoomsPerNetwork.get()),
+            RoomGeometry.MAX_ROOMS);
     }
 
     public int bayCapacity() {

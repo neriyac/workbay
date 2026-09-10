@@ -98,9 +98,11 @@ public class WBLanguageProvider extends LanguageProvider {
             + "the block you want to link.");
         add(WorkbayLang.messageKey("connector_unpaired"), "This Connector isn't paired yet. "
             + "Right-click a Workbay with it first.");
-        add(WorkbayLang.messageKey("connector_linked"), "Linked to %s. Workbay %s has a row for it, "
-            + "switched off until you turn it on.");
-        add(WorkbayLang.messageKey("connector_full"), "This Connector already carries everything it "
+        add(WorkbayLang.messageKey("connector_linked"), "Linked to %s on bay %s. Workbay %s has a "
+            + "row for it, switched off until you turn it on.");
+        // Only reachable once every bay of the network is served, since OPEN_ISSUES #77: a second
+        // right-click on a full Connector now lands on the next bay instead of refusing.
+        add(WorkbayLang.messageKey("connector_full"), "This Connector already feeds every bay it "
             + "can. Install a Multichannel Upgrade to carry items, fluids and energy on one.");
         add(WorkbayLang.messageKey("connector_no_workbay"), "The Workbay this Connector is paired "
             + "to isn't loaded. Go back to it and place this again.");
