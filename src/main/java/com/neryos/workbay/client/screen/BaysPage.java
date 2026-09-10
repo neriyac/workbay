@@ -52,6 +52,12 @@ class BaysPage extends WorkbayPage {
     private static final int RACK_Y = 50;
 
     private static final int LINKS_Y_FROM_BOTTOM = 146;
+
+    /**
+     * The highest a filter panel that has outgrown the links area may start: just under the
+     * summary line, which is the first row of the page that is not chrome.
+     */
+    private static final int PANEL_TOP = 48;
     private static final int ROW_PITCH = 20;
     /** The filter panel nine slots. Its own name, because it is not the list row pitch. */
     private static final int SLOT_PITCH = 20;
@@ -192,20 +198,9 @@ class BaysPage extends WorkbayPage {
     @org.jetbrains.annotations.Nullable
     private static UUID editingFilter;
 
-    /**
-     * The page's ceiling, which is <b>taller while the filter panel is open</b>. The panel carries
-     * the player's own inventory now, and the links area it is centred in was never sized for one
-     * -- five rows of links is 130 pixels and the panel needs the best part of 200. Raising the cap
-     * only while it is open costs nothing the rest of the time; {@code availableHeight} still has
-     * the last word, so a short window shrinks the whole thing as it always did.
-     */
-    private static int maxHeight() {
-        return editingFilter != null ? MAX_HEIGHT + 96 : MAX_HEIGHT;
-    }
-
     BaysPage(WorkbayScreen screen) {
         super(screen);
-        height = Math.clamp(screen.availableHeight() - 8, MIN_HEIGHT, maxHeight());
+        height = Math.clamp(screen.availableHeight() - 8, MIN_HEIGHT, MAX_HEIGHT);
         // Eight bay slots always fit, however short the window is; they lose pitch, not slots.
         rackPitch = Math.clamp((height - RACK_Y - 12) / BayGeometry.MAX_BAYS, 20, 26);
         slot = rackPitch - 2;
@@ -1272,12 +1267,7 @@ class BaysPage extends WorkbayPage {
             // direction arrow beside it already uses for insert and extract.
             g.fill(px, py + 16, px + 16, py + 17, filter.deny() ? Draw.AMBER : Draw.BLUE);
         }
-        screen.hit(px, py, 16, 16, () -> {
-                editingFilter = config.id();
-                // The page is a different height with the panel open, and height is worked out in
-                // the constructor -- so the panel has to be built, not merely drawn.
-                screen.relayout();
-            },
+        screen.hit(px, py, 16, 16, () -> editingFilter = config.id(),
             filter.isEmpty()
                 ? WorkbayScreen.gui("filter.none")
                 : WorkbayScreen.gui(filter.deny() ? "filter.some.deny" : "filter.some.allow",
@@ -1310,11 +1300,30 @@ class BaysPage extends WorkbayPage {
         // A chemical filter has no items to pick from -- it is named off the tank (#41) -- so it
         // is the one resource whose panel carries no inventory.
         boolean pickable = config.resource() != BusConfig.Resource.CHEMICAL;
-        int panelH = SLOT_PITCH + 26 + STEP_H + 4
-            + (config.resource() == BusConfig.Resource.CHEMICAL ? 14 : 0)
+        int panelH = STEP_H + 10 + SLOT_PITCH
+            + (config.resource() == BusConfig.Resource.CHEMICAL ? 40 : 16)
             + (pickable ? INVENTORY_H : 0);
         int blockH = 18 + 6 + panelH;
-        int blockY = y(linksY) + (18 + rows * ROW_PITCH + 12 - blockH) / 2;
+
+        // <b>Centred in the links area while it fits, and standing above it when it does not.</b>
+        // With the player's inventory in it the panel is a hundred and seventy pixels and the list
+        // area is a hundred and thirty, so centring put the last row of the inventory off the
+        // bottom of the page -- photographed. It is a dialog and a dialog may cover the page it is
+        // over, so when it outgrows the list it starts under the summary line instead and uses the
+        // room the rack and the machine panel were using. They keep drawing to its left and above
+        // it; the catch-all below is what stops a click landing on one of them through it.
+        int listTop = y(linksY);
+        int listH = 18 + rows * ROW_PITCH + 12;
+        int blockY = blockH <= listH ? listTop + (listH - blockH) / 2
+            : Math.max(y(PANEL_TOP), y(height - 10) - blockH);
+
+        // Registered first, so every control the panel draws later wins the click and nothing
+        // underneath it does. Hits dispatch in reverse registration order.
+        screen.swallow(x(LIST_X), blockY, LIST_W, blockH);
+        // And its own background, because the heading row used to sit on whatever the page had
+        // drawn there. Inside the links area that was empty space; standing over the machine panel
+        // it was the in/out key showing through the title. Photographed.
+        Draw.band(g, x(LIST_X), blockY, LIST_W, 24);
 
         // Heading and link name as one string. They used to sit at opposite ends of the row with
         // the mode button between them, and the first screenshot of this panel read the middle and
@@ -1369,6 +1378,7 @@ class BaysPage extends WorkbayPage {
         for (int slot = 0; slot < com.neryos.workbay.bus.BusFilter.MAX; slot++) {
             filterEntry(g, x(slotsX + slot * SLOT_PITCH), entriesY, config, slot);
         }
+        int sentenceY = entriesY + SLOT_PITCH + 4;
         // One sentence, and it has to be true of what is on screen. It said "Nothing listed. This
         // link carries everything." over a slot with something in it -- caught on the first
         // screenshot of the panel with an entry, which is exactly what reading the geometry in an
@@ -1378,13 +1388,13 @@ class BaysPage extends WorkbayPage {
             : filter.isEmpty() ? "filter.empty"
             : filter.deny() ? "filter.listed.deny" : "filter.listed.allow";
         textCentre(g, WorkbayScreen.gui(said).getString(),
-            x(LIST_X + LIST_W / 2), panelY + SLOT_PITCH + 12 + STEP_H + 4, LIST_W - 16,
+            x(LIST_X + LIST_W / 2), sentenceY, LIST_W - 16,
             carrying ? Draw.SELECT : Draw.TEXT_FAINT);
-        inventory(g, mouseX, mouseY, config, entriesY + SLOT_PITCH + 14);
+        inventory(g, mouseX, mouseY, sentenceY + 14);
     }
 
-    /** Four rows of nine at eighteen pixels, plus the line that says what it is for. */
-    private static final int INVENTORY_H = 4 * 18 + 3 + 12;
+    /** Four rows of nine at eighteen pixels, the hotbar's own gap, and the line above them. */
+    private static final int INVENTORY_H = 12 + 4 * 18 + 3;
 
     /**
      * <b>The player's own inventory, inside the filter panel.</b>
@@ -1402,7 +1412,7 @@ class BaysPage extends WorkbayPage {
      * something already on the cursor puts it back rather than swapping, because a swap here would
      * be the only place in the mod where an inventory cell changed.
      */
-    private void inventory(GuiGraphics g, int mouseX, int mouseY, BusConfig config, int py) {
+    private void inventory(GuiGraphics g, int mouseX, int mouseY, int py) {
         var player = net.minecraft.client.Minecraft.getInstance().player;
         if (player == null) {
             return;
@@ -1545,7 +1555,6 @@ class BaysPage extends WorkbayPage {
     private void closeFilter() {
         screen.carry(ItemStack.EMPTY);
         editingFilter = null;
-        screen.relayout();
     }
 
     /**

@@ -161,17 +161,6 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         return page;
     }
 
-    /**
-     * Builds the current page again, at whatever size it now wants to be.
-     *
-     * <p>A page works its geometry out in its constructor, so a page that changes height while it
-     * is open -- BAYS does, when the filter panel opens and brings the player's inventory with it
-     * -- has to be rebuilt rather than merely redrawn. {@link #goTo} is the same call with a page
-     * change attached; this is the half without one.
-     */
-    public void relayout() {
-        init(minecraft, width, height);
-    }
 
     public WorkbaySnapshot snapshot() {
         return menu.snapshot();
@@ -393,22 +382,40 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         boolean test(double mx, double my);
     }
 
+    /**
+     * {@code ring} is false for a region that exists only to <b>swallow</b> a click — a dialog's
+     * own background, standing over controls that are still registered underneath it. The hover
+     * ring is drawn from this list, so without the flag pointing anywhere inside an open panel
+     * outlined the whole panel. Photographed.
+     */
     private record Hit(int x, int y, int w, int h, @Nullable Inside shape, Runnable onClick,
-        @Nullable List<Component> tooltip) {
+        @Nullable List<Component> tooltip, boolean ring) {
         boolean contains(double mx, double my) {
             return mx >= x && mx < x + w && my >= y && my < y + h
                 && (shape == null || shape.test(mx, my));
         }
     }
 
+    /**
+     * A region that takes a click and does nothing with it, so nothing registered underneath gets
+     * it. What an open dialog puts behind itself: the page's own controls are still in the list and
+     * still where they were drawn, and hits dispatch in reverse registration order, so a panel
+     * drawn over them needs one of these under its own controls. It draws no hover ring, because
+     * it is not a control.
+     */
+    public void swallow(int x, int y, int w, int h) {
+        hits.add(new Hit(x, y, w, h, null, () -> { }, null, false));
+    }
+
     /** Registers a clickable region in screen coordinates. Called by a page while it draws. */
     public void hit(int x, int y, int w, int h, Runnable onClick, Component... tooltip) {
-        hits.add(new Hit(x, y, w, h, null, onClick, tooltip.length == 0 ? null : List.of(tooltip)));
+        hits.add(new Hit(x, y, w, h, null, onClick, tooltip.length == 0 ? null : List.of(tooltip), true));
     }
 
     /** The same, for a region that is not a rectangle: the box is tested first, then the shape. */
     public void hit(int x, int y, int w, int h, Inside shape, Runnable onClick, Component... tooltip) {
-        hits.add(new Hit(x, y, w, h, shape, onClick, tooltip.length == 0 ? null : List.of(tooltip)));
+        hits.add(new Hit(x, y, w, h, shape, onClick,
+            tooltip.length == 0 ? null : List.of(tooltip), true));
     }
 
     /**
@@ -494,6 +501,9 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
             Hit hit = hits.get(i);
             if (!hit.contains(mouseX, mouseY)) {
                 continue;
+            }
+            if (!hit.ring()) {
+                return;
             }
             int where = hit.x() * 31 + hit.y();
             if (where != ringOn) {
