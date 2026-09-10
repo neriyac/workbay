@@ -439,6 +439,12 @@ public class PerfBench {
         WBBlocks.WORKBAY.get().setPlacedBy(level, at, level.getBlockState(at), player,
             new ItemStack(WBBlocks.WORKBAY.get()));
         WorkbayBlockEntity workbay = (WorkbayBlockEntity) level.getBlockEntity(at);
+        // Powered, because a real one has to be: SPEC.md §9 charges the buffer for every
+        // link that is switched on and again for every move, so an unfed Workbay runs
+        // nothing and every link on it reads NO_POWER. OPEN_ISSUES #72. A test that is not
+        // about the bill pays it up front and says so here.
+        workbay.energy().deserializeNBT(null,
+            net.minecraft.nbt.IntTag.valueOf(WorkbayBlockEntity.BUFFER_FE));
         RoomRegistry registry = RoomRegistry.get(level.getServer());
         workbay.bindTo(registry.create(java.util.UUID.randomUUID(), "bench",
             level.getRandom()).id());

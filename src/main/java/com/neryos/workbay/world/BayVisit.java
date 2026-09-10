@@ -172,7 +172,37 @@ public final class BayVisit {
             forget(player);
             return false;
         }
+        announce(player, record, bay);
         return true;
+    }
+
+    /**
+     * <b>Which bay this is, said on arrival.</b> A bay is a small grey room with one machine in it
+     * and every one of the eight looks exactly the same, so a player standing in one had nothing
+     * anywhere telling them which they were in or whose Workbay it belonged to. OPEN_ISSUES #66.
+     *
+     * <p>A title rather than a sign on the Port wall, which was the other suggestion: the question
+     * is asked the moment you arrive and not again, a title answers it then and takes no room, and
+     * a sign is a real block that a player can break and that has to be rewritten every time the
+     * bay is renamed. The subtitle carries the two things the number alone does not -- what is in
+     * the bay, and which network it belongs to, which is the answer for anyone who owns more than
+     * one Workbay.
+     */
+    private static void announce(ServerPlayer player, WorkbayRecord record, int bay) {
+        player.connection.send(
+            new net.minecraft.network.protocol.game.ClientboundSetTitlesAnimationPacket(2, 40, 10));
+        player.connection.send(
+            new net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket(
+                com.neryos.workbay.WorkbayLang.gui("bay.n", bay + 1)));
+        String named = record.bay(bay).name();
+        net.minecraft.network.chat.Component what = named.isEmpty()
+            ? record.bay(bay).hosted()
+                .map(id -> net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(id).getName())
+                .orElseGet(() -> com.neryos.workbay.WorkbayLang.gui("bay.empty"))
+            : net.minecraft.network.chat.Component.literal(named);
+        player.connection.send(
+            new net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket(
+                com.neryos.workbay.WorkbayLang.gui("bay.here", what, record.code())));
     }
 
     /** Puts a visitor back where they came from. Silent and harmless if they are not one. */
@@ -227,6 +257,24 @@ public final class BayVisit {
         OPENING.remove(player.getUUID());
         SENT.remove(player.getUUID());
         CLOSED.remove(player.getUUID());
+    }
+
+    /**
+     * <b>Owe this player their Workbay screen back once they have landed.</b> Public because a
+     * room visit owes exactly the same thing and there is no second way to pay it: a menu opened
+     * in the same tick as a cross-dimension teleport is thrown away without an error, so the debt
+     * has to be held for a few ticks and settled from the tick handler. Leaving a bay put the
+     * screen back and leaving a room did not, which is what OPEN_ISSUES #69 is about.
+     *
+     * <p>{@code bay} is which bay to open it on -- a room has none of its own, so it asks for the
+     * bay the player was last looking at, which is where they were when they clicked Enter.
+     */
+    public static void oweTheScreen(ServerPlayer player, net.minecraft.core.GlobalPos workbay,
+        int bay) {
+        REOPEN.put(player.getUUID(), 0);
+        OWED.put(player.getUUID(), new Return(player.level().dimension(), player.position(),
+            player.getYRot(), player.getXRot(), BlockPos.ZERO,
+            java.util.Optional.of(workbay), bay));
     }
 
     /** A player who logs out mid-return is owed nothing; the map must not outlive them. */

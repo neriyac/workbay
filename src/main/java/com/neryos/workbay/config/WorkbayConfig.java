@@ -56,6 +56,9 @@ public class WorkbayConfig {
         public final ModConfigSpec.IntValue impellerStep;
         public final ModConfigSpec.IntValue maxImpellers;
 
+        public final ModConfigSpec.IntValue feePerLinkPerTick;
+        public final ModConfigSpec.IntValue feePerOperation;
+
 
 
         Server(ModConfigSpec.Builder builder) {
@@ -147,6 +150,24 @@ public class WorkbayConfig {
                     "under its plain one - a mod that sells space rather than throughput has no",
                     "business beating a cable mod at cables. Raise it if your pack disagrees.")
                 .defineInRange("maxImpellers", 2, 0, 16);
+
+            // ------------------------------------------------------------------ running cost
+            //
+            // SPEC.md §9's three layers, and the two that are not zero. <b>Knobs rather than
+            // constants, and shipped at XNet's own numbers</b>, because §9 calls them "a
+            // calibration start": what a link is worth to run depends on the pack it is in, and
+            // the first person to disagree with these should not have to fork the mod. Setting
+            // both to zero gives back exactly the behaviour that shipped, where the buffer was
+            // drawn, saved and spent by nothing at all -- OPEN_ISSUES #72.
+            feePerLinkPerTick = builder
+                .comment("FE per tick for each link that is switched on, whether or not it moves",
+                    "anything. The standing cost of having automation at all.")
+                .defineInRange("feePerLinkPerTick", 1, 0, 10_000);
+
+            feePerOperation = builder
+                .comment("FE for one move by one link. Taken before the move, so a link that",
+                    "cannot pay does not move and says so; nothing is ever half-moved.")
+                .defineInRange("feePerOperation", 2, 0, 10_000);
 
             builder.pop();
 

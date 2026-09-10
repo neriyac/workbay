@@ -41,13 +41,20 @@ public final class RoomVisit {
      * <p>Persisted, and that is the point: SPEC.md §14 says a player who disconnects inside a room
      * keeps their return position, unlike a bay visitor, whose visit is simply over.
      */
-    public record Inside(UUID room, ResourceKey<Level> dimension, Vec3 where, float yRot, float xRot) {
+    public record Inside(UUID room, ResourceKey<Level> dimension, Vec3 where, float yRot, float xRot,
+        java.util.Optional<net.minecraft.core.GlobalPos> workbay, int bay) {
         public static final Codec<Inside> CODEC = RecordCodecBuilder.create(i -> i.group(
             UUIDUtil.CODEC.fieldOf("room").forGetter(Inside::room),
             ResourceKey.codec(Registries.DIMENSION).fieldOf("dimension").forGetter(Inside::dimension),
             Vec3.CODEC.fieldOf("where").forGetter(Inside::where),
             Codec.FLOAT.fieldOf("y_rot").forGetter(Inside::yRot),
-            Codec.FLOAT.fieldOf("x_rot").forGetter(Inside::xRot)
+            Codec.FLOAT.fieldOf("x_rot").forGetter(Inside::xRot),
+            // Which Workbay the player left, so leaving the room can put its screen back up --
+            // OPEN_ISSUES #69. Optional and not defaulted: a room entered through another room's
+            // door has no Workbay to go back to, and `optionalFieldOf(name, default)` would turn a
+            // malformed entry into "there was none" without saying so.
+            net.minecraft.core.GlobalPos.CODEC.optionalFieldOf("workbay").forGetter(Inside::workbay),
+            Codec.INT.optionalFieldOf("bay", 0).forGetter(Inside::bay)
         ).apply(i, Inside::new));
     }
 
@@ -122,6 +129,16 @@ public final class RoomVisit {
      *         Frame installed
      */
     public static boolean enter(ServerPlayer player, WorkbayRecord record, int index) {
+        return enter(player, record, index, null, 0);
+    }
+
+    /**
+     * {@code workbay} is the block the player left to get here and {@code selectedBay} the bay its
+     * screen was showing, so {@link #leave} can put that screen back up. Null for an entry that
+     * came from somewhere with no Workbay -- a room door, or a command.
+     */
+    public static boolean enter(ServerPlayer player, WorkbayRecord record, int index,
+        @org.jetbrains.annotations.Nullable net.minecraft.core.GlobalPos workbay, int selectedBay) {
         ServerLevel backshop = player.server.getLevel(WorkbayDimensions.BACKSHOP);
         if (backshop == null || index < 0 || index >= record.roomCapacity()) {
             return false;
@@ -149,8 +166,16 @@ public final class RoomVisit {
             registry.putRoom(grown);
         }
 
+        // A room entered from a room door carries the Workbay the first entry recorded, so a walk
+        // through three doors still knows the way back to the screen it started at.
+        java.util.Optional<net.minecraft.core.GlobalPos> from = isInside(player)
+            ? player.getData(WBAttachments.ROOM_RETURN.get()).workbay()
+            : java.util.Optional.ofNullable(workbay);
+        int bay = isInside(player)
+            ? player.getData(WBAttachments.ROOM_RETURN.get()).bay() : selectedBay;
         player.setData(WBAttachments.ROOM_RETURN.get(), new Inside(grown.id(),
-            player.level().dimension(), player.position(), player.getYRot(), player.getXRot()));
+            player.level().dimension(), player.position(), player.getYRot(), player.getXRot(),
+            from, bay));
         Vec3 spot = RoomGeometry.entrySpot(grown.region());
         BayVisit.admit(player, () -> player.teleportTo(backshop, spot.x, spot.y, spot.z, Set.of(),
             RoomGeometry.ENTRY_YAW, 0.0F));
@@ -203,6 +228,10 @@ public final class RoomVisit {
         ServerLevel back = level;
         WorkbaySounds.travel(player, () -> player.teleportTo(back, home.where().x, home.where().y,
             home.where().z, Set.of(), home.yRot(), home.xRot()));
+        // And the screen the player left, back the way a bay visit gives it back. Without this the
+        // way out of a room dropped you in the world with nothing open, so every trip into a room
+        // cost a walk back to the block and a right-click. OPEN_ISSUES #69.
+        home.workbay().ifPresent(at -> BayVisit.oweTheScreen(player, at, home.bay()));
         return true;
     }
 

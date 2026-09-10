@@ -87,6 +87,18 @@ class BaysPage extends WorkbayPage {
      * because it was the one part of it laid out by hand.
      */
     private static final int FACES_X = 232;
+    /**
+     * Where the machine column stops, and it is the <b>rule</b>, not the faces column.
+     *
+     * <p>{@code columns()} draws the divider at {@code FACES_X - 8}, two pixels wide. Everything in
+     * the middle column was measured against four short of {@code FACES_X} instead, which is four
+     * pixels <em>past</em> that divider -- so a long machine name, and the power figure
+     * right-aligned beside its bar, both ran over the line and onto the faces column behind it.
+     * Reported from play on an Industrial Foregoing Latex Processing Unit, where the name fits and
+     * the bar and its figure do not. OPEN_ISSUES #64. Two clear of the rule, which is what every
+     * other column on this screen leaves.
+     */
+    private static final int MACHINE_RIGHT = FACES_X - 10;
     private static final int WELL_X = FACES_X;
     private static final int WELL_W = 80;
     private static final int WELL_Y = 76;
@@ -468,7 +480,7 @@ class BaysPage extends WorkbayPage {
         // Everything in this column is clamped to where the faces panel starts. A machine name is
         // whatever another mod called it, and an unclamped one runs across the cube and off the
         // panel entirely.
-        int room = FACES_X - 4 - 98;
+        int room = MACHINE_RIGHT - 98;
         String shown = nameOf(bay, screen.selectedBay());
         if (!screen.renaming(bayRename(bay.index()))) {
             text(g, shown, x(98), y(56), room, Draw.TEXT);
@@ -479,9 +491,9 @@ class BaysPage extends WorkbayPage {
             // pixels under a Mekanism cube's "0 / 1600.0k" - invisible while an empty bar was black
             // inside, and plain the moment the empty part got its tint.
             String power = Draw.compact(bay.energy()) + " / " + Draw.compact(bay.energyCapacity());
-            int barW = Math.max(20, FACES_X - 4 - Draw.width(font, power) - 6 - 98);
+            int barW = Math.max(20, MACHINE_RIGHT - Draw.width(font, power) - 6 - 98);
             Draw.bar(g, x(98), y(68), barW, 9, bay.energy(), bay.energyCapacity(), Draw.ENERGY);
-            textRight(g, power, x(FACES_X - 4), y(69), room - barW - 6, Draw.TEXT_DIM);
+            textRight(g, power, x(MACHINE_RIGHT), y(69), room - barW - 6, Draw.TEXT_DIM);
             screen.hit(x(98), y(68), barW, 9, () -> { },
                 WorkbayScreen.gui("power", Draw.exact(bay.energy()),
                     Draw.exact(bay.energyCapacity())),
@@ -512,7 +524,7 @@ class BaysPage extends WorkbayPage {
             : WorkbayScreen.gui("redstone.short." + bay.redstone().getSerializedName()).getString();
         int modeRoom = mode.isEmpty() ? 0 : Math.min(Draw.width(font, mode), room / 2);
         if (!mode.isEmpty()) {
-            textRight(g, mode, x(FACES_X - 4), y(82), modeRoom, Draw.TEXT_DIM);
+            textRight(g, mode, x(MACHINE_RIGHT), y(82), modeRoom, Draw.TEXT_DIM);
         }
         int statusRoom = room - (mode.isEmpty() ? 0 : modeRoom + 6);
         if (!hint) {
@@ -1777,8 +1789,10 @@ class BaysPage extends WorkbayPage {
             case TARGET_MISSING, CONNECTOR_GONE -> Draw.RED;
             // Amber is "you can fix this from here". The face config and an unreachable machine
             // both are; a target that has gone is not.
+            // NO_POWER joins them: it is amber because feeding the block is something the
+            // player can do from here, which is what amber means on these screens.
             case TARGET_NOT_LOADED, TARGET_NO_PORT, MACHINE_NO_PORT, MACHINE_NO_FACE,
-                NEEDS_RESONATOR -> Draw.AMBER;
+                NEEDS_RESONATOR, NO_POWER -> Draw.AMBER;
         };
     }
 

@@ -436,6 +436,12 @@ public class BusTests {
             level.getBlockState(workbayPos), player, new ItemStack(WBBlocks.WORKBAY.get()));
 
         WorkbayBlockEntity workbay = (WorkbayBlockEntity) level.getBlockEntity(workbayPos);
+        // Powered, because a real one has to be: SPEC.md §9 charges the buffer for every
+        // link that is switched on and again for every move, so an unfed Workbay runs
+        // nothing and every link on it reads NO_POWER. OPEN_ISSUES #72. A test that is not
+        // about the bill pays it up front and says so here.
+        workbay.energy().deserializeNBT(null,
+            net.minecraft.nbt.IntTag.valueOf(WorkbayBlockEntity.BUFFER_FE));
         WorkbayRecord record = workbay.record().orElseThrow();
 
         ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
@@ -710,6 +716,66 @@ public class BusTests {
      * Rate and speed are the two numbers a player sets, so they have to mean exactly what the screen
      * says. A bus that quietly moves more than its rate is a bus nobody can plan around.
      */
+    /**
+     * OPEN_ISSUES #72. The Workbay's buffer was drawn on three screens, saved to disk, restored off
+     * the item it was broken into -- and asked for by nothing. Links moved goods for ever on an
+     * empty one, which made the bar a decoration and the whole of SPEC.md §9 a paragraph.
+     *
+     * <p>Both halves, because only one of them is a regression that can be seen: an empty buffer
+     * moves <b>nothing</b> and every link says why, and the same rig with the buffer full moves
+     * what it always did. Without the second half this test passes just as well against a mod
+     * where links never work at all.
+     */
+    @GameTest(timeoutTicks = 900)
+    @TestHolder(description = "A link with an empty buffer moves nothing, and moves again once it is fed.")
+    public static void anEmptyBufferMovesNothing(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos targetPos = helper.absolutePos(new BlockPos(4, 1, 4));
+
+            level.setBlock(targetPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.CHEST));
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+            if (backshop.getBlockEntity(machinePos) instanceof Container hosted) {
+                hosted.setItem(0, new ItemStack(Items.IRON_INGOT, 64));
+            }
+            BusConfig link = connect(helper, workbay, targetPos.above(), Direction.DOWN, player);
+            workbay.addBus(link.withRate(4).withSpeed(20));
+
+            // setUp pays the bill for every other test here. This one is the bill.
+            workbay.energy().deserializeNBT(null, net.minecraft.nbt.IntTag.valueOf(0));
+
+            helper.startSequence()
+                .thenIdle(120)
+                .thenExecute(() -> {
+                    int moved = countIn(level, targetPos, Items.IRON_INGOT);
+                    if (moved > 0) {
+                        helper.fail("a link on a Workbay with an empty buffer moved " + moved
+                            + " iron: the buffer is drawn, saved and spent by nothing");
+                    }
+                    helper.assertValueEqual(workbay.busStatus(link.id()),
+                        BusRunner.BusStatus.NO_POWER,
+                        "the status of a link that cannot pay for its move");
+                })
+                .thenExecute(() -> workbay.energy().deserializeNBT(null,
+                    net.minecraft.nbt.IntTag.valueOf(WorkbayBlockEntity.BUFFER_FE)))
+                .thenWaitUntil(() -> {
+                    if (countIn(level, targetPos, Items.IRON_INGOT) <= 0) {
+                        throw new GameTestAssertException("the link never started again after the "
+                            + "buffer was filled, so the fee is not a fee but a wall");
+                    }
+                })
+                .thenExecute(() -> tearDown(helper, workbayPos))
+                .thenSucceed();
+        });
+    }
+
     @GameTest(timeoutTicks = 900)
     @TestHolder(description = "A bus never moves more than its rate in one operation.")
     public static void busObeysItsRate(final DynamicTest test) {

@@ -233,7 +233,10 @@ public class WorkbayMenu extends AbstractContainerMenu {
                 // somewhere this menu's stillValid would refuse, and a screen left open over a
                 // teleport is how you get a ghost.
                 serverPlayer.closeContainer();
-                com.neryos.workbay.world.RoomVisit.enter(serverPlayer, record, (int) arg);
+                com.neryos.workbay.world.RoomVisit.enter(serverPlayer, record, (int) arg,
+                    net.minecraft.core.GlobalPos.of(workbay.getLevel().dimension(),
+                        workbay.getBlockPos()),
+                    selectedBay);
             }
             case TOGGLE_ROOM_ANCHOR -> toggleRoomAnchor(serverPlayer, record, (int) arg);
             case CYCLE_ROOM_BIOME -> cycleRoomBiome(serverPlayer, record, (int) arg);

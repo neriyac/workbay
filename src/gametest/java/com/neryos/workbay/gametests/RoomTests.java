@@ -56,6 +56,12 @@ public class RoomTests {
         player.moveTo(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5);
 
         WorkbayBlockEntity workbay = (WorkbayBlockEntity) level.getBlockEntity(pos);
+        // Powered, because a real one has to be: SPEC.md §9 charges the buffer for every
+        // link that is switched on and again for every move, so an unfed Workbay runs
+        // nothing and every link on it reads NO_POWER. OPEN_ISSUES #72. A test that is not
+        // about the bill pays it up front and says so here.
+        workbay.energy().deserializeNBT(null,
+            net.minecraft.nbt.IntTag.valueOf(WorkbayBlockEntity.BUFFER_FE));
         WorkbayRecord record = workbay.record().orElseThrow();
         WorkbayRecord.Upgrades up = record.upgrades();
         record = record.withUpgrades(new WorkbayRecord.Upgrades(up.expansionPlates(), up.resonators(),

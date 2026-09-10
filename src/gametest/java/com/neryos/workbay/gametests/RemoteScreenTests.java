@@ -87,6 +87,9 @@ public class RemoteScreenTests {
             player.moveTo(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5);
 
             WorkbayBlockEntity workbay = (WorkbayBlockEntity) home.getBlockEntity(pos);
+            // Powered: a link that cannot pay does not run. OPEN_ISSUES #72.
+            workbay.energy().deserializeNBT(null,
+                net.minecraft.nbt.IntTag.valueOf(WorkbayBlockEntity.BUFFER_FE));
             WorkbayRecord record = workbay.record().orElseThrow();
             ServerLevel backshop = home.getServer().getLevel(WorkbayDimensions.BACKSHOP);
             WorkbayTickets.force(backshop, record.id(), record.bayColumn());

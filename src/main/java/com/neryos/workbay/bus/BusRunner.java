@@ -1,5 +1,6 @@
 package com.neryos.workbay.bus;
 
+import com.neryos.workbay.config.WorkbayConfig;
 import com.neryos.workbay.init.WBBlocks;
 import com.neryos.workbay.world.BayGeometry;
 import com.neryos.workbay.world.RedstoneMode;
@@ -120,7 +121,30 @@ public class BusRunner {
         powered = nowPowered;
     }
 
-    public void tick(ServerLevel level, WorkbayRecord record, Iterable<BusConfig> buses, int offset) {
+    /**
+     * <b>What running costs, and the only place it is charged.</b> SPEC.md §9: one FE per tick for
+     * each link that is switched on, and one fee per move on top. Takes an amount and answers
+     * whether the whole of it was there.
+     *
+     * <p>Handed in rather than reached for, because the buffer belongs to the block and this class
+     * knows nothing about blocks -- and because every gametest that drives a runner without one
+     * then says exactly what it means: this test is not about the bill.
+     */
+    @FunctionalInterface
+    public interface Purse {
+        boolean spend(int fe);
+    }
+
+    /** A purse that pays for anything. What a test uses when the bill is not what it is testing. */
+    public static final Purse FREE = fe -> true;
+
+    public void tick(ServerLevel level, WorkbayRecord record, Iterable<BusConfig> buses,
+        int offset) {
+        tick(level, record, buses, offset, FREE);
+    }
+
+    public void tick(ServerLevel level, WorkbayRecord record, Iterable<BusConfig> buses, int offset,
+        Purse purse) {
         if (--delay < 0) {
             delay = WHEEL - 1;
         }
@@ -130,6 +154,29 @@ public class BusRunner {
         }
         int step = phase / STEP_TICKS;
         boolean spentPulse = false;
+
+        // <b>The standing cost first, for every link that is switched on.</b> Charged here rather
+        // than in the per-bus loop because it is owed whether or not a link's turn came up on this
+        // step -- it is the price of having the automation at all, not of using it. STEP_TICKS
+        // ticks have passed since the last time this ran, so that is what is billed for.
+        //
+        // A Workbay that cannot pay it runs nothing at all this step and every link says why. The
+        // buffer was drawn, saved and spent by nothing before this: links moved goods for ever on
+        // an empty buffer, which made the bar on the screen a decoration. OPEN_ISSUES #72.
+        int switchedOn = 0;
+        for (BusConfig bus : buses) {
+            if (bus.enabled() && !bus.detached()) {
+                switchedOn++;
+            }
+        }
+        int standing = switchedOn * WorkbayConfig.SERVER.feePerLinkPerTick.get() * STEP_TICKS;
+        if (!purse.spend(standing)) {
+            for (BusConfig bus : buses) {
+                statuses.put(bus.id(), bus.enabled() && !bus.detached()
+                    ? BusStatus.NO_POWER : BusStatus.DISABLED);
+            }
+            return;
+        }
 
         ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
         if (backshop == null) {
@@ -161,6 +208,12 @@ public class BusRunner {
             spentPulse |= gate == RedstoneMode.PULSE;
             if (needsResonator(level, record, bus)) {
                 statuses.put(bus.id(), BusStatus.NEEDS_RESONATOR);
+                continue;
+            }
+            // And the per-move fee, before the move. Taken first so nothing is ever half-moved:
+            // a link that cannot pay does not touch either end.
+            if (!purse.spend(WorkbayConfig.SERVER.feePerOperation.get())) {
+                statuses.put(bus.id(), BusStatus.NO_POWER);
                 continue;
             }
             statuses.put(bus.id(), run(level, backshop, record, bus));
@@ -566,7 +619,16 @@ public class BusRunner {
          *
          * <p>Appended at the end because a status travels on the snapshot as its ordinal.
          */
-        DETACHED;
+        DETACHED,
+        /**
+         * The Workbay's own buffer is empty, so it cannot pay for the move. SPEC.md §9: the buses
+         * stop and the block reads stuck.
+         *
+         * <p><b>A problem</b>, unlike DISABLED and DETACHED: nobody chose it and it is fixed by
+         * feeding the block, which is the sort of thing the header's problem count exists to point
+         * at. Appended at the end because a status travels on the snapshot as its ordinal.
+         */
+        NO_POWER;
 
         /** True for a status the player has to do something about. Drives the problem count. */
         public boolean isProblem() {

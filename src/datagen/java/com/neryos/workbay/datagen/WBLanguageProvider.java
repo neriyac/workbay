@@ -169,6 +169,7 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("button.paste.empty"), "Copy a bay first.");
 
         add(WorkbayLang.guiKey("bay.n"), "Bay %s");
+        add(WorkbayLang.guiKey("bay.here"), "%s · Workbay %s");
         add(WorkbayLang.guiKey("bay.empty"), "Empty bay");
         add(WorkbayLang.guiKey("bay.empty.tip"), "Hold a machine and click here to rack it.");
         add(WorkbayLang.guiKey("bay.rack.tip"), "Hold a machine and click to rack it in this bay.");
@@ -264,6 +265,10 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("links.remove.tip"), "The link keeps its filter, rate and name and "
             + "waits under Add. Breaking the Connector is what deletes one.");
         add(WorkbayLang.guiKey("links.add.detached"), "%s, on no bay");
+        add(WorkbayLang.guiKey("status.no_power"), "No power");
+        add(WorkbayLang.guiKey("status.short.no_power"), "No power");
+        add(WorkbayLang.guiKey("status.no_power.tip"), "The Workbay's buffer is empty. Running "
+            + "links costs power; feed the block and they start again where they left off.");
         add(WorkbayLang.guiKey("status.detached"), "Not on a bay");
         add(WorkbayLang.guiKey("status.short.detached"), "No bay");
         add(WorkbayLang.guiKey("status.detached.tip"), "Taken off its bay and kept. Put it on one "

@@ -121,8 +121,8 @@ public class WorkbayBlockEntity extends BlockEntity {
 
     /**
      * SPEC.md §9's buffer, accepted on any face and never handing energy back out of the block.
-     * The three-layer spend model and round-robin sharing to bays are not built yet, so this is a
-     * real buffer the screen reads rather than a number invented for a progress bar.
+     * Two of §9's three layers are spent through {@link #spend}; the third is zero. Round-robin
+     * sharing to the bays is still not built -- a hosted machine keeps its own power.
      */
     private final EnergyStorage energy = new EnergyStorage(BUFFER_FE, MAX_FE_PER_TICK, 0) {
         private long tick = Long.MIN_VALUE;
@@ -156,6 +156,31 @@ public class WorkbayBlockEntity extends BlockEntity {
 
     public static final int BUFFER_FE = 100_000;
     public static final int MAX_FE_PER_TICK = 10_000;
+
+    /**
+     * <b>What running the links costs, taken out of the buffer.</b> SPEC.md §9.
+     *
+     * <p>Not {@code energy.extractEnergy}: this buffer is built with a max extract of zero on
+     * purpose, so that nothing outside the block can pull power back out of it, and the mod's own
+     * running cost is not something outside the block. It writes the stored figure directly, the
+     * same call {@code deserializeNBT} makes when a buffer comes back off disk.
+     *
+     * <p>All or nothing. Half a fee buys half a move, and there is no such thing.
+     *
+     * @return true when the whole amount was there and has now been spent
+     */
+    public boolean spend(int fe) {
+        if (fe <= 0) {
+            return true;
+        }
+        int stored = energy.getEnergyStored();
+        if (stored < fe) {
+            return false;
+        }
+        energy.deserializeNBT(null, net.minecraft.nbt.IntTag.valueOf(stored - fe));
+        setChanged();
+        return true;
+    }
 
     public WorkbayBlockEntity(BlockPos pos, BlockState state) {
         super(WBBlockEntities.WORKBAY.get(), pos, state);
@@ -353,7 +378,7 @@ public class WorkbayBlockEntity extends BlockEntity {
                 return;
             }
             workbay.runner.tick(server, record, record.buses(),
-                Math.floorMod(pos.hashCode(), BusRunner.WHEEL));
+                Math.floorMod(pos.hashCode(), BusRunner.WHEEL), workbay::spend);
         });
 
         profiler.popPush("state");
@@ -459,7 +484,7 @@ public class WorkbayBlockEntity extends BlockEntity {
             // Listed rather than defaulted, so a new BusStatus is a compile error here as well as
             // in the two screens. A default would have quietly called it ATTENTION.
             case TARGET_NOT_LOADED, TARGET_NO_PORT, MACHINE_NO_PORT, MACHINE_NO_FACE,
-                NEEDS_RESONATOR -> Pip.ATTENTION;
+                NEEDS_RESONATOR, NO_POWER -> Pip.ATTENTION;
         };
     }
 

@@ -506,7 +506,7 @@ class FlowPage extends WorkbayPage {
             case DISABLED, HELD_BY_REDSTONE, DETACHED -> Draw.GREY;
             case TARGET_MISSING, CONNECTOR_GONE -> Draw.RED;
             case TARGET_NOT_LOADED, TARGET_NO_PORT, MACHINE_NO_PORT, MACHINE_NO_FACE,
-                NEEDS_RESONATOR -> Draw.AMBER;
+                NEEDS_RESONATOR, NO_POWER -> Draw.AMBER;
         };
     }
 
