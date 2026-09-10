@@ -224,13 +224,64 @@ class BaysPage extends WorkbayPage {
 
     @Override
     void render(GuiGraphics g, int mouseX, int mouseY) {
+        // Where the filter panel will stand, worked out before anything it stands over is drawn.
+        // Two things on this page are not flat: the face cube is a block model at z=200 with its
+        // markers at 400, and the racked machine is an item sprite, which draws at z=150 whatever
+        // the order. Both came up through the panel's title band, one photograph each. The panel
+        // cannot simply be lifted -- tooltips are at 400, the hover ring at 0 -- so the things
+        // under it are what give way: the cube is not drawn at all, the sprite is cut at the
+        // panel's top edge, and both need to know where that edge is before they draw.
+        filterTop = Integer.MAX_VALUE;
+        if (editingFilter != null) {
+            snapshot().links().stream()
+                .filter(l -> l.config().id().equals(editingFilter)).findFirst()
+                .ifPresent(link -> filterTop = filterBlockY(filterBlockH(link.config())));
+        }
         header(g, mouseX, mouseY, "WORKBAY");
         summary(g, mouseX, mouseY);
         columns(g);
         rack(g, mouseX, mouseY);
+        // Everything the panel stands over is cut at its top edge, not only the sprite that was
+        // photographed: half the buttons on the machine row are item sprites too on a build
+        // without the drawn icons, and each of them would come up through the band the same way.
+        boolean under = filterTop < y(height);
+        if (under) {
+            g.enableScissor(x(0), y(0), x(WIDTH), filterTop);
+        }
         machine(g, mouseX, mouseY);
         faces(g, mouseX, mouseY);
+        if (under) {
+            g.disableScissor();
+        }
         links(g, mouseX, mouseY);
+    }
+
+    /** The open filter panel's top edge in screen pixels, or MAX_VALUE while none is open. */
+    private int filterTop = Integer.MAX_VALUE;
+
+    private static int filterBlockH(BusConfig config) {
+        // A chemical filter has no items to pick from -- it is named off the tank (#41) -- so it
+        // is the one resource whose panel carries no inventory.
+        boolean pickable = config.resource() != BusConfig.Resource.CHEMICAL;
+        int panelH = STEP_H + 10 + SLOT_PITCH
+            + (config.resource() == BusConfig.Resource.CHEMICAL ? 40 : 16)
+            + (pickable ? INVENTORY_H : 0);
+        return 18 + 6 + panelH;
+    }
+
+    /**
+     * <b>Centred in the links area while it fits, and standing above it when it does not.</b>
+     * With the player's inventory in it the panel is a hundred and seventy pixels and the list
+     * area is a hundred and thirty, so centring put the last row of the inventory off the bottom
+     * of the page -- photographed. It is a dialog and a dialog may cover the page it is over, so
+     * when it outgrows the list it starts under the summary line instead and uses the room the
+     * rack and the machine panel were using.
+     */
+    private int filterBlockY(int blockH) {
+        int listTop = y(linksY);
+        int listH = 18 + rows * ROW_PITCH + 12;
+        return blockH <= listH ? listTop + (listH - blockH) / 2
+            : Math.max(y(PANEL_TOP), y(height - 10) - blockH);
     }
 
     // ------------------------------------------------------ header y 30..44
@@ -753,13 +804,10 @@ class BaysPage extends WorkbayPage {
             // rather than pinned to its top edge with an empty half underneath.
             wrapped(g, WorkbayScreen.gui("faces.empty"), x(WELL_X + 4), y(WELL_Y + 20),
                 WELL_W - 8, Draw.TEXT_FAINT);
-        } else if (editingFilter != null) {
-            // <b>Not while the filter panel is open.</b> The cube is a real block model rendered
-            // at z=200 with its markers at 400, and the panel is drawn flat at z=0 -- so a panel
-            // standing over this well had the cube and two of its letters poking up through its
-            // title band. Photographed by Neriya. Lifting the panel instead would put it over the
-            // tooltips (400), the hover ring (0) and the carried item, so the cube simply waits:
-            // nobody is turning it while they are listing items in a filter.
+        } else if (filterTop < y(WELL_Y + WELL_H)) {
+            // <b>Not while a filter panel stands over it.</b> The cube is a real block model at
+            // z=200 with its markers at 400 -- see render() -- and nobody is turning it while they
+            // are listing items in a filter, so it simply waits.
         } else {
             // A face marker projects to wherever its face's centre lands on screen, which at a
             // steep enough drag angle is genuinely outside the well - the marker is correct, the
@@ -1308,25 +1356,10 @@ class BaysPage extends WorkbayPage {
         // A chemical link's panel carries one line the others do not — the sentence about which
         // face carries gas — and on its first screenshot that line was drawn below the well and
         // cut in the middle of a word. The height is part of the layout, not a constant.
-        // A chemical filter has no items to pick from -- it is named off the tank (#41) -- so it
-        // is the one resource whose panel carries no inventory.
+        int blockH = filterBlockH(config);
+        int panelH = blockH - 24;
+        int blockY = filterBlockY(blockH);
         boolean pickable = config.resource() != BusConfig.Resource.CHEMICAL;
-        int panelH = STEP_H + 10 + SLOT_PITCH
-            + (config.resource() == BusConfig.Resource.CHEMICAL ? 40 : 16)
-            + (pickable ? INVENTORY_H : 0);
-        int blockH = 18 + 6 + panelH;
-
-        // <b>Centred in the links area while it fits, and standing above it when it does not.</b>
-        // With the player's inventory in it the panel is a hundred and seventy pixels and the list
-        // area is a hundred and thirty, so centring put the last row of the inventory off the
-        // bottom of the page -- photographed. It is a dialog and a dialog may cover the page it is
-        // over, so when it outgrows the list it starts under the summary line instead and uses the
-        // room the rack and the machine panel were using. They keep drawing to its left and above
-        // it; the catch-all below is what stops a click landing on one of them through it.
-        int listTop = y(linksY);
-        int listH = 18 + rows * ROW_PITCH + 12;
-        int blockY = blockH <= listH ? listTop + (listH - blockH) / 2
-            : Math.max(y(PANEL_TOP), y(height - 10) - blockH);
 
         // Registered first, so every control the panel draws later wins the click and nothing
         // underneath it does. Hits dispatch in reverse registration order.
