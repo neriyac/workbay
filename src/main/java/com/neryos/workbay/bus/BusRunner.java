@@ -123,7 +123,7 @@ public class BusRunner {
 
     /**
      * <b>What running costs, and the only place it is charged.</b> SPEC.md §9: one FE per tick for
-     * each link that is switched on, and one fee per move on top. Takes an amount and answers
+     * each link that is switched on, and one draw per move on top. Takes an amount and answers
      * whether the whole of it was there.
      *
      * <p>Handed in rather than reached for, because the buffer belongs to the block and this class
@@ -169,7 +169,7 @@ public class BusRunner {
                 switchedOn++;
             }
         }
-        int standing = switchedOn * WorkbayConfig.SERVER.feePerLinkPerTick.get() * STEP_TICKS;
+        int standing = switchedOn * WorkbayConfig.SERVER.powerPerLinkPerTick.get() * STEP_TICKS;
         if (!purse.spend(standing)) {
             for (BusConfig bus : buses) {
                 statuses.put(bus.id(), bus.enabled() && !bus.detached()
@@ -210,9 +210,9 @@ public class BusRunner {
                 statuses.put(bus.id(), BusStatus.NEEDS_RESONATOR);
                 continue;
             }
-            // And the per-move fee, before the move. Taken first so nothing is ever half-moved:
+            // And the per-move draw, before the move. Taken first so nothing is ever half-moved:
             // a link that cannot pay does not touch either end.
-            if (!purse.spend(WorkbayConfig.SERVER.feePerOperation.get())) {
+            if (!purse.spend(WorkbayConfig.SERVER.powerPerMove.get())) {
                 statuses.put(bus.id(), BusStatus.NO_POWER);
                 continue;
             }

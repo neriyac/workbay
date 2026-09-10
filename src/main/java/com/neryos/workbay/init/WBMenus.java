@@ -35,6 +35,15 @@ public class WBMenus {
         ROOM_DOOR = MENUS.register("room_door",
             () -> IMenuTypeExtension.create(com.neryos.workbay.menu.RoomDoorMenu::new));
 
+    /**
+     * The rename panel a placed Connector opens (OPEN_ISSUES #77). Its own type for the room
+     * door's reason: it is built from a player and a block, and the Workbay it belongs to is
+     * usually in another dimension.
+     */
+    public static final DeferredHolder<MenuType<?>, MenuType<com.neryos.workbay.menu.ConnectorMenu>>
+        CONNECTOR = MENUS.register("connector",
+            () -> IMenuTypeExtension.create(com.neryos.workbay.menu.ConnectorMenu::new));
+
     public static void register(IEventBus bus) {
         MENUS.register(bus);
     }

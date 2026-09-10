@@ -87,18 +87,29 @@ class UpgradesPage extends WorkbayPage {
         textCentre(g, WorkbayScreen.gui("faces.drag").getString(), x(WELL_X + WELL_W / 2),
             y(WELL_Y + WELL_H + 3), WELL_W, Draw.TEXT_FAINT);
 
-        Draw.bar(g, x(WELL_X), y(WELL_Y + WELL_H + 16), WELL_W, 12,
-            snap.energy(), snap.energyCapacity(), Draw.ENERGY);
-        // Compact, like every other energy figure in the mod: "0 / 100000 FE" is 74 pixels in a
-        // column 96 wide before the capacity grows a digit, and the exact figure is in the tooltip.
-        text(g, Draw.compact(snap.energy()) + " / " + Draw.compact(snap.energyCapacity()) + " FE",
-            x(WELL_X), y(WELL_Y + WELL_H + 32), WELL_W, Draw.TEXT_DIM);
-        screen.hit(x(WELL_X), y(WELL_Y + WELL_H + 16), WELL_W, 26, () -> { },
-            WorkbayScreen.gui("power", Draw.exact(snap.energy()), Draw.exact(snap.energyCapacity())),
-            WorkbayScreen.gui("power.tip"));
-        text(g, WorkbayScreen.gui("upgrades.rate",
-                com.neryos.workbay.content.workbay.WorkbayBlockEntity.MAX_FE_PER_TICK),
-            x(WELL_X), y(WELL_Y + WELL_H + 44), WELL_W, Draw.TEXT_FAINT);
+        // <b>Only where running actually draws power.</b> Both knobs ship at zero, which means
+        // nothing ever spends this buffer -- so the bar never moves, the figure never changes and
+        // the intake rate prices a thing that is free. Three readings about a charge nobody makes,
+        // on the screen a player opens to decide what to buy. Neriya's call: when the value is
+        // zero the row is not there at all. A pack that turns either knob on gets all three back.
+        boolean charged = snap.charged();
+        if (charged) {
+            Draw.bar(g, x(WELL_X), y(WELL_Y + WELL_H + 16), WELL_W, 12,
+                snap.energy(), snap.energyCapacity(), Draw.ENERGY);
+            // Compact, like every other energy figure in the mod: "0 / 100000 FE" is 74 pixels in
+            // a column 96 wide before the capacity grows a digit; the exact one is in the tooltip.
+            text(g, Draw.compact(snap.energy()) + " / " + Draw.compact(snap.energyCapacity()) + " FE",
+                x(WELL_X), y(WELL_Y + WELL_H + 32), WELL_W, Draw.TEXT_DIM);
+            screen.hit(x(WELL_X), y(WELL_Y + WELL_H + 16), WELL_W, 26, () -> { },
+                WorkbayScreen.gui("power", Draw.exact(snap.energy()),
+                    Draw.exact(snap.energyCapacity())),
+                WorkbayScreen.gui("power.tip"));
+            text(g, WorkbayScreen.gui("upgrades.rate",
+                    com.neryos.workbay.content.workbay.WorkbayBlockEntity.MAX_FE_PER_TICK),
+                x(WELL_X), y(WELL_Y + WELL_H + 44), WELL_W, Draw.TEXT_FAINT);
+        }
+        // The deployed line closes the gap the three of them leave rather than floating below it.
+        int deployedY = WELL_H + (charged ? 56 : 18);
 
         // How many of this network's Workbays are standing, out of how many the server allows.
         // Drawn on the first one a player builds, because the cap is otherwise invisible until they
@@ -110,8 +121,8 @@ class UpgradesPage extends WorkbayPage {
         boolean over = snap.deployed() > snap.maxDeployed();
         // The short form on the line, the sentence in the tooltip: this column is 96 wide.
         text(g, WorkbayScreen.gui("upgrades.deployed.short", snap.deployed(), snap.maxDeployed()),
-            x(WELL_X), y(WELL_Y + WELL_H + 56), WELL_W, full ? Draw.AMBER : Draw.TEXT_FAINT);
-        screen.hit(x(WELL_X), y(WELL_Y + WELL_H + 54), WELL_W, 12, () -> { },
+            x(WELL_X), y(WELL_Y + deployedY), WELL_W, full ? Draw.AMBER : Draw.TEXT_FAINT);
+        screen.hit(x(WELL_X), y(WELL_Y + deployedY - 2), WELL_W, 12, () -> { },
             WorkbayScreen.gui("upgrades.deployed", snap.deployed(), snap.maxDeployed()),
             over ? WorkbayScreen.gui("upgrades.deployed.over",
                     snap.deployed() - snap.maxDeployed())

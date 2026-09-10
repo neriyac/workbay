@@ -64,6 +64,13 @@ public record ActionPacket(int containerId, WorkbayAction action, long arg,
             && player.containerMenu instanceof com.neryos.workbay.menu.RoomDoorMenu door
             && door.containerId == packet.containerId()) {
             door.act(packet.action(), (int) packet.arg(), player);
+            return;
+        }
+        // And the Connector's rename panel, on the same guard for the same reason.
+        if (context.player() instanceof net.minecraft.server.level.ServerPlayer player
+            && player.containerMenu instanceof com.neryos.workbay.menu.ConnectorMenu connector
+            && connector.containerId == packet.containerId()) {
+            connector.act(packet.action(), packet.text().orElse(""), player);
         }
     }
 }

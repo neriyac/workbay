@@ -31,8 +31,8 @@ import org.apache.commons.lang3.tuple.Pair;
  * <ul>
  *   <li><b>The buffer's size (100,000 FE) and how fast it fills (10,000 FE/t).</b> The capacity is
  *       saved per block and restored off the item a Workbay was broken into, so lowering it mid-world
- *       leaves blocks holding more than they can hold; and at any fee a pack would plausibly set,
- *       100,000 is minutes of running. The fees below are the knob that makes the buffer mean
+ *       leaves blocks holding more than they can hold; and at any draw a pack would plausibly set,
+ *       100,000 is minutes of running. The two power draws below are the knob that makes the buffer mean
  *       something.</li>
  *   <li><b>What one rate step is worth per resource</b> ({@code MB_PER_RATE} 100,
  *       {@code FE_PER_RATE} 1000). Constants, because changing one <em>rescales every saved
@@ -93,8 +93,18 @@ public class WorkbayConfig {
         public final ModConfigSpec.IntValue impellerStep;
         public final ModConfigSpec.IntValue maxImpellers;
 
-        public final ModConfigSpec.IntValue feePerLinkPerTick;
-        public final ModConfigSpec.IntValue feePerOperation;
+        public final ModConfigSpec.IntValue powerPerLinkPerTick;
+        public final ModConfigSpec.IntValue powerPerMove;
+
+        /**
+         * Whether running a link costs anything at all on this server. <b>False is the shipped
+         * answer</b>, and every readout about the Workbay's own buffer is hidden while it is:
+         * a bar, a figure and an intake rate that exist to price something free are a bill for
+         * nothing, and the player has no way to tell that from a bill they have not paid.
+         */
+        public boolean chargesForRunning() {
+            return powerPerLinkPerTick.get() > 0 || powerPerMove.get() > 0;
+        }
 
 
 
@@ -256,13 +266,13 @@ public class WorkbayConfig {
                     "business beating a cable mod at cables. Raise it if your pack disagrees.")
                 .defineInRange("maxImpellers", 2, 0, 16);
 
-            // ------------------------------------------------------------------ running cost
+            // ------------------------------------------------------------------ running power
             //
             // SPEC.md §9's three layers, as knobs rather than constants -- what a link is worth to
             // run depends on the pack it is in, and §9 calls its own numbers "a calibration start".
             //
             // <b>Both ship at zero, and that is the decision, not the knob.</b> The buffer is
-            // spent now (OPEN_ISSUES #72), so a non-zero fee means an unpowered Workbay moves
+            // spent now (OPEN_ISSUES #72), so a non-zero charge means an unpowered Workbay moves
             // nothing -- and a player running vanilla plus this mod has no source of FE in the
             // world at all. XNet has the same shape and its players prime a network by touching a
             // generator to it and taking it away again, which is an implementation detail escaping
@@ -270,18 +280,24 @@ public class WorkbayConfig {
             // A pack author knows whether energy mods are present. A solo player does not, and
             // must never install this and find it inert. So the cost is opt-in: a pack that ships
             // energy turns it on, at XNet's own numbers (1 and 2), which is what these were.
-            feePerLinkPerTick = builder
-                .comment("FE per tick for each link that is switched on, whether or not it moves",
-                    "anything - the standing cost of having automation at all. ZERO BY DEFAULT:",
+            //
+            // <b>They are named for power, not for a fee.</b> Neriya's call: a player who turns
+            // these on is buying electricity, and every word the mod uses for that has to be a
+            // word about power -- a fee, a levy or a tax is a thing somebody takes off you.
+            powerPerLinkPerTick = builder
+                .comment("FE per tick each switched-on link draws, whether or not it moves",
+                    "anything - the standing draw of having automation at all. ZERO BY DEFAULT:",
                     "a mod that needs FE to do anything is inert in an install with no energy mod,",
-                    "and only a pack author knows whether there is one. XNet's own number is 1.")
-                .defineInRange("feePerLinkPerTick", 0, 0, 10_000);
+                    "and only a pack author knows whether there is one. XNet's own number is 1.",
+                    "While this and powerPerMove are both zero the Workbay's power bar, its FE",
+                    "figure and its intake rate are hidden - there is nothing to spend it on.")
+                .defineInRange("powerPerLinkPerTick", 0, 0, 10_000);
 
-            feePerOperation = builder
-                .comment("FE for one move by one link. Taken before the move, so a link that",
+            powerPerMove = builder
+                .comment("FE one link draws for one move. Taken before the move, so a link that",
                     "cannot pay does not move and says so; nothing is ever half-moved.",
                     "Zero by default, for the reason above. XNet's own number is 2.")
-                .defineInRange("feePerOperation", 0, 0, 10_000);
+                .defineInRange("powerPerMove", 0, 0, 10_000);
 
             builder.pop();
 

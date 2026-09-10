@@ -55,10 +55,18 @@ public record WorkbaySnapshot(
      * including the ones nobody has opened yet, which is what {@code built} is false for. On the
      * snapshot because the page has to price a room before it exists.
      */
-    List<Room> rooms) {
+    List<Room> rooms,
+    /**
+     * Whether <b>this server</b> charges anything for running links. False is what it ships as,
+     * and while it is false the Workbay's own power bar, its FE figure and its intake rate are
+     * not drawn: a reading that prices something free is a bill for nothing, and a player cannot
+     * tell that from a bill they have not paid. On the snapshot rather than read from the
+     * client's own config for {@link #remoteScreens}' reason -- the knob is the server's.
+     */
+    boolean charged) {
 
     public static final WorkbaySnapshot EMPTY = new WorkbaySnapshot("", false, 1, 0, 0, 1,
-        List.of(), List.of(), WorkbayRecord.Upgrades.NONE, 1, 1, false, List.of());
+        List.of(), List.of(), WorkbayRecord.Upgrades.NONE, 1, 1, false, List.of(), false);
 
     public static final Codec<WorkbaySnapshot> CODEC = RecordCodecBuilder.create(i -> i.group(
         Codec.STRING.fieldOf("Code").forGetter(WorkbaySnapshot::code),
@@ -73,7 +81,8 @@ public record WorkbaySnapshot(
         Codec.INT.fieldOf("Deployed").forGetter(WorkbaySnapshot::deployed),
         Codec.INT.fieldOf("MaxDeployed").forGetter(WorkbaySnapshot::maxDeployed),
         Codec.BOOL.optionalFieldOf("RemoteScreens", false).forGetter(WorkbaySnapshot::remoteScreens),
-        Room.CODEC.listOf().optionalFieldOf("Rooms", List.of()).forGetter(WorkbaySnapshot::rooms)
+        Room.CODEC.listOf().optionalFieldOf("Rooms", List.of()).forGetter(WorkbaySnapshot::rooms),
+        Codec.BOOL.optionalFieldOf("Charged", false).forGetter(WorkbaySnapshot::charged)
     ).apply(i, WorkbaySnapshot::new));
 
     /**

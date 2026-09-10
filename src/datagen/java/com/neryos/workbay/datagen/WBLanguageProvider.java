@@ -100,10 +100,6 @@ public class WBLanguageProvider extends LanguageProvider {
             + "Right-click a Workbay with it first.");
         add(WorkbayLang.messageKey("connector_linked"), "Linked to %s on bay %s. Workbay %s has a "
             + "row for it, switched off until you turn it on.");
-        // Only reachable once every bay of the network is served, since OPEN_ISSUES #77: a second
-        // right-click on a full Connector now lands on the next bay instead of refusing.
-        add(WorkbayLang.messageKey("connector_full"), "This Connector already feeds every bay it "
-            + "can. Install a Multichannel Upgrade to carry items, fluids and energy on one.");
         add(WorkbayLang.messageKey("connector_no_workbay"), "The Workbay this Connector is paired "
             + "to isn't loaded. Go back to it and place this again.");
 
@@ -498,6 +494,13 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("rooms.anchored.tip"), "Keeps what is inside this room running with nobody in it, holding %s "
             + "chunks loaded. Click to switch off.");
         add(WorkbayLang.guiKey("rooms.unanchored"), "Not anchored");
+        // The Connector's rename panel. One field, and a line saying what it is called when the
+        // field is left empty -- which is the block's own coordinates, not a stored default.
+        add(WorkbayLang.guiKey("connector.title"), "Name this Connector");
+        add(WorkbayLang.guiKey("connector.hint"), "Empty leaves it \"%s\" · on bay %s");
+        add(WorkbayLang.guiKey("connector.nobay"), "Empty leaves it \"%s\" · on no bay yet");
+        add(WorkbayLang.guiKey("connector.save"), "Save");
+
         add(WorkbayLang.guiKey("door.title"), "Way out");
         add(WorkbayLang.guiKey("door.elsewhere"), "Or go straight to");
         add(WorkbayLang.guiKey("door.leave"), "Leave");

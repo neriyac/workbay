@@ -189,16 +189,20 @@ public class ConnectorTests {
     }
 
     /**
-     * Base behaviour is one resource type <b>per bay</b>, and Multichannel is what buys the other
-     * two. If the cap stops being enforced, the upgrade stops meaning anything.
+     * OPEN_ISSUES #77's model, as the one test that can fail against the fan-out it replaces.
      *
-     * <p>Per bay and not per Connector since OPEN_ISSUES #77. The counts here are therefore
-     * {@code cap * bays}, and the assertion that matters is the per-bay one: a Connector that
-     * carried four item links on one bay would satisfy a total and be nonsense.
+     * <p><b>A Connector is one object with one row, and the right-click is a rename.</b> The
+     * assertion that can actually fail is the menu: the row count alone cannot, because
+     * {@link WorkbayRecord}'s own invariant would fold a ladder's extra rows back to one before
+     * this could see them -- which is what {@code aRecordFoldsFourLinksOnOneConnectorToOne}
+     * covers, and this one would then be a test that cannot go red. So it asserts what the
+     * gesture <em>is</em>: after right-clicking, the player has the Connector's rename panel
+     * open, and the link is the one that was there before, untouched, on the bay it was paired
+     * to. Poked six times over a two-bay network.
      */
     @GameTest
-    @TestHolder(description = "A Connector carries one resource type per bay, or all of them with Multichannel.")
-    public static void multichannelRaisesTheOneTypeCap(final DynamicTest test) {
+    @TestHolder(description = "A placed Connector is one row however often it is right-clicked.")
+    public static void oneConnectorIsOneRowHoweverOftenItIsPoked(final DynamicTest test) {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
 
         test.onGameTest(ExtendedGameTestHelper.class, helper -> {
@@ -211,127 +215,82 @@ public class ConnectorTests {
             level.setBlock(chestPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
             WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
             place(level, connectorPos, Direction.DOWN, paired(level, workbay), player);
+
             int bays = workbay.record().orElseThrow().bayCapacity();
             helper.assertTrue(bays >= 2, "a base Workbay is supposed to have two bays, not " + bays);
-
-            // Base: one item link on every bay, and then nothing. Poked twice past the ceiling so
-            // a cap that is off by one is a failure rather than a coincidence.
-            for (int attempt = 0; attempt < bays + 2; attempt++) {
+            int before = workbay.buses().getFirst().bay();
+            for (int attempt = 0; attempt < bays + 4; attempt++) {
                 poke(level, connectorPos, player);
             }
-            helper.assertValueEqual(workbay.buses().size(), bays,
-                "links on a base Connector poked past every bay it can feed");
-            for (int bay = 0; bay < bays; bay++) {
-                int on = bay;
-                helper.assertValueEqual(
-                    workbay.buses().stream().filter(link -> link.bay() == on).count(), 1L,
-                    "links a base Connector holds on bay " + (bay + 1));
-            }
 
-            // With Multichannel it carries every resource that exists in this install, and no
-            // more. Four here, because the gametest server has Mekanism and therefore chemicals;
-            // three without it, which is why the number is asked for rather than written down.
-            int all = com.neryos.workbay.content.connector.ConnectorBlock.multichannelLinks();
-            RoomRegistry registry = RoomRegistry.get(level.getServer());
-            WorkbayRecord record = workbay.record().orElseThrow();
-            registry.put(record.withUpgrades(record.upgrades()
-                .plus(com.neryos.workbay.content.workbay.WorkbayUpgrade.MULTICHANNEL)));
-
-            for (int attempt = 0; attempt < all * bays + 1; attempt++) {
-                poke(level, connectorPos, player);
-            }
-            helper.assertValueEqual(workbay.buses().size(), all * bays,
-                "links on a Multichannel Connector after one more attempt than it can hold");
-            for (int bay = 0; bay < bays; bay++) {
-                int on = bay;
-                helper.assertValueEqual(workbay.buses().stream()
-                    .filter(link -> link.bay() == on)
-                    .map(BusConfig::resource).distinct().count(), (long) all,
-                    "distinct resource types one Multichannel Connector holds on bay " + (bay + 1));
-            }
+            GlobalPos here = GlobalPos.of(level.dimension(), connectorPos);
+            helper.assertTrue(
+                player.containerMenu instanceof com.neryos.workbay.menu.ConnectorMenu,
+                "right-clicking a placed Connector left the player with "
+                    + player.containerMenu.getClass().getSimpleName()
+                    + " open, not its rename panel");
+            helper.assertValueEqual(workbay.linksAt(here).size(), 1,
+                "links one Connector holds after being right-clicked " + (bays + 4) + " times");
+            helper.assertValueEqual(workbay.buses().size(), 1,
+                "links on the whole Workbay after one Connector was poked past every bay");
+            helper.assertValueEqual(workbay.buses().getFirst().bay(), before,
+                "the bay the one link sits on after every one of those right-clicks");
             helper.succeed();
         });
     }
 
     /**
-     * OPEN_ISSUES #77. <b>One chest, two bays.</b> A Connector paired to bay 1 could not also feed
-     * bay 2 — and nothing in the storage was stopping it, which is why this is a regression test
-     * over behaviour rather than over a count: a {@code BusConfig} always carried its own bay and
-     * its own Connector position, so the pair of links this makes would have persisted and run in
-     * every version. What refused to <em>make</em> them was one cap counted per Connector instead
-     * of per bay.
+     * The other half of #77's invariant: a <b>saved</b> world holding several links on one
+     * Connector folds to one when its record is read back, and an <em>attached</em> one wins over
+     * a detached one however they were ordered.
      *
-     * <p>Both links pull the same chest into a different bay, so the assertion is that iron
-     * arrives in <em>both</em> racked chests. A test that only counted rows would pass against a
-     * runner that quietly ran one of them.
+     * <p>Written against {@link WorkbayRecord} directly rather than through a Connector, because
+     * the fan-out that made these rows no longer exists to make them -- the only way they arrive
+     * now is off a disk written by an older build, which is exactly what this constructs.
+     *
+     * <p>And an internal link is exempt, which is the trap: a bay-to-bay link anchors on the
+     * Workbay's own position, so a fold that did not exempt them would collapse every internal
+     * link in a network into one. Two are made here for that reason alone.
      */
-    @GameTest(timeoutTicks = 600)
-    @TestHolder(description = "One Connector on one chest feeds two different bays.")
-    public static void oneConnectorFeedsTwoBays(final DynamicTest test) {
-        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+    @GameTest
+    @TestHolder(description = "A record holding four links on one Connector folds to one, sparing bay-to-bay links.")
+    public static void aRecordFoldsFourLinksOnOneConnectorToOne(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
 
         test.onGameTest(ExtendedGameTestHelper.class, helper -> {
             ServerLevel level = helper.getLevel();
-            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
-            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
-            BlockPos chestPos = helper.absolutePos(new BlockPos(4, 1, 4));
-            BlockPos connectorPos = chestPos.above();
+            GlobalPos connector = GlobalPos.of(level.dimension(), helper.absolutePos(new BlockPos(2, 1, 2)));
+            GlobalPos target = GlobalPos.of(level.dimension(), helper.absolutePos(new BlockPos(2, 1, 1)));
+            GlobalPos anchor = GlobalPos.of(level.dimension(), helper.absolutePos(new BlockPos(0, 1, 0)));
 
-            level.setBlock(chestPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
-            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
-            WorkbayRecord record = workbay.record().orElseThrow();
-            ServerLevel backshop = level.getServer()
-                .getLevel(com.neryos.workbay.world.WorkbayDimensions.BACKSHOP);
-            com.neryos.workbay.world.BayHosting.rack(backshop, record.bayColumn(), 0,
-                new ItemStack(Blocks.CHEST), player, Direction.NORTH);
-            com.neryos.workbay.world.BayHosting.rack(backshop, record.bayColumn(), 1,
-                new ItemStack(Blocks.CHEST), player, Direction.NORTH);
+            java.util.UUID kept = java.util.UUID.randomUUID();
+            java.util.List<BusConfig> saved = java.util.List.of(
+                // Detached first, so "the attached one wins" is doing work rather than agreeing
+                // with list order by accident.
+                BusConfig.create(java.util.UUID.randomUUID(), BusConfig.NO_BAY,
+                    BusConfig.Resource.ITEM, BusConfig.Mode.INSERT, connector, target),
+                BusConfig.create(kept, 1, BusConfig.Resource.FLUID, BusConfig.Mode.INSERT,
+                    connector, target),
+                BusConfig.create(java.util.UUID.randomUUID(), 0, BusConfig.Resource.ENERGY,
+                    BusConfig.Mode.INSERT, connector, target),
+                BusConfig.createInternal(java.util.UUID.randomUUID(), 0, anchor, target),
+                BusConfig.createInternal(java.util.UUID.randomUUID(), 1, anchor, target));
 
-            // Placing the Connector makes the link on the bay it was stamped with; the second
-            // right-click is the whole of the new gesture and lands on the next bay.
-            place(level, connectorPos, Direction.DOWN, paired(level, workbay), player);
-            poke(level, connectorPos, player);
+            WorkbayRecord record = new WorkbayRecord(java.util.UUID.randomUUID(), "TEST-CODE-0000",
+                java.util.UUID.randomUUID(), "tester", false,
+                new net.minecraft.world.level.ChunkPos(0, 0),
+                com.neryos.workbay.world.WorkbayRecord.Upgrades.NONE,
+                java.util.Optional.empty(), java.util.List.of(), java.util.List.of(), saved, 1);
 
-            GlobalPos here = GlobalPos.of(level.dimension(), connectorPos);
-            java.util.List<BusConfig> links = workbay.linksAt(here);
-            helper.assertValueEqual(links.size(), 2,
-                "links one Connector holds after being asked for a second bay");
-            helper.assertValueEqual(links.stream().map(BusConfig::bay).distinct().count(), 2L,
-                "distinct bays two links on one Connector point at");
-
-            // Pulling, not pushing: the chest is the source and each bay is a sink, so both links
-            // are EXTRACT and both are switched on. The chest holds enough for both.
-            if (level.getBlockEntity(chestPos) instanceof net.minecraft.world.Container chest) {
-                chest.setItem(0, new ItemStack(net.minecraft.world.item.Items.IRON_INGOT, 64));
-            }
-            for (BusConfig link : links) {
-                workbay.addBus(link.withMode(BusConfig.Mode.EXTRACT).withEnabled(true)
-                    .withRate(4).withSpeed(20));
-            }
-
-            helper.startSequence()
-                .thenIdle(160)
-                .thenExecute(() -> {
-                    for (int bay = 0; bay < 2; bay++) {
-                        BlockPos machine = com.neryos.workbay.world.BayGeometry
-                            .machinePos(record.bayColumn(), bay);
-                        int got = 0;
-                        if (backshop.getBlockEntity(machine)
-                            instanceof net.minecraft.world.Container hosted) {
-                            for (int slot = 0; slot < hosted.getContainerSize(); slot++) {
-                                if (hosted.getItem(slot)
-                                    .is(net.minecraft.world.item.Items.IRON_INGOT)) {
-                                    got += hosted.getItem(slot).getCount();
-                                }
-                            }
-                        }
-                        if (got <= 0) {
-                            helper.fail("bay " + (bay + 1) + " got no iron: one Connector is still"
-                                + " only feeding one bay");
-                        }
-                    }
-                })
-                .thenSucceed();
+            helper.assertValueEqual(record.buses().stream()
+                .filter(bus -> !bus.internal()).count(), 1L,
+                "links left on one Connector after a saved record was read back");
+            helper.assertValueEqual(record.buses().stream()
+                .filter(bus -> !bus.internal()).findFirst().orElseThrow().id(), kept,
+                "the link that survived the fold (the attached one, not the detached one)");
+            helper.assertValueEqual(record.buses().stream().filter(BusConfig::internal).count(), 2L,
+                "bay-to-bay links, which anchor on the Workbay and must not fold into each other");
+            helper.succeed();
         });
     }
 

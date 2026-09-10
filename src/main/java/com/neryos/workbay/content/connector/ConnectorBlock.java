@@ -32,7 +32,6 @@ import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -56,17 +55,16 @@ public class ConnectorBlock extends BaseEntityBlock {
     public static final DirectionProperty FACING = BlockStateProperties.FACING;
 
     /**
-     * Base cap: one resource type per Connector. The Multichannel upgrade raises it to every
-     * resource that <em>exists here</em> — three without Mekanism, four with it, because a fourth
-     * slot for a chemical link that can never bind is a slot that reads as broken. Not a constant
-     * for the same reason: whether chemicals exist is a property of the install.
+     * <b>One Connector, one link.</b> OPEN_ISSUES #77's model. It was a cap -- one resource on a
+     * base Connector, every resource this install has once a Multichannel was in -- and the cap
+     * was the thing that let one block hold four rows. The number is now one and it is not a
+     * number: the invariant lives on {@link com.neryos.workbay.world.WorkbayRecord}, where every
+     * path that writes a link has to go through it.
+     *
+     * <p><b>That was the Multichannel Upgrade's only reader.</b> Named in #77 rather than fixed
+     * here: the upgrade is still craftable, priced and installable and now gates nothing.
      */
-    public static final int BASE_LINKS = 1;
-
-    public static int multichannelLinks() {
-        return (int) java.util.Arrays.stream(BusConfig.Resource.values())
-            .filter(BusConfig.Resource::available).count();
-    }
+    public static final int LINKS_PER_CONNECTOR = 1;
 
     private static final VoxelShape[] SHAPES = new VoxelShape[6];
 
@@ -170,24 +168,18 @@ public class ConnectorBlock extends BaseEntityBlock {
     }
 
     /**
-     * Right-clicking a placed Connector with an empty hand adds <b>the next link this Connector
-     * could carry</b>, and the chat line says where it landed.
+     * Right-clicking a placed Connector opens its <b>rename panel</b>, and does nothing else.
+     * OPEN_ISSUES #77.
      *
-     * <p>The ladder runs over resources first and bays second: every resource this install has
-     * that the Connector's own bay does not already carry -- one without a Multichannel, all of
-     * them with -- and then the same again on the next bay of the network. <b>That second half is
-     * OPEN_ISSUES #77.</b> A chest feeding bay 1 could not also feed bay 2, and nothing in the
-     * storage was stopping it: a {@code BusConfig} carries its own bay and its own Connector
-     * position, and nothing keys a link by Connector, so two links on one Connector pointing at
-     * two bays persisted and ran already. What refused them was this method counting
-     * {@code linksAt(pos)} per <em>Connector</em> instead of per bay.
+     * <p>It used to add a link -- the next resource this Connector did not carry, then the same
+     * again on the next bay of the network -- which is how one block came to have four rows in a
+     * list that is meant to have one row per Connector. The model is one object, one name, one
+     * home bay: <b>a Connector is not a thing you feed bays with, it is a thing a bay picks up.</b>
+     * Which bay it lands on is a question about a bay, and this block cannot see which bay the
+     * player is standing in, so the answer never belonged in the world gesture at all -- it is the
+     * Add list on the bay screen, which already moves a link from any bay to the one you are in.
      *
-     * <p>Making the second click do something is the whole gesture. A placed Connector has no way
-     * to be told a bay -- this method cannot see the screen's selection -- and the alternatives
-     * were a re-stamp from the Pair button or a third list on the Add picker, both of which are a
-     * screen for a question the world already answers: a link can be handed to any bay afterwards
-     * ({@code LINK_ASSIGN_BAY}), so the click only has to <em>make</em> one. The refusal that is
-     * left is "every bay is served", which is the true one.
+     * <p>What is left is the one thing a block <em>can</em> answer for itself: what it is called.
      */
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
@@ -202,15 +194,9 @@ public class ConnectorBlock extends BaseEntityBlock {
             WorkbaySounds.refuse(player, WorkbayLang.message("connector_unpaired"));
             return InteractionResult.CONSUME;
         }
-        Slot next = nextFree(level, pos, connector);
-        if (next == null) {
-            WorkbaySounds.refuse(player, WorkbayLang.message("connector_full"));
-            return InteractionResult.CONSUME;
+        if (player instanceof net.minecraft.server.level.ServerPlayer server) {
+            com.neryos.workbay.menu.ConnectorMenu.open(server, pos);
         }
-        // The second and third resources on one Connector take the name the first one was given,
-        // because they are the same Connector and the player named the Connector, not the row.
-        String named = workbayNameAt(level, pos, connector);
-        addLink(level, pos, state, connector, next.bay(), next.resource(), player, named);
         return InteractionResult.CONSUME;
     }
 
@@ -229,60 +215,10 @@ public class ConnectorBlock extends BaseEntityBlock {
         super.onRemove(state, level, pos, newState, movedByPiston);
     }
 
-    /** One link this Connector does not carry yet: which bay it lands on, and what it moves. */
-    private record Slot(int bay, BusConfig.Resource resource) {}
-
-    /**
-     * The next link this Connector could carry, or null when every bay of the network is served.
-     *
-     * <p>Bays are walked from the Connector's own pairing and round, so the first click after
-     * placing always lands where the tooltip on the item said it would, and only a Connector whose
-     * own bay is full reaches for another. The cap is per <b>bay</b>: one resource, or every
-     * resource this install has once a Multichannel is in.
-     */
-    @Nullable
-    private static Slot nextFree(Level level, BlockPos pos, ConnectorBlockEntity connector) {
-        WorkbayBlockEntity workbay = connector.workbay().orElse(null);
-        com.neryos.workbay.world.WorkbayRecord record =
-            workbay == null ? null : workbay.record().orElse(null);
-        if (record == null) {
-            return null;
-        }
-        List<BusConfig> here = workbay.linksAt(GlobalPos.of(level.dimension(), pos));
-        int cap = record.upgrades().multichannel() > 0 ? multichannelLinks() : BASE_LINKS;
-        int bays = record.bayCapacity();
-        int from = connector.pairing().map(ConnectorPairing::bay).orElse(0);
-        for (int step = 0; step < bays; step++) {
-            int bay = (from + step) % bays;
-            List<BusConfig> onBay = here.stream().filter(link -> link.bay() == bay).toList();
-            if (onBay.size() >= cap) {
-                continue;
-            }
-            for (BusConfig.Resource resource : BusConfig.Resource.values()) {
-                if (resource.available()
-                    && onBay.stream().noneMatch(link -> link.resource() == resource)) {
-                    return new Slot(bay, resource);
-                }
-            }
-        }
-        return null;
-    }
-
     /** Whatever an anvil wrote on the stack, or "" for one that was never renamed. */
     private static String nameOn(ItemStack stack) {
         Component custom = stack.get(net.minecraft.core.component.DataComponents.CUSTOM_NAME);
         return custom == null ? "" : custom.getString().strip();
-    }
-
-    /** The name the links already on this Connector carry, so a second resource matches the first. */
-    private static String workbayNameAt(Level level, BlockPos pos, ConnectorBlockEntity connector) {
-        return connector.workbay()
-            .map(workbay -> workbay.linksAt(GlobalPos.of(level.dimension(), pos)).stream()
-                .map(BusConfig::name)
-                .filter(name -> !name.isEmpty())
-                .findFirst()
-                .orElse(""))
-            .orElse("");
     }
 
     private static void addLink(Level level, BlockPos pos, BlockState state,

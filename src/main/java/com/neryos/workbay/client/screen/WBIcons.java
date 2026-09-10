@@ -38,137 +38,104 @@ public final class WBIcons {
         new java.util.HashMap<>();
 
     /**
-     * One item sprite, {@code side} pixels wide instead of the sixteen it is drawn at, dimmed to
-     * the panel when the colour it was asked for is a faint one.
+     * One item sprite, {@code side} pixels wide instead of the sixteen it is drawn at, at the
+     * brightness the caller's colour has.
      *
-     * <p>An item sprite cannot be tinted -- {@code renderItem} goes through the item renderer and
-     * never sees {@code GuiGraphics#setColor} -- so "disabled" is the wash every other disabled
-     * thing on these screens uses, laid over the top.
+     * <p><b>Dimmed by tinting the sprite, not by laying anything over it.</b> The wash every
+     * other disabled thing uses was drawn here, and it landed <em>behind</em> the icon: an item
+     * sprite renders on the item renderer's own layer at Z 150 whatever the draw order was, so
+     * {@code Draw.disabled} put a dark rounded panel behind the redstone dust instead of taking
+     * the dust down -- which is what the whole set looked like it had been designed around.
+     * Neriya's call: solve it in the icon.
+     *
+     * <p>It <em>can</em> be solved in the icon, and the note that said otherwise was wrong:
+     * {@code GuiGraphics#setColor} sets the shader's colour modulator and
+     * {@code renderItem} flushes before it returns, so the multiply reaches the item's own
+     * quads. Scaled by the tint's brightness exactly the way {@link #dim} scales a palette
+     * colour, so a sprite and a drawn grid on the same disabled row go dark together.
      */
     public static void sprite(GuiGraphics graphics, net.minecraft.world.item.ItemStack stack,
         int x, int y, int side, boolean full) {
+        sprite(graphics, stack, x, y, side, full ? 0xFF : FAINT);
+    }
+
+    /** How dark {@link Draw#TEXT_FAINT} is against {@link Draw#TEXT}, as the grids read it. */
+    private static final int FAINT = 0x76;
+
+    public static void sprite(GuiGraphics graphics, net.minecraft.world.item.ItemStack stack,
+        int x, int y, int side, int lit) {
+        float tint = Math.min(1.0F, lit / 240.0F);
         graphics.pose().pushPose();
         graphics.pose().translate(x, y, 0);
         graphics.pose().scale(side / 16.0F, side / 16.0F, 1.0F);
-        graphics.renderItem(stack, 0, 0);
-        graphics.pose().popPose();
-        if (!full) {
-            Draw.disabled(graphics, x, y, side, side);
+        if (tint < 1.0F) {
+            graphics.setColor(tint, tint, tint, 1.0F);
         }
+        graphics.renderItem(stack, 0, 0);
+        if (tint < 1.0F) {
+            graphics.setColor(1.0F, 1.0F, 1.0F, 1.0F);
+        }
+        graphics.pose().popPose();
     }
 
     /**
-     * <b>Upgrade.</b> A chevron standing on the rung it just left.
+     * <b>Upgrade.</b> The mod's own Expansion Plate.
      *
-     * <p>The first one was an arrow into a box, which at twelve pixels is a house with a chimney;
-     * on a tab labelled UPGRADES that is a picture of the wrong idea. A step up over a bar is the
-     * one shape the genre agrees on, and it is what every upgrade in the tier table does.
+     * <p>It was a chevron over a bar -- the genre's shape for "a step up", and the last drawn
+     * glyph in a tab strip whose other entries are the Workbay and an iron door. The plate is the
+     * first row of the page the tab opens and the one upgrade every network buys, so the tab is
+     * now a picture of what is behind it rather than of the idea of improvement.
      */
-    public static final String[] UPGRADE = {
-        "............",
-        ".....##.....",
-        "....####....",
-        "...######...",
-        "..########..",
-        ".##########.",
-        "....####....",
-        "....####....",
-        "............",
-        "..########..",
-        "..########..",
-        "............",
-    };
+    public static final String[] UPGRADE = item("workbay:expansion_plate");
 
     /**
-     * The flow map. Was four arms meeting in the middle, which reads as "expand", not as a map --
-     * a flow map is <b>things joined by routes</b>, so this is two sources routed into one target.
-     * The nodes are hollow 3x3 boxes rather than solid 2x2 ones: filled squares that small merge
-     * into the lines they are attached to and the whole icon reads as a pitchfork.
+     * <b>The flow map.</b> A filled map, because the page is a map and the game has one.
+     *
+     * <p>The drawn version -- two sources routed into one target -- was a good diagram and a bad
+     * tab: at twelve pixels beside two item sprites it read as a fork, and a diagram of a map is
+     * a longer way round than the map.
      */
-public static final String[] MAP = {
-        "............",
-        "###.....###.",
-        "#.#.....#.#.",
-        "###.....###.",
-        "..#.......#.",
-        "..#########.",
-        ".....#......",
-        ".....#......",
-        "....###.....",
-        "....#.#.....",
-        "....###.....",
-        "............",
-    };
+    public static final String[] MAP = item("minecraft:filled_map");
 
     // ------------------------------------------------------- what a link carries
 
     /**
-     * <b>Energy.</b> A cell, not a bolt.
+     * <b>Energy.</b> A block of redstone.
      *
-     * <p>The bolt is the genre's reflex and it is the wrong shape for twelve pixels: a diagonal
-     * two pixels wide is a scratch, and every mod on the screen beside us already has one. A cell
-     * is an <em>object</em> -- a body, a terminal proud of it, a window with the charge showing
-     * through -- which is what the item sprites beside it are, and it is lit from the top left
-     * like every texture in the game. Picked off a rendered sheet at 1x, 3x and 8x.
+     * <p>It was a drawn cell, and the cell was a good drawing of the wrong thing to be: the row
+     * beside it is an item sprite (items) and a bucket (fluids), so a hand-drawn object among
+     * rendered ones reads as the one icon that failed to load. A block of redstone is the game's
+     * own noun for stored power and the material every tech mod in the genre spends on its first
+     * tier -- and at twelve pixels it is a solid red cube, which is nothing like the scattered
+     * dust, the torch or the repeater the redstone-mode button uses two panels away.
      */
-    public static final String[] ENERGY = {
-        "....2222....",
-        "...244443...",
-        "...233333...",
-        "..22222223..",
-        ".2111111113.",
-        ".2144444413.",
-        ".2145555413.",
-        ".2144444413.",
-        ".2111111113.",
-        ".2333333333.",
-        "..33333333..",
-        "............",
-    };
-
-    /** Steel body, its lit edge, its shadow, and the charge in two heats. */
-    public static final int[] ENERGY_COLOURS =
-        { 0xFF4A5364, 0xFF6E7A8E, 0xFF262C36, 0xFFFFC53D, 0xFFFFF0B8 };
+    public static final String[] ENERGY = item("minecraft:redstone_block");
 
     /**
-     * <b>Fluid.</b> A drop: pointed at the top, round at the bottom. Drawn rather than sampled
-     * from water, because a link carries whatever fluid it is pointed at and a blue puddle would
-     * name one of them.
+     * <b>Fluid.</b> A water bucket.
+     *
+     * <p>The drop it replaces was drawn to avoid naming one fluid, and the objection was real --
+     * a link carries whatever it is pointed at. It is the wrong trade: every fluid UI in the game
+     * and in the genre is a bucket, so the bucket is the word for "fluid" rather than the word
+     * for "water", and the drop was the shape a player had to be taught.
      */
-    public static final String[] FLUID = {
-        ".....##.....",
-        ".....##.....",
-        "....####....",
-        "....####....",
-        "...######...",
-        "..########..",
-        ".##########.",
-        ".##########.",
-        ".##########.",
-        "..########..",
-        "...######...",
-        "............",
-    };
+    public static final String[] FLUID = item("minecraft:water_bucket");
 
     /**
-     * <b>Chemical.</b> A round-bottomed flask with something in it. The neck is what separates it
-     * from {@link #FLUID} at this size — a bulb alone is a drop drawn upside down.
+     * <b>Chemical.</b> A bottle of dragon's breath -- vanilla's only container of gas, and the
+     * one object in the game that is a substance which is neither an item you stack nor a fluid
+     * you pour. Mekanism's own chemicals cannot be named here: they are the resource that is
+     * absent from an install without it, and an icon may not be.
      */
-    public static final String[] CHEMICAL = {
-        "...######...",
-        "....#..#....",
-        "....#..#....",
-        "....#..#....",
-        "...#....#...",
-        "..#......#..",
-        ".#........#.",
-        ".#........#.",
-        ".##########.",
-        ".##########.",
-        "..########..",
-        "............",
-    };
+    public static final String[] CHEMICAL = item("minecraft:dragon_breath");
 
+    /**
+     * <b>Lock and unlock stay drawn, and they are the one pair that has to.</b> Every other noun
+     * in this file is now the game's own picture of itself; vanilla has no padlock, and each
+     * candidate names something else -- an iron door is the rooms tab, a barrier is a refusal, a
+     * chest is a container. A shackle over a body is the shape the genre agreed on, and it is
+     * only ever drawn next to other drawn controls.
+     */
     public static final String[] LOCK = {
         "............",
         "....####....",
@@ -200,65 +167,25 @@ public static final String[] MAP = {
     };
 
     /**
-     * The trip to a hosted machine. ART.md: it must read as <b>reaching the machine</b>, not as a
-     * doorway -- one button carries "open its screen where you stand" and "walk into the bay"
-     * (SPEC.md §5), and a door is wrong for the first of those. So: a distance crossed, and the
-     * machine at the end of it: a distance crossed, and the machine's own wall at the far side.
+     * <b>The trip to a hosted machine.</b> An ender pearl: the one object in the game whose whole
+     * meaning is <em>reaching somewhere you are not</em>.
+     *
+     * <p>ART.md asks this to read as reaching the machine rather than as a doorway, because the
+     * one button carries both "open its screen where you stand" and "walk into the bay"
+     * (SPEC.md §5) -- and a pearl is the half of that pair a player already owns a word for. It
+     * was the last drawn glyph in a button row of five sprites.
      */
-public static final String[] ENTER = {
-        "............",
-        "............",
-        ".........###",
-        "....#....###",
-        "....##...###",
-        "########.###",
-        "########.###",
-        "....##...###",
-        "....#....###",
-        ".........###",
-        "............",
-        "............",
-    };
-
-    /** Opens Bay View. A window, deliberately not a machine. */
-    public static final String[] SCREEN = {
-        "............",
-        ".##########.",
-        ".##########.",
-        ".#........#.",
-        ".#.######.#.",
-        ".#.######.#.",
-        ".#.######.#.",
-        ".#........#.",
-        ".##########.",
-        "............",
-        "............",
-        "............",
-    };
+    public static final String[] ENTER = item("minecraft:ender_pearl");
 
     /**
-     * <b>Eject.</b> The machine coming back up out of an open bay.
+     * <b>Eject.</b> A piston: the one object in the game whose entire meaning is "push this back
+     * out".
      *
-     * <p>A bare eject bar is a media button. This is a box with its top gone and what was in it on
-     * the way out, which is the sentence the tooltip says. Drawn open on purpose: closed it is a
-     * crate, and a crate is what the bay rack beside it already means.
+     * <p>The drawn box with its lid off was the last hand-drawn glyph in a button row of five
+     * sprites -- rename, redstone, copy, paste -- and one drawing among five renders is the
+     * inconsistency you see before you read any of them.
      */
-    public static final String[] EJECT = {
-        ".....2......",
-        "....222.....",
-        "...22222....",
-        "..2222223...",
-        "....2223....",
-        ".....23.....",
-        "111111111111",
-        "1..........3",
-        "1..........3",
-        "1..........3",
-        "1..........3",
-        "133333333333",
-    };
-
-    public static final int[] EJECT_COLOURS = { 0xFF7C8698, 0xFFB9C2D0, 0xFF3A4150 };
+    public static final String[] EJECT = item("minecraft:piston");
 
     /**
      * <b>Rename.</b> The thing you rename with, and the one object in the game that means exactly that.
@@ -507,21 +434,12 @@ public static final String[] EXTRACT = {
      */
     public static final String[] DOOR = item("minecraft:iron_door");
 
-    /** The room anchor toggle: a shackle over two flukes, read at twelve pixels as "held down". */
-    public static final String[] ANCHOR = {
-        "....####....",
-        "...##..##...",
-        "...##..##...",
-        "....####....",
-        ".....##.....",
-        "..########..",
-        ".....##.....",
-        ".....##.....",
-        "##...##...##",
-        "##...##...##",
-        ".##########.",
-        "...######...",
-    };
+    /**
+     * <b>Anchor.</b> A respawn anchor -- vanilla's own block called an anchor, and the only one
+     * that means "this place stays real while you are not in it", which is the whole of what the
+     * upgrade buys.
+     */
+    public static final String[] ANCHOR = item("minecraft:respawn_anchor");
 
     /**
      * <b>Guest.</b> Rendered as the block model, which is a head: the one icon here that is 3D and is better for it.
@@ -601,8 +519,7 @@ public static final String[] EXTRACT = {
      * the one control that recolours itself.
      */
     private static final java.util.Map<String[], int[]> PALETTES = java.util.Map.of(
-        ENERGY, ENERGY_COLOURS, EJECT, EJECT_COLOURS, FILTER, FILTER_COLOURS,
-        PAPER, PAPER_COLOURS);
+        FILTER, FILTER_COLOURS, PAPER, PAPER_COLOURS);
 
     public static void draw(GuiGraphics graphics, String[] icon, int x, int y, int argb,
         int... palette) {
@@ -616,7 +533,7 @@ public static final String[] EXTRACT = {
                 new net.minecraft.world.item.ItemStack(
                     net.minecraft.core.registries.BuiltInRegistries.ITEM.get(
                         net.minecraft.resources.ResourceLocation.parse(id.substring(1))))),
-                x, y, 12, lit >= 0xC0);
+                x, y, 12, lit);
             return;
         }
         for (int row = 0; row < icon.length; row++) {

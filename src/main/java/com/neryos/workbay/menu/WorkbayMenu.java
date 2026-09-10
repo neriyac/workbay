@@ -1072,7 +1072,8 @@ public class WorkbayMenu extends AbstractContainerMenu {
             bays, links, record.upgrades(), record.deployedCount(),
             com.neryos.workbay.config.WorkbayConfig.SERVER.maxDeployedWorkbaysPerNetwork.get(),
             com.neryos.workbay.remote.RemoteConfig.remoteScreensEnabled(),
-            readRooms(player, record));
+            readRooms(player, record),
+            com.neryos.workbay.config.WorkbayConfig.SERVER.chargesForRunning());
     }
 
     /**

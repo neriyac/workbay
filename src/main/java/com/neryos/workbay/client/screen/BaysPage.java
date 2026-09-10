@@ -236,13 +236,18 @@ class BaysPage extends WorkbayPage {
 
         // A bar with no figure beside it reads as broken, and an empty one reads as broken twice
         // over, so with no capacity at all the words replace the bar entirely (SPEC.md §7).
-        boolean powered = snap.energyCapacity() > 0;
-        String power = powered
-            ? Draw.compact(snap.energy()) + " / " + Draw.compact(snap.energyCapacity())
-            : WorkbayScreen.gui("power.none").getString();
+        //
+        // <b>And with nothing to spend it on, neither is drawn.</b> Both power knobs ship at zero
+        // (WorkbayConfig), so on a stock server this buffer is filled by nobody, spent by nothing
+        // and never moves -- a column on the header saying "0 / 100.0k" about a charge that is
+        // not being made. Neriya's call: while the value is zero the word is not on the screen.
+        // The counters take the width back, which is the rest of this method's whole argument.
+        boolean powered = snap.charged() && snap.energyCapacity() > 0;
+        String power = !snap.charged() ? ""
+            : Draw.compact(snap.energy()) + " / " + Draw.compact(snap.energyCapacity());
         // Measured, not assumed -- see POWER_W. The counters are packed against this, so they are
         // told the same number the readout is drawn with and the two can never disagree.
-        int powerW = Math.max(POWER_W, Draw.width(font, power));
+        int powerW = power.isEmpty() ? 0 : Math.max(POWER_W, Draw.width(font, power));
 
         // Three counters, packed left to right against where the power readout starts, rather than
         // sitting on hardcoded pitches with guessed widths. Guessed widths were wrong twice on one
@@ -250,7 +255,7 @@ class BaysPage extends WorkbayPage {
         // fit 46 either. Packed, each one has exactly what it needs and the last one has the rest,
         // which is the only version of this that cannot be wrong for a count nobody tried.
         int textX = x(8);
-        int limit = x(POWER_X) - powerW - 6;
+        int limit = power.isEmpty() ? x(WIDTH - 8) : x(POWER_X) - powerW - 6;
         int cursor = textX;
         if (!snap.bays().isEmpty()) {
             cursor = counter(g, WorkbayScreen.gui("count.bays", used, snap.bayCapacity()),
@@ -279,7 +284,10 @@ class BaysPage extends WorkbayPage {
                 WorkbayScreen.gui("links.problems.tip"));
         }
 
-        textRight(g, power, x(POWER_X), y(31), powerW, powered ? Draw.TEXT_DIM : Draw.TEXT_FAINT);
+        if (!power.isEmpty()) {
+            textRight(g, power, x(POWER_X), y(31), powerW,
+                powered ? Draw.TEXT_DIM : Draw.TEXT_FAINT);
+        }
         if (powered) {
             Draw.bar(g, x(250), y(29), 44, 9, snap.energy(), snap.energyCapacity(), Draw.ENERGY);
             screen.hit(x(250), y(29), 44, 9, () -> { },
@@ -1651,7 +1659,20 @@ class BaysPage extends WorkbayPage {
                     com.neryos.workbay.client.LinkHighlight.set(config.target());
                 }
                 checkbox(g, px, py + 3, ticked);
-                resourceIcon(g, config.resource(), px + 18, py + 3);
+                // <b>The block it is stuck to, not what it carries.</b> OPEN_ISSUES #77: this
+                // list is a list of Connectors, and a Connector on an Energy Cube is recognised
+                // as an Energy Cube long before a drop or a cell is decoded as "fluid" or
+                // "energy". The resource is one click away on the row it lands on, and it is the
+                // one fact about a link that the player is about to change anyway. An internal
+                // link has no block in the world, so it keeps the arrow it always had.
+                Optional<ResourceLocation> pickIcon = targetIcon(link);
+                if (pickIcon.isPresent()
+                    && BuiltInRegistries.ITEM.get(pickIcon.get()) != net.minecraft.world.item.Items.AIR) {
+                    WBIcons.sprite(g, new ItemStack(BuiltInRegistries.ITEM.get(pickIcon.get())),
+                        px + 18, py + 3, 12, true);
+                } else {
+                    resourceIcon(g, config.resource(), px + 18, py + 3);
+                }
                 String label = labelOf(link);
                 // An internal link's target is a machine in the Backshop, which this client has
                 // never loaded, so asking for the block there gets air. Name the bay instead --
@@ -1837,8 +1858,27 @@ class BaysPage extends WorkbayPage {
      * Never the link's <em>state</em> — the status column beside it is already saying that, and the
      * name column has fifty pixels it can spend on something the row is not otherwise carrying.
      */
+    /**
+     * What the row calls this link.
+     *
+     * <p>The name the player gave it; failing that <b>the Connector's own coordinates</b>, which
+     * is OPEN_ISSUES #77's model: a Connector is one object with a name, and its name before
+     * anybody gives it one is where it is. It used to be the target block's own name, which was
+     * the right answer while one Connector could hold four rows -- and is the wrong one now, when
+     * three Connectors on three Energy Cubes would be three rows all reading "Basic Energy Cube".
+     * The block is the icon beside it, and the full answer is one hover away.
+     *
+     * <p>A link into a room is still named by the room: the coordinate of a barrel in a dimension
+     * the player cannot walk to names nothing.
+     */
     private String labelOf(WorkbaySnapshot.Link link) {
-        return link.label().orElseGet(() -> targetName(link));
+        return link.label().orElseGet(() -> {
+            if (link.targetRoom().isPresent()) {
+                return snapshot().roomLabel(link.targetRoom().get()).getString();
+            }
+            net.minecraft.core.BlockPos at = link.config().connector().pos();
+            return at.getX() + " " + at.getY() + " " + at.getZ();
+        });
     }
 
     /**

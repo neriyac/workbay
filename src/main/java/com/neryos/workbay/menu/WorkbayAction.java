@@ -177,5 +177,15 @@ public enum WorkbayAction {
      * <p>Last in the enum, for the reason every action before it was appended: an action travels
      * as its ordinal.
      */
-    REMOVE_ROOM
+    REMOVE_ROOM,
+    /**
+     * What to call the Connector the player is standing at. {@code text} is the name; empty clears
+     * it and the row falls back to the Connector's own coordinates. Sent only by
+     * {@link com.neryos.workbay.menu.ConnectorMenu}, which is the whole of what right-clicking a
+     * placed Connector does now (OPEN_ISSUES #77).
+     *
+     * <p>Last in the enum, for the reason every action before it was appended: an action travels
+     * as its ordinal.
+     */
+    SET_CONNECTOR_NAME
 }

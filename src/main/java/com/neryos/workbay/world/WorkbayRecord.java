@@ -39,6 +39,54 @@ public record WorkbayRecord(
     List<com.neryos.workbay.bus.BusConfig> buses,
     int deployedCount) {
 
+    /**
+     * <b>One Connector, one link.</b> OPEN_ISSUES #77's model, enforced where every path that
+     * builds a record has to go through it rather than in the one place that happened to mint
+     * links -- the fan-out that made four rows out of one Connector was written in a block's
+     * {@code useWithoutItem}, and a rule that lives beside the mistake is a rule the next mistake
+     * will not obey.
+     *
+     * <p>It is an <em>invariant on the list</em> and not a change of shape: {@link
+     * com.neryos.workbay.bus.BusConfig} already carries the Connector's own {@code GlobalPos},
+     * so "a Connector owns its placement" is what was already stored.
+     *
+     * <p><b>Internal links are exempt, and that is not a detail.</b> A bay-to-bay link anchors on
+     * the Workbay's own position ({@code BusConfig#createInternal}) because there is no Connector
+     * to anchor it to -- so folding by position without this exemption collapses every internal
+     * link in a network into one.
+     *
+     * <p>An attached link beats a detached one, then list order wins. A world saved before this
+     * loses the extras, with their filter, rate, speed and name; that is stated in #77 rather
+     * than migrated, because the extras are rows the model says should never have existed.
+     */
+    public WorkbayRecord {
+        buses = foldByConnector(buses);
+    }
+
+    private static List<com.neryos.workbay.bus.BusConfig> foldByConnector(
+        List<com.neryos.workbay.bus.BusConfig> all) {
+        java.util.Map<GlobalPos, Integer> seen = new java.util.HashMap<>();
+        List<com.neryos.workbay.bus.BusConfig> kept = new java.util.ArrayList<>(all.size());
+        boolean folded = false;
+        for (com.neryos.workbay.bus.BusConfig bus : all) {
+            if (bus.internal()) {
+                kept.add(bus);
+                continue;
+            }
+            Integer at = seen.get(bus.connector());
+            if (at == null) {
+                seen.put(bus.connector(), kept.size());
+                kept.add(bus);
+                continue;
+            }
+            folded = true;
+            if (kept.get(at).detached() && !bus.detached()) {
+                kept.set(at, bus);
+            }
+        }
+        return folded ? List.copyOf(kept) : all;
+    }
+
     public static final Codec<WorkbayRecord> CODEC = RecordCodecBuilder.create(i -> i.group(
         UUIDUtil.CODEC.fieldOf("Id").forGetter(WorkbayRecord::id),
         Codec.STRING.fieldOf("Code").forGetter(WorkbayRecord::code),

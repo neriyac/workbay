@@ -42,6 +42,8 @@ public final class WorkbayClient {
         event.register(WBMenus.WORKBAY.get(), WorkbayScreen::new);
         event.register(WBMenus.ROOM_DOOR.get(),
             com.neryos.workbay.client.screen.RoomDoorScreen::new);
+        event.register(WBMenus.CONNECTOR.get(),
+            com.neryos.workbay.client.screen.ConnectorScreen::new);
     }
 
     /**

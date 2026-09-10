@@ -165,7 +165,7 @@ public class WorkbayBlockEntity extends BlockEntity {
      * running cost is not something outside the block. It writes the stored figure directly, the
      * same call {@code deserializeNBT} makes when a buffer comes back off disk.
      *
-     * <p>All or nothing. Half a fee buys half a move, and there is no such thing.
+     * <p>All or nothing. Half the power buys half a move, and there is no such thing.
      *
      * @return true when the whole amount was there and has now been spent
      */
