@@ -552,22 +552,18 @@ public class DuplicationTests {
             cube.setPlacedBy(level, sourcePos, cubeState, player, new ItemStack(cube));
             level.invalidateCapabilities(sourcePos);
 
-            int charged = 0;
-            for (Direction side : Direction.values()) {
-                var store = level.getCapability(
-                    net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK,
-                    sourcePos, side);
-                if (store != null) {
-                    charged = store.receiveEnergy(200_000, false);
-                    if (charged > 0) {
-                        break;
-                    }
-                }
-            }
+            // Through the same fixture the command uses, and asserting on what it *kept*. The
+            // hand-rolled loop this replaces asserted on receiveEnergy's return, which is the
+            // number Mekanism's creative cube lies with -- so this test could have been written
+            // against an empty source and still passed. OPEN_ISSUES #81.
+            int charged = com.neryos.workbay.command.WorkbayCommands
+                .chargeBlock(level, sourcePos).stored();
             if (charged <= 0) {
                 helper.fail("could not charge the source Energy Cube through any face, so there is "
                     + "nothing for the link to carry");
             }
+            helper.assertValueEqual(inEnergy(level, sourcePos), charged,
+                "FE the source reports holding, against what charging it stored");
 
             WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
             WorkbayRecord record = workbay.record().orElseThrow();
@@ -614,6 +610,75 @@ public class DuplicationTests {
                 })
                 .thenSucceed();
         });
+    }
+
+    /**
+     * The instrument, not the mod: <b>charging a block reports what the block kept</b>.
+     *
+     * <p>Mekanism's creative Energy Cube combines every insert with {@code SIMULATE}, so it answers
+     * {@code receiveEnergy} with {@code Integer.MAX_VALUE} and stores nothing — and a creative cube
+     * taken from JEI or {@code /give}, rather than from the creative tab's second, charged entry,
+     * arrives empty and stays empty. Trusting that answer printed <em>"Pushed 2147483646 FE"</em>
+     * over an empty cube, and the empty cube then made a healthy energy link read Idle for a
+     * session: that is the whole of OPEN_ISSUES #81, and no test could see it because the fixture
+     * was the thing that was wrong.
+     *
+     * <p>Both halves on purpose. A source that keeps nothing must report zero, and a source that
+     * really keeps something must report what it kept — or the fix is just a zero.
+     */
+    @GameTest
+    @TestHolder(description = "Charging a block reports the FE it kept, not the FE its handler "
+        + "claimed to accept.")
+    public static void chargingReportsWhatTheBlockKeptAndNotWhatItClaimed(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 3, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+
+            Block creative = net.minecraft.core.registries.BuiltInRegistries.BLOCK
+                .get(net.minecraft.resources.ResourceLocation.parse("mekanism:creative_energy_cube"));
+            Block basic = net.minecraft.core.registries.BuiltInRegistries.BLOCK
+                .get(net.minecraft.resources.ResourceLocation.parse("mekanism:basic_energy_cube"));
+            if (creative == Blocks.AIR || basic == Blocks.AIR) {
+                helper.fail("Mekanism's Energy Cubes are not registered. This test is about a real "
+                    + "mod's energy handler, so a missing partner mod is a failure, never a skip.");
+            }
+
+            BlockPos liar = helper.absolutePos(new BlockPos(1, 1, 1));
+            BlockPos honest = helper.absolutePos(new BlockPos(3, 1, 3));
+            place(level, player, liar, creative);
+            place(level, player, honest, basic);
+
+            var lied = com.neryos.workbay.command.WorkbayCommands.chargeBlock(level, liar);
+            // If this ever fails, Mekanism stopped lying and the guard below stopped guarding.
+            helper.assertTrue(lied.claimed() > 0,
+                "the creative cube no longer claims to accept FE, so this test guards nothing");
+            helper.assertValueEqual(lied.stored(), 0,
+                "FE reported as stored in a creative Energy Cube, which keeps none");
+            helper.assertValueEqual(inEnergy(level, liar), 0,
+                "FE actually held by a creative Energy Cube after charging it");
+
+            var kept = com.neryos.workbay.command.WorkbayCommands.chargeBlock(level, honest);
+            helper.assertTrue(kept.stored() > 0,
+                "charging a Basic Energy Cube stored nothing, so the fixture is now useless");
+            helper.assertValueEqual(kept.stored(), inEnergy(level, honest),
+                "FE reported as stored in a Basic Energy Cube, against what it holds");
+            helper.succeed();
+        });
+    }
+
+    /** A block put down the way a player puts it down, from a bare item — components and all. */
+    private static void place(ServerLevel level, GameTestPlayer player, BlockPos pos, Block block) {
+        BlockState state = block.defaultBlockState();
+        ItemStack stack = new ItemStack(block);
+        level.setBlock(pos, state, Block.UPDATE_ALL);
+        net.minecraft.world.item.BlockItem.updateCustomBlockEntityTag(level, player, pos, stack);
+        if (level.getBlockEntity(pos) != null) {
+            level.getBlockEntity(pos).applyComponentsFromItemStack(stack);
+        }
+        block.setPlacedBy(level, pos, state, player, stack);
+        level.invalidateCapabilities(pos);
     }
 
     private static BusConfig connect(ExtendedGameTestHelper helper, WorkbayBlockEntity workbay,

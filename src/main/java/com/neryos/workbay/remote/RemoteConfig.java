@@ -60,13 +60,19 @@ public final class RemoteConfig {
             # Workbay: the only file in this mod read before Minecraft's classes are loaded.
             #
             # remoteScreens=true lets a Workbay open a hosted machine's own screen wherever the
-            # player is. It needs two Mixin injections, both narrow and both only for this:
-            #   Player#canInteractWithBlock  - so the open screen is not closed for standing away
-            #   Level#getBlockEntity         - client only, so the screen can find a machine whose
-            #                                  chunk is in a dimension the client was never sent
+            # player is. It needs five Mixin injections, every one of them narrow, every one of
+            # them consulted only while such a screen is open, and every one of them answering
+            # about a block rather than about the player:
+            #   Player#canInteractWithBlock   - so the open screen is not closed for standing away
+            #   ServerChunkCache#hasChunk     - a mod asks "is it loaded" before it asks for a tile
+            #   Level#getBlockEntity          - so a mod's own button finds the machine
+            #   ClientChunkCache#getChunk     - client only: the machine's chunk was never sent
+            #   LevelChunk#getBlockEntity     - client only: and when that chunk coordinate really
+            #                                   is loaded in the player's own dimension, the answer
+            #                                   has to be given for one position instead
             #
-            # Set it to false and neither class is patched: the mixins are not applied, and the
-            # button is not offered. Everything else in the mod works exactly the same.
+            # Set it to false and none of those classes is patched: the mixins are not applied, and
+            # the button is not offered. Everything else in the mod works exactly the same.
             remoteScreens=true
             """);
     }

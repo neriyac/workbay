@@ -103,7 +103,7 @@ neoForge {
     runs {
         client {
             client()
-            programArguments.addAll '--quickPlaySingleplayer', 'Walk'
+            programArguments.addAll '--quickPlaySingleplayer', 'Round Two'
             // To drive the client without a human, add:
             //   programArguments.addAll '--quickPlaySingleplayer', '<world name in run/saves>'
             // It boots straight past the menus. Left out by default because it fails on a fresh

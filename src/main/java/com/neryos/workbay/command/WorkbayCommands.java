@@ -55,11 +55,48 @@ public class WorkbayCommands {
     }
 
     /**
-     * Fills the looked-at block's energy buffer. A test fixture, not a feature: the mod's own
-     * gametests charge a source through the capability in one line, and without this there is no
-     * way to do the same by hand -- a creative Energy Cube placed from a bare item arrives empty,
-     * and its own screen offers no way to fill it.
+     * What one call to {@link #chargeBlock} did: the FE the block <b>kept</b>, and the FE its
+     * handler <b>claimed</b> to accept. They are not the same number, and the gap is the point.
      */
+    public record Charged(int stored, int claimed) {}
+
+    /**
+     * Fills a block's energy buffer, and answers with what actually landed in it.
+     *
+     * <p>A test fixture, not a feature: the mod's own gametests charge a source through the
+     * capability in one line, and without this there is no way to do the same by hand.
+     *
+     * <p><b>Measured, not asked.</b> {@code receiveEnergy}'s return is what a handler
+     * <em>says</em> it took, and Mekanism's creative Energy Cube says it took
+     * {@code Integer.MAX_VALUE} and keeps nothing -- its container combines every insert with
+     * {@code SIMULATE} so a creative buffer cannot be filled from outside at all. Trusting that
+     * return printed "Pushed 2147483646 FE" over an empty cube, and the empty cube then made a
+     * perfectly healthy energy link read Idle for a session: OPEN_ISSUES #81, and the whole of it.
+     * So this reads {@code getEnergyStored} either side of the push and reports the difference.
+     * Same rule as everywhere else in the mod -- never a foreign handler's word for what it did.
+     */
+    public static Charged chargeBlock(net.minecraft.server.level.ServerLevel level,
+        net.minecraft.core.BlockPos pos) {
+        int claimed = 0;
+        int stored = 0;
+        for (net.minecraft.core.Direction side : net.minecraft.core.Direction.values()) {
+            var store = level.getCapability(
+                net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK, pos, side);
+            if (store == null) {
+                continue;
+            }
+            int before = store.getEnergyStored();
+            int said = store.receiveEnergy(Integer.MAX_VALUE, false);
+            int landed = store.getEnergyStored() - before;
+            claimed = Math.max(claimed, said);
+            if (landed > 0) {
+                stored = landed;
+                break;
+            }
+        }
+        return new Charged(stored, claimed);
+    }
+
     private static int charge(CommandSourceStack source) {
         if (!(source.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) {
             source.sendFailure(Component.literal("Run this as a player, looking at a block."));
@@ -71,20 +108,16 @@ public class WorkbayCommands {
             return 0;
         }
         net.minecraft.core.BlockPos pos = block.getBlockPos();
-        int total = 0;
-        for (net.minecraft.core.Direction side : net.minecraft.core.Direction.values()) {
-            var store = player.serverLevel().getCapability(
-                net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK, pos, side);
-            if (store != null) {
-                total = store.receiveEnergy(Integer.MAX_VALUE, false);
-                if (total > 0) {
-                    break;
-                }
-            }
+        Charged charged = chargeBlock(player.serverLevel(), pos);
+        String name = player.serverLevel().getBlockState(pos).getBlock().getName().getString();
+        source.sendSuccess(() -> Component.literal(
+            "Pushed " + charged.stored() + " FE into " + name), false);
+        if (charged.stored() == 0 && charged.claimed() > 0) {
+            // The one line that would have ended #81 in a minute instead of a session.
+            source.sendSuccess(() -> Component.literal("  it reported accepting "
+                + charged.claimed() + " FE and kept none, so it holds nothing for a link to carry")
+                .withStyle(ChatFormatting.RED), false);
         }
-        int stored = total;
-        source.sendSuccess(() -> Component.literal("Pushed " + stored + " FE into "
-            + player.serverLevel().getBlockState(pos).getBlock().getName().getString()), false);
         return 1;
     }
 

@@ -25,9 +25,14 @@ import org.spongepowered.asm.mixin.injection.At;
  * being patched one at a time.
  *
  * <p>A real chunk always wins: only vanilla's {@code null} and its shared empty chunk are replaced.
- * The cost of that is a collision nobody will hit but which is worth writing down — a player
- * standing next to the same chunk coordinates in their own dimension gets the real chunk, and the
- * remote screen refuses to open until they walk away.
+ * It has to — a chunk vanilla hands over is the world the player is standing in, and swapping it for
+ * a chunk of air would put a hole in their terrain.
+ *
+ * <p><b>That collision is not rare, and it is not handled here.</b> A network's bay column is
+ * allocated from index zero, so the first network anybody makes is in chunk (0, 0), which any player
+ * building near the world origin has loaded. Then this returns their overworld and the copy is never
+ * consulted. {@link LevelChunkMixin} answers that case <em>per position</em>, which is the one thing
+ * a chunk-level hook cannot do. OPEN_ISSUES #80.
  */
 @Mixin(ClientChunkCache.class)
 public abstract class ClientChunkCacheMixin {

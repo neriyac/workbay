@@ -10,6 +10,7 @@
         "ServerChunkCacheMixin"
     ],
     "client": [
-        "ClientChunkCacheMixin"
+        "ClientChunkCacheMixin",
+        "LevelChunkMixin"
     ]
 }
