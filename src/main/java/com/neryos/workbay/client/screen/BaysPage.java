@@ -192,9 +192,20 @@ class BaysPage extends WorkbayPage {
     @org.jetbrains.annotations.Nullable
     private static UUID editingFilter;
 
+    /**
+     * The page's ceiling, which is <b>taller while the filter panel is open</b>. The panel carries
+     * the player's own inventory now, and the links area it is centred in was never sized for one
+     * -- five rows of links is 130 pixels and the panel needs the best part of 200. Raising the cap
+     * only while it is open costs nothing the rest of the time; {@code availableHeight} still has
+     * the last word, so a short window shrinks the whole thing as it always did.
+     */
+    private static int maxHeight() {
+        return editingFilter != null ? MAX_HEIGHT + 96 : MAX_HEIGHT;
+    }
+
     BaysPage(WorkbayScreen screen) {
         super(screen);
-        height = Math.clamp(screen.availableHeight() - 8, MIN_HEIGHT, MAX_HEIGHT);
+        height = Math.clamp(screen.availableHeight() - 8, MIN_HEIGHT, maxHeight());
         // Eight bay slots always fit, however short the window is; they lose pitch, not slots.
         rackPitch = Math.clamp((height - RACK_Y - 12) / BayGeometry.MAX_BAYS, 20, 26);
         slot = rackPitch - 2;
@@ -1261,7 +1272,12 @@ class BaysPage extends WorkbayPage {
             // direction arrow beside it already uses for insert and extract.
             g.fill(px, py + 16, px + 16, py + 17, filter.deny() ? Draw.AMBER : Draw.BLUE);
         }
-        screen.hit(px, py, 16, 16, () -> editingFilter = config.id(),
+        screen.hit(px, py, 16, 16, () -> {
+                editingFilter = config.id();
+                // The page is a different height with the panel open, and height is worked out in
+                // the constructor -- so the panel has to be built, not merely drawn.
+                screen.relayout();
+            },
             filter.isEmpty()
                 ? WorkbayScreen.gui("filter.none")
                 : WorkbayScreen.gui(filter.deny() ? "filter.some.deny" : "filter.some.allow",
@@ -1291,8 +1307,12 @@ class BaysPage extends WorkbayPage {
         // A chemical link's panel carries one line the others do not — the sentence about which
         // face carries gas — and on its first screenshot that line was drawn below the well and
         // cut in the middle of a word. The height is part of the layout, not a constant.
+        // A chemical filter has no items to pick from -- it is named off the tank (#41) -- so it
+        // is the one resource whose panel carries no inventory.
+        boolean pickable = config.resource() != BusConfig.Resource.CHEMICAL;
         int panelH = SLOT_PITCH + 26 + STEP_H + 4
-            + (config.resource() == BusConfig.Resource.CHEMICAL ? 14 : 0);
+            + (config.resource() == BusConfig.Resource.CHEMICAL ? 14 : 0)
+            + (pickable ? INVENTORY_H : 0);
         int blockH = 18 + 6 + panelH;
         int blockY = y(linksY) + (18 + rows * ROW_PITCH + 12 - blockH) / 2;
 
@@ -1360,6 +1380,58 @@ class BaysPage extends WorkbayPage {
         textCentre(g, WorkbayScreen.gui(said).getString(),
             x(LIST_X + LIST_W / 2), panelY + SLOT_PITCH + 12 + STEP_H + 4, LIST_W - 16,
             carrying ? Draw.SELECT : Draw.TEXT_FAINT);
+        inventory(g, mouseX, mouseY, config, entriesY + SLOT_PITCH + 14);
+    }
+
+    /** Four rows of nine at eighteen pixels, plus the line that says what it is for. */
+    private static final int INVENTORY_H = 4 * 18 + 3 + 12;
+
+    /**
+     * <b>The player's own inventory, inside the filter panel.</b>
+     *
+     * <p>The panel had nine ghost slots and three ways to fill one: hold the item in your hand and
+     * click, drag it out of JEI, or lift an entry from another slot. All three need the thing to be
+     * somewhere other than your backpack, so the ordinary case -- "I want to filter on the cooked
+     * chicken I am carrying" -- meant closing the screen, moving a stack to the hotbar, and coming
+     * back. Neriya's ask.
+     *
+     * <p><b>Ghosts, not slots.</b> A filter entry is an item <em>id</em>, not a stack, and this
+     * screen deliberately has no {@code Slot} of any kind (SPEC.md §4) -- so nothing here can be
+     * picked up, moved or lost. Clicking one puts a copy on the cursor, which is the gesture the
+     * filter slots already have between themselves; clicking a slot drops it in. Clicking with
+     * something already on the cursor puts it back rather than swapping, because a swap here would
+     * be the only place in the mod where an inventory cell changed.
+     */
+    private void inventory(GuiGraphics g, int mouseX, int mouseY, BusConfig config, int py) {
+        var player = net.minecraft.client.Minecraft.getInstance().player;
+        if (player == null) {
+            return;
+        }
+        text(g, WorkbayScreen.gui("filter.inventory"), x(LIST_X + 8), py, LIST_W - 16,
+            Draw.TEXT_FAINT);
+        int gridW = 9 * 18;
+        int gridX = LIST_X + (LIST_W - gridW) / 2;
+        int gridY = py + 12;
+        for (int index = 0; index < 36; index++) {
+            // The hotbar last, drawn where a player looks for it: vanilla's slot 0..8 is the
+            // hotbar and 9..35 the three rows above it, and drawing them in index order would put
+            // the hotbar on top.
+            int slot = index < 27 ? index + 9 : index - 27;
+            int cx = x(gridX + (index % 9) * 18);
+            int cy = gridY + (index / 9) * 18 + (index >= 27 ? 3 : 0);
+            Draw.slot(g, cx, cy, 18, 18);
+            ItemStack stack = player.getInventory().getItem(slot);
+            if (stack.isEmpty()) {
+                continue;
+            }
+            WBIcons.sprite(g, stack, cx + 1, cy + 1, 16, false);
+            boolean carrying = !screen.carried().isEmpty();
+            screen.hit(cx, cy, 18, 18,
+                () -> screen.carry(carrying ? ItemStack.EMPTY : stack),
+                stack.getHoverName(),
+                WorkbayScreen.gui(carrying ? "filter.inventory.putback.tip"
+                    : "filter.inventory.tip"));
+        }
     }
 
     /**
@@ -1473,6 +1545,7 @@ class BaysPage extends WorkbayPage {
     private void closeFilter() {
         screen.carry(ItemStack.EMPTY);
         editingFilter = null;
+        screen.relayout();
     }
 
     /**

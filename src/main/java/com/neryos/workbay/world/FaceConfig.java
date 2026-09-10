@@ -69,15 +69,30 @@ public record FaceConfig(int items, int fluids, int energy, int chemicals) {
             return EnumSet.allOf(Direction.class);
         }
         Role wanted = takingOut ? Role.OUTPUT : Role.INPUT;
+        Role opposite = takingOut ? Role.INPUT : Role.OUTPUT;
         EnumSet<Direction> allowed = EnumSet.noneOf(Direction.class);
+        EnumSet<Direction> notDenied = EnumSet.noneOf(Direction.class);
         for (Direction face : Direction.values()) {
-            if (role(resource, face) == wanted) {
+            Role role = role(resource, face);
+            if (role == wanted) {
                 allowed.add(face);
             }
+            if (role != opposite) {
+                notDenied.add(face);
+            }
         }
-        // Configured, but not for this direction of travel. Falling back to every face would make
-        // the config a decoration; an empty set is what makes the cube mean something.
-        return allowed;
+        // <b>Setting a face for one direction of travel must not close the other one.</b> This
+        // returned the empty set whenever anything at all was configured and nothing carried the
+        // role being asked for -- so marking the top face "in", which is the first and most
+        // obvious thing anybody does, silently made the machine impossible to take anything out
+        // of, and the row said "Idle. Nothing to move." Found in a live world: a furnace fed
+        // through its top face would not give its cooked output back, because "out" had never
+        // been set and every face had therefore been closed to it. OPEN_ISSUES #83.
+        //
+        // A face the player marked for the <em>opposite</em> role is still refused -- that is a
+        // deliberate instruction and the whole point of the cube. What is no longer refused is a
+        // face nobody has said anything about.
+        return allowed.isEmpty() ? notDenied : allowed;
     }
 
     /**

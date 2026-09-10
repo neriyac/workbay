@@ -83,6 +83,7 @@ public class WorkbayConfig {
         public final ModConfigSpec.IntValue maxBaysPerWorkbay;
         public final ModConfigSpec.IntValue maxRoomsPerNetwork;
         public final ModConfigSpec.BooleanValue allowCrossDimensionLinks;
+        public final ModConfigSpec.BooleanValue blockSounds;
         public final ModConfigSpec.IntValue maxNetworksPerPlayer;
 
         public final ModConfigSpec.IntValue linkDefaultRate;
@@ -208,6 +209,19 @@ public class WorkbayConfig {
                     "links inside one dimension, and links into this network's own bays and",
                     "rooms, are unaffected.")
                 .define("allowCrossDimensionLinks", true);
+
+            blockSounds = builder
+                .comment("Whether a Workbay makes any sound at its own position: a link starting,",
+                    "stopping or getting stuck, a machine going into a bay or coming out, an",
+                    "upgrade fitting, a door. Turn it off and the block is silent.",
+                    "A busy Workbay is a noisy one - every link that starts and stops says so -",
+                    "and that is worth hearing when you are standing at it and not otherwise.",
+                    "This is a SERVER knob and not a client one on purpose: every sound the mod",
+                    "makes is a borrowed vanilla one, so a client-side filter could not tell a",
+                    "Workbay's copper bulb from a real copper bulb next to it.",
+                    "The sounds that answer your own click - a refusal, a confirmation - are not",
+                    "affected: they are feedback on something you just did, not noise from a block.")
+                .define("blockSounds", true);
 
             maxNetworksPerPlayer = builder
                 .comment("How many separate Workbay networks one player may own. One Workbay block",

@@ -345,6 +345,12 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("filter.allow"), "Whitelist");
         add(WorkbayLang.guiKey("filter.deny"), "Blacklist");
         add(WorkbayLang.guiKey("filter.mode.tip"), "Whitelist carries only what is listed; blacklist carries the rest.");
+        add(WorkbayLang.guiKey("filter.inventory"), "Your inventory");
+        add(WorkbayLang.guiKey("filter.inventory.tip"), "Click to put a copy on the cursor, then "
+            + "click a filter slot to list it. Nothing leaves your inventory - a filter names an "
+            + "item, it does not hold one.");
+        add(WorkbayLang.guiKey("filter.inventory.putback.tip"), "Click to put down what is on the "
+            + "cursor.");
         add(WorkbayLang.guiKey("filter.slot"), "Empty");
         add(WorkbayLang.guiKey("filter.slot.tip.item"), "Click to drop what you are carrying here. "
             + "With empty hands it lists what you are holding, and a recipe-list drag works too.");

@@ -145,9 +145,16 @@ public final class WorkbaySounds {
      * One sound, at a block, for everyone near enough to hear it. {@code null} for the player
      * argument means nobody is excluded — the player who caused it is standing right there and is
      * the one who most needs to hear it.
+     *
+     * <p><b>And the one place a Workbay can be silenced.</b> Every sound the block makes goes
+     * through here, so {@code blockSounds} is one branch rather than a flag checked at nine call
+     * sites — the same reason {@code Draw#text} is the only way to write a string. A busy Workbay
+     * says so every time a link starts and stops, which is worth hearing while you are standing at
+     * it and noise the rest of the time. Neriya's ask.
      */
     private static void at(Level level, BlockPos pos, SoundEvent sound, float volume, float pitch) {
-        if (!level.isClientSide) {
+        if (!level.isClientSide
+            && com.neryos.workbay.config.WorkbayConfig.SERVER.blockSounds.get()) {
             level.playSound(null, pos, sound, SoundSource.BLOCKS, volume, pitch);
         }
     }

@@ -236,6 +236,10 @@ public class NetworkTests {
             ServerLevel level = helper.getLevel();
             GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
             RoomRegistry registry = RoomRegistry.get(level.getServer());
+            // Remembered, not assumed. This put the knob back as a literal 1, and the moment the
+            // default became 2 every test that ran after it read 1 -- serverConfigIsLoaded caught
+            // it. Writing the fact down is not the same as not doing it.
+            int wasLimit = com.neryos.workbay.config.WorkbayConfig.SERVER.maxNetworksPerPlayer.get();
             com.neryos.workbay.config.WorkbayConfig.SERVER.maxNetworksPerPlayer.set(2);
 
             // Two networks, one block each, both switched on and both with a link: the shape
@@ -245,7 +249,7 @@ public class NetworkTests {
             BlockPos home = helper.absolutePos(new BlockPos(1, 1, 1));
             WorkbayBlockEntity workbay = place(level, home, player,
                 new ItemStack(WBBlocks.WORKBAY.get()));
-            com.neryos.workbay.config.WorkbayConfig.SERVER.maxNetworksPerPlayer.set(1);
+            com.neryos.workbay.config.WorkbayConfig.SERVER.maxNetworksPerPlayer.set(wasLimit);
             java.util.UUID id = workbay.workbayId().orElseThrow();
             java.util.UUID neighbourId = neighbour.workbayId().orElseThrow();
             for (WorkbayBlockEntity each : java.util.List.of(neighbour, workbay)) {

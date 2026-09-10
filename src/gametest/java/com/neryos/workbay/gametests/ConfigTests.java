@@ -27,6 +27,12 @@ public class ConfigTests {
                 "maxAnchoredWorkbaysPerPlayer");
             helper.assertValueEqual(WorkbayConfig.SERVER.anchorGraceMinutes.get(), 5, "anchorGraceMinutes");
             helper.assertValueEqual(WorkbayConfig.SERVER.maxBaysPerWorkbay.get(), 8, "maxBaysPerWorkbay");
+            helper.assertValueEqual(WorkbayConfig.SERVER.maxNetworksPerPlayer.get(), 2,
+                "maxNetworksPerPlayer");
+            // A knob nothing reads ships as a knob that does nothing, which has happened here
+            // twice (OPEN_ISSUES' note about the Resonator and two anchor knobs). Reading it is
+            // the cheap half; WorkbaySounds#at is the only place that acts on it.
+            helper.assertValueEqual(WorkbayConfig.SERVER.blockSounds.get(), true, "blockSounds");
             helper.succeed();
         });
     }

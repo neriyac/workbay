@@ -554,11 +554,65 @@ public class MenuTests {
     }
 
     /**
+     * <b>Setting one face for one direction of travel must not close the other one.</b>
+     * OPEN_ISSUES #83, found in a live world: a furnace fed through its top face would not give
+     * its cooked output back, and the row said "Idle. Nothing to move."
+     *
+     * <p>{@code usable} returned the empty set the moment <em>anything</em> was configured and
+     * nothing carried the role being asked for -- so marking the top face "in", the first and most
+     * obvious thing anybody does, silently closed all six faces to extraction. A face the player
+     * marked for the opposite role is still refused; a face nobody has said anything about is not.
+     */
+    @GameTest
+    @TestHolder(description = "Marking one face in leaves the others open to taking out.")
+    public static void markingAFaceInLeavesTheOthersOpenToTakingOut(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            var item = BusConfig.Resource.ITEM;
+            helper.assertValueEqual(FaceConfig.NONE.usable(item, true).size(), 6,
+                "faces an unconfigured bay offers to a link taking out");
+
+            // The top face marked "in", and nothing else said at all.
+            FaceConfig topIn = FaceConfig.NONE.cycled(item, Direction.UP, false);
+            helper.assertValueEqual(topIn.role(item, Direction.UP), FaceConfig.Role.INPUT,
+                "the role one click puts on the top face");
+
+            var out = topIn.usable(item, true);
+            if (!out.contains(Direction.DOWN)) {
+                helper.fail("a bay fed through its top face offers no face at all to a link taking "
+                    + "out, so a furnace's cooked output can never leave -- the whole of #83");
+                return;
+            }
+            if (out.contains(Direction.UP)) {
+                helper.fail("the face marked in is offered to a link taking out; a role the player "
+                    + "set must still be obeyed");
+                return;
+            }
+            helper.assertValueEqual(topIn.usable(item, false), java.util.Set.of(Direction.UP),
+                "faces offered to a link putting in, once one is marked in");
+
+            // And an explicit out still wins over the fallback.
+            FaceConfig alsoOut = topIn.cycled(item, Direction.NORTH, false)
+                .cycled(item, Direction.NORTH, false);
+            helper.assertValueEqual(alsoOut.role(item, Direction.NORTH), FaceConfig.Role.OUTPUT,
+                "the role two clicks put on the north face");
+            helper.assertValueEqual(alsoOut.usable(item, true), java.util.Set.of(Direction.NORTH),
+                "faces offered to a link taking out, once one is marked out");
+            helper.succeed();
+        });
+    }
+
+    /**
      * The isometric cube is not decoration. A bay configured with no output face for items has
      * nothing an insert link can pull from, and opening one has to be what makes it move again.
      *
      * <p>Runs both halves: the negative would pass on its own if links never worked at all, so the
      * positive control after it is what makes the first half mean anything.
+     *
+     * <p>"No output face" means <b>every</b> face marked in, not one. Marking one face for one
+     * direction of travel no longer closes the other direction — OPEN_ISSUES #83, and
+     * {@link #markingAFaceInLeavesTheOthersOpenToTakingOut} is the rule on its own.
      */
     @GameTest(timeoutTicks = 900)
     @TestHolder(description = "A bay's face config decides which faces a link may use.")
@@ -588,12 +642,15 @@ public class MenuTests {
             }
             hosted.setItem(0, new ItemStack(Items.IRON_INGOT, 64));
 
-            // Items may go IN through north and nowhere else. An insert link pulls OUT of the
-            // machine, so it has no face at all to use.
+            // Every face marked in, so an insert link -- which pulls OUT of the machine -- has no
+            // face at all to use. One face was enough before #83; it is not any more.
             RoomRegistry registry = RoomRegistry.get(level.getServer());
-            WorkbayRecord shut = registry.byId(record.id()).orElseThrow();
-            registry.put(shut.withBay(shut.bay(0).withFaces(
-                FaceConfig.NONE.cycled(BusConfig.Resource.ITEM, Direction.NORTH, false))));
+            WorkbayRecord shutRecord = registry.byId(record.id()).orElseThrow();
+            FaceConfig shut = FaceConfig.NONE;
+            for (Direction face : Direction.values()) {
+                shut = shut.cycled(BusConfig.Resource.ITEM, face, false);
+            }
+            registry.put(shutRecord.withBay(shutRecord.bay(0).withFaces(shut)));
             workbay.forgetBay(0);
 
             ItemStack connector = new ItemStack(WBBlocks.CONNECTOR.get());

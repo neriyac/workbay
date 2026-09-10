@@ -924,6 +924,14 @@ public class BusTests {
      * must not report {@code IDLE} — idle means "working, nothing to do right now", and a link that
      * can never work is not idle. And a link blocked at the machine end must not report a status
      * whose name blames the target.
+     *
+     * <p><b>What "forbids" means changed, and this test moved with it.</b> It used to mark
+     * <em>one</em> face in and expect the out direction to be closed, which is the rule
+     * OPEN_ISSUES #83 was about: Neriya fed a furnace through its top face in a live world and
+     * could not get the cooked output back out, because marking one face in had closed all six to
+     * extraction and the row said only "Idle. Nothing to move." Marking a face for one direction of
+     * travel now says nothing about the other. So the way to forbid a direction is to leave it no
+     * face at all — every face marked for the opposite role — and that is what this sets up.
      */
     @GameTest(timeoutTicks = 400)
     @TestHolder(description = "A face config that forbids a link's direction is reported, not silently idle.")
@@ -945,9 +953,13 @@ public class BusTests {
                 hosted.setItem(0, new ItemStack(Items.IRON_INGOT, 64));
             }
 
-            // Exactly what was set in play: one face, in, for items. Nothing marked out.
-            RoomRegistry.get(level.getServer()).put(record.withBay(
-                record.bay(0).withFaces(FaceConfig.NONE.cycled(BusConfig.Resource.ITEM, Direction.WEST, false))));
+            // Every face marked in, so there is genuinely nowhere to take anything out of. One
+            // face marked in used to be enough to close the other five; it is not any more (#83).
+            FaceConfig shut = FaceConfig.NONE;
+            for (Direction face : Direction.values()) {
+                shut = shut.cycled(BusConfig.Resource.ITEM, face, false);
+            }
+            RoomRegistry.get(level.getServer()).put(record.withBay(record.bay(0).withFaces(shut)));
             workbay.forgetBay(0);
 
             BusConfig link = connect(helper, workbay, targetPos.above(), Direction.DOWN, player);

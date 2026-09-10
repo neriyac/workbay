@@ -161,6 +161,18 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         return page;
     }
 
+    /**
+     * Builds the current page again, at whatever size it now wants to be.
+     *
+     * <p>A page works its geometry out in its constructor, so a page that changes height while it
+     * is open -- BAYS does, when the filter panel opens and brings the player's inventory with it
+     * -- has to be rebuilt rather than merely redrawn. {@link #goTo} is the same call with a page
+     * change attached; this is the half without one.
+     */
+    public void relayout() {
+        init(minecraft, width, height);
+    }
+
     public WorkbaySnapshot snapshot() {
         return menu.snapshot();
     }
