@@ -5,7 +5,7 @@
   "block.workbay.workbay": "Workbay",
   "gui.workbay.bay.empty": "Empty bay",
   "gui.workbay.bay.empty.tip": "Hold a machine and click here to rack it.",
-  "gui.workbay.bay.here": "%s · Workbay %s",
+  "gui.workbay.bay.here": "Bay %s · %s · Workbay %s",
   "gui.workbay.bay.idle": "Idle",
   "gui.workbay.bay.inert": "Nothing can reach this machine on any face. It keeps running; no link can use it.",
   "gui.workbay.bay.locked": "Locked bay",

@@ -22,8 +22,14 @@ set -u
 cd "$(dirname "$0")/.." || exit 1
 
 ALWAYS_BUDGET=600      # read at the start of every session
-REFERENCE_BUDGET=1600  # looked up, never read whole
+REFERENCE_BUDGET=1690  # looked up, never read whole
 
+# 1600 -> 1690 when WALKTHROUGH.md arrived (79 lines): the twenty-minute walk of the product,
+# looked up before a release and after any change to a screen, never read by a coding session.
+# It is the one document in this repo that would have prevented the night it came out of --
+# Neriya found nineteen faults in one sitting because he *used* the mod, and every round before
+# that had read the report instead. Part of the raise was paid rather than printed: SPEC lost
+# §5's Bay View specification (28 lines), which stopped being true when the screen was deleted.
 # 1580 -> 1600 when the room shell became a thing a player looks at: §8 gained the block, the
 # colour, the light and the 2x2 door, and ART.md gained the five greyscale textures' own rules
 # (why they are greyscale, why smooth took two tries, why the door is drawn shut). Most of it was
@@ -46,7 +52,7 @@ REFERENCE_BUDGET=1600  # looked up, never read whole
 # its list of QOL features that have since shipped.
 is_reference() {
   case "$1" in
-    SPEC.md|MOD_MAP.md|ENDERIO_MAP.md|ART.md|README.md) return 0 ;;
+    SPEC.md|MOD_MAP.md|ENDERIO_MAP.md|ART.md|README.md|WALKTHROUGH.md) return 0 ;;
     *) return 1 ;;
   esac
 }

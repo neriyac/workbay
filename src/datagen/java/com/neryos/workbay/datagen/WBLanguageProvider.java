@@ -169,7 +169,7 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("button.paste.empty"), "Copy a bay first.");
 
         add(WorkbayLang.guiKey("bay.n"), "Bay %s");
-        add(WorkbayLang.guiKey("bay.here"), "%s · Workbay %s");
+        add(WorkbayLang.guiKey("bay.here"), "Bay %s · %s · Workbay %s");
         add(WorkbayLang.guiKey("bay.empty"), "Empty bay");
         add(WorkbayLang.guiKey("bay.empty.tip"), "Hold a machine and click here to rack it.");
         add(WorkbayLang.guiKey("bay.rack.tip"), "Hold a machine and click to rack it in this bay.");

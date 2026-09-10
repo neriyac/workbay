@@ -184,9 +184,14 @@ public final class BayVisit {
      * <p>A title rather than a sign on the Port wall, which was the other suggestion: the question
      * is asked the moment you arrive and not again, a title answers it then and takes no room, and
      * a sign is a real block that a player can break and that has to be rewritten every time the
-     * bay is renamed. The subtitle carries the two things the number alone does not -- what is in
-     * the bay, and which network it belongs to, which is the answer for anyone who owns more than
-     * one Workbay.
+     * bay is renamed.
+     *
+     * <p><b>The subtitle repeats the bay number, and that is not redundancy.</b> A visit ends with
+     * the hosted machine's own screen opening on top, and vanilla draws the title overlay
+     * <em>under</em> a screen -- so the big line is hidden within a second of being sent, and the
+     * subtitle, being wider than the screen, is the half that stays readable. Photographed: the
+     * title was gone behind a Mekanism panel and the subtitle's two ends were showing either side
+     * of it. So the number goes at the front of the line that survives.
      */
     private static void announce(ServerPlayer player, WorkbayRecord record, int bay) {
         player.connection.send(
@@ -202,7 +207,7 @@ public final class BayVisit {
             : net.minecraft.network.chat.Component.literal(named);
         player.connection.send(
             new net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket(
-                com.neryos.workbay.WorkbayLang.gui("bay.here", what, record.code())));
+                com.neryos.workbay.WorkbayLang.gui("bay.here", bay + 1, what, record.code())));
     }
 
     /** Puts a visitor back where they came from. Silent and harmless if they are not one. */
