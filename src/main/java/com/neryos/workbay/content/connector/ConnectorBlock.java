@@ -10,6 +10,7 @@ import com.neryos.workbay.init.WBDataComponents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
@@ -155,8 +156,16 @@ public class ConnectorBlock extends BaseEntityBlock {
             return;
         }
         connector.pairTo(pairing);
+        // <b>The name comes off the item, and the item is named in an anvil.</b> OPEN_ISSUES #67
+        // asks for a Connector to be named before it is placed, so that a link is named before it
+        // exists -- and an item already has a name a player can set, drawn on the thing in their
+        // hand, kept through a stack split and shown in the hotbar. A rename box on the item would
+        // have been a second screen, a second packet and a second place for "what is this called"
+        // to live; renaming an item is the game's own answer to the same question. Empty custom
+        // name leaves the link deriving its name from its target, exactly as before.
         addLink(level, pos, state, connector, BusConfig.Resource.ITEM,
-            placer instanceof Player player ? player : null);
+            placer instanceof Player player ? player : null,
+            nameOn(stack));
     }
 
     /**
@@ -182,7 +191,10 @@ public class ConnectorBlock extends BaseEntityBlock {
             WorkbaySounds.refuse(player, WorkbayLang.message("connector_full"));
             return InteractionResult.CONSUME;
         }
-        addLink(level, pos, state, connector, next, player);
+        // The second and third resources on one Connector take the name the first one was given,
+        // because they are the same Connector and the player named the Connector, not the row.
+        String named = workbayNameAt(level, pos, connector);
+        addLink(level, pos, state, connector, next, player, named);
         return InteractionResult.CONSUME;
     }
 
@@ -222,8 +234,26 @@ public class ConnectorBlock extends BaseEntityBlock {
         return null;
     }
 
+    /** Whatever an anvil wrote on the stack, or "" for one that was never renamed. */
+    private static String nameOn(ItemStack stack) {
+        Component custom = stack.get(net.minecraft.core.component.DataComponents.CUSTOM_NAME);
+        return custom == null ? "" : custom.getString().strip();
+    }
+
+    /** The name the links already on this Connector carry, so a second resource matches the first. */
+    private static String workbayNameAt(Level level, BlockPos pos, ConnectorBlockEntity connector) {
+        return connector.workbay()
+            .map(workbay -> workbay.linksAt(GlobalPos.of(level.dimension(), pos)).stream()
+                .map(BusConfig::name)
+                .filter(name -> !name.isEmpty())
+                .findFirst()
+                .orElse(""))
+            .orElse("");
+    }
+
     private static void addLink(Level level, BlockPos pos, BlockState state,
-        ConnectorBlockEntity connector, BusConfig.Resource resource, @Nullable Player player) {
+        ConnectorBlockEntity connector, BusConfig.Resource resource, @Nullable Player player,
+        String name) {
         WorkbayBlockEntity workbay = connector.workbay().orElse(null);
         if (workbay == null) {
             if (player != null) {
@@ -242,7 +272,8 @@ public class ConnectorBlock extends BaseEntityBlock {
             GlobalPos.of(level.dimension(), targetPos))
             .withTargetBlock(java.util.Optional.ofNullable(
                 net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(
-                    level.getBlockState(targetPos).getBlock()))));
+                    level.getBlockState(targetPos).getBlock())))
+            .withName(name));
         if (player != null) {
             WorkbaySounds.confirm(player, WorkbayLang.message("connector_linked",
                 level.getBlockState(target(state, pos)).getBlock().getName(), pairing.code()),

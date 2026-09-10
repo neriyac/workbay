@@ -332,7 +332,7 @@ class BaysPage extends WorkbayPage {
             int py = y(RACK_Y + index * rackPitch);
             WorkbaySnapshot.Bay bay = snap.bay(index);
             boolean locked = bay.state() == WorkbaySnapshot.State.LOCKED;
-            boolean selected = index == snap.selectedBay();
+            boolean selected = index == screen.selectedBay();
             boolean hover = screen.hovered(px, py, slot, slot, mouseX, mouseY);
 
             Draw.slot(g, px, py, slot, slot);
@@ -394,9 +394,14 @@ class BaysPage extends WorkbayPage {
         // redrawn beside it. Eight identical slots in a column is exactly the arrangement where a
         // marker that jumps leaves the player checking which one moved; one that travels is read
         // without being looked at.
-        float at = Draw.approach("sel", snap.selectedBay(), 18.0F);
+        float at = Draw.approach("sel", screen.selectedBay(), 18.0F);
         int marker = y(RACK_Y) + Math.round(at * rackPitch);
         g.fill(x(RACK_X - 3), marker, x(RACK_X - 1), marker + slot, Draw.SELECT);
+    }
+
+    /** The rename subject for a bay title. A link is its own UUID; an index needs a namespace. */
+    private static String bayRename(int index) {
+        return "bay:" + index;
     }
 
     private Component[] bayTooltip(WorkbaySnapshot.Bay bay) {
@@ -430,7 +435,7 @@ class BaysPage extends WorkbayPage {
 
     private void machine(GuiGraphics g, int mouseX, int mouseY) {
         WorkbaySnapshot snap = snapshot();
-        WorkbaySnapshot.Bay bay = snap.bay(snap.selectedBay());
+        WorkbaySnapshot.Bay bay = snap.bay(screen.selectedBay());
         var font = screen.font();
 
         int slotX = x(50);
@@ -464,8 +469,8 @@ class BaysPage extends WorkbayPage {
         // whatever another mod called it, and an unclamped one runs across the cube and off the
         // panel entirely.
         int room = FACES_X - 4 - 98;
-        String shown = nameOf(bay, snap.selectedBay());
-        if (!screen.renaming()) {
+        String shown = nameOf(bay, screen.selectedBay());
+        if (!screen.renaming(bayRename(bay.index()))) {
             text(g, shown, x(98), y(56), room, Draw.TEXT);
         }
 
@@ -528,7 +533,7 @@ class BaysPage extends WorkbayPage {
             WorkbayScreen.gui("button.eject"), WorkbayScreen.gui("button.eject.tip"));
         boolean unlocked = bay.state() != WorkbaySnapshot.State.LOCKED;
         actionButton(g, mouseX, mouseY, x(74), WBIcons.RENAME, unlocked, false,
-            () -> screen.beginRename(x(98), y(53), room, 14, bay.name(),
+            () -> screen.beginRename(bayRename(bay.index()), x(98), y(53), room, 14, bay.name(),
                 typed -> screen.sendText(WorkbayAction.SET_BAY_NAME, typed)),
             WorkbayScreen.gui("button.rename"), WorkbayScreen.gui("button.rename.tip"));
         // Lit only while the gate is actually in use, so the button says which state it is in
@@ -666,7 +671,7 @@ class BaysPage extends WorkbayPage {
 
     private void faces(GuiGraphics g, int mouseX, int mouseY) {
         WorkbaySnapshot snap = snapshot();
-        WorkbaySnapshot.Bay bay = snap.bay(snap.selectedBay());
+        WorkbaySnapshot.Bay bay = snap.bay(screen.selectedBay());
 
         // One button per resource this install actually has. The block shows one type at a time,
         // which is why a face can take items in and send energy out without the picture
@@ -818,7 +823,7 @@ class BaysPage extends WorkbayPage {
         screen.carry(net.minecraft.world.item.ItemStack.EMPTY);
 
         if (adding) {
-            text(g, WorkbayScreen.gui("links.adding", snap.selectedBay() + 1),
+            text(g, WorkbayScreen.gui("links.adding", screen.selectedBay() + 1),
                 x(LIST_X + 4), y(linksY + 4), 48, Draw.TEXT);
             // Laid out left to right with the widths written down, because the first version put
             // the Bays tab and Back on top of each other: heading to LIST_X+52, two 44-wide tabs,
@@ -852,7 +857,7 @@ class BaysPage extends WorkbayPage {
 
         // Whose links these are. The list is per bay, so a heading that does not say which bay is
         // the one thing that can make the whole screen lie to you.
-        text(g, filter == Filter.THIS_BAY ? "LINKS · BAY " + (snap.selectedBay() + 1) : "LINKS",
+        text(g, filter == Filter.THIS_BAY ? "LINKS · BAY " + (screen.selectedBay() + 1) : "LINKS",
             x(LIST_X + 4), y(linksY + 4), 70, Draw.TEXT);
 
         // Clear of the heading, which is no longer the fixed-width word "LINKS": it now carries the
@@ -991,17 +996,29 @@ class BaysPage extends WorkbayPage {
         screen.hit(px + 16, py + 4, 10, 10, () -> { },
             statusName(link.status()), statusHelp(link.status()));
 
-        resourceIcon(g, config.resource(), px + 30, py + 3);
-        screen.hit(px + 30, py + 3, 12, 12,
+        // <b>The arrow never turns round; the two ends swap around it.</b> A row that reads right
+        // to left half the time is a row the player has to re-read to know which end is which, and
+        // "which way is it going" was being asked of a twelve-pixel glyph that changes shape.
+        // Left is always where it comes from and right always where it goes -- so an extracting
+        // link draws the target first and the resource second, and an inserting one the other way
+        // round. The colour still says which mode it is in. Neriya's call; OPEN_ISSUES #75.
+        //
+        // Two slots, filled in order rather than two fixed x's, so the hit boxes travel with the
+        // icons they belong to and neither can be clicked where it is not drawn.
+        boolean insert = config.mode() == BusConfig.Mode.INSERT;
+        Optional<ResourceLocation> icon = targetIcon(link);
+        int fromX = px + 30;
+        int toX = px + 62;
+        int resourceX = insert ? fromX : toX;
+        int targetX = insert ? toX : fromX;
+
+        resourceIcon(g, config.resource(), resourceX, py + 3);
+        screen.hit(resourceX, py + 3, 12, 12,
             () -> screen.send(WorkbayAction.LINK_CYCLE_RESOURCE, config.id()),
             WorkbayScreen.gui("links.type." + config.resource().getSerializedName()),
             WorkbayScreen.gui("links.type.tip"));
 
-        // A plain arrow, pointing the way the resource travels: the machine is this row's left and
-        // the target its right, so insert points right and extract points left.
-        boolean insert = config.mode() == BusConfig.Mode.INSERT;
-        WBIcons.draw(g, insert ? WBIcons.ARROW_RIGHT : WBIcons.ARROW_LEFT, px + 46, py + 3,
-            insert ? Draw.BLUE : Draw.GREEN);
+        WBIcons.draw(g, WBIcons.ARROW_RIGHT, px + 46, py + 3, insert ? Draw.BLUE : Draw.GREEN);
         screen.hit(px + 46, py + 3, 12, 12,
             () -> screen.send(WorkbayAction.LINK_FLIP_MODE, config.id()),
             WorkbayScreen.gui("links.mode." + config.mode().getSerializedName()),
@@ -1013,12 +1030,35 @@ class BaysPage extends WorkbayPage {
         // name column was too narrow to finish the word "Connector". A column that answers the
         // same for every row is not a column.
         boolean showBay = filter != Filter.THIS_BAY;
-        int cursor = px + 62;
+        // What the link is pointed at, as the block itself. A name answers "which one" only if you
+        // read it; a chest reads as a chest before you have finished the row. It sits in one of the
+        // two end slots above rather than in a column of its own because the row is at SPEC.md §4's
+        // ceiling and this is the same fact as the name, not a new one.
+        //
+        // And it only takes the twelve pixels when there is something to draw: a link with nothing
+        // remembered falls back to a *position* for its name, which is the longest label the column
+        // ever carries and the one that needed fifty-six in the first place. So the column gives up
+        // width exactly when the label got shorter, and never otherwise.
+        boolean drewTarget = false;
+        if (icon.isPresent()) {
+            var item = BuiltInRegistries.ITEM.get(icon.get());
+            if (item != net.minecraft.world.item.Items.AIR) {
+                WBIcons.sprite(g, new ItemStack(item), targetX, py + 3, 12, true);
+                screen.hit(targetX, py + 3, 12, 12, () -> { },
+                    displayName(icon.get()), WorkbayScreen.gui("links.target.tip"));
+                drewTarget = true;
+            }
+        }
+        // The name starts after whichever slot the far end used, and reclaims the second slot when
+        // nothing was drawn in it.
+        int cursor = drewTarget || !insert ? px + 76 : px + 62;
         if (showBay) {
-            text(g, "B" + (config.bay() + 1), cursor, py + 5, 14, Draw.TEXT_DIM);
+            text(g, bayBadge(config), cursor, py + 5, 14, Draw.TEXT_DIM);
             screen.hit(cursor, py + 3, 14, 12, () -> { },
-                WorkbayScreen.gui("links.bay", config.bay() + 1),
-                WorkbayScreen.gui("links.bay.tip"));
+                config.detached() ? WorkbayScreen.gui("status.detached")
+                    : WorkbayScreen.gui("links.bay", config.bay() + 1),
+                config.detached() ? WorkbayScreen.gui("status.detached.tip")
+                    : WorkbayScreen.gui("links.bay.tip"));
             cursor += 18;
         }
 
@@ -1028,37 +1068,25 @@ class BaysPage extends WorkbayPage {
         String label = labelOf(link);
 
         int nameW;
-        // What the link is pointed at, as the block itself. A name answers "which one" only if you
-        // read it; a chest reads as a chest before you have finished the row. It sits in front of
-        // the name rather than in a column of its own because the row is at SPEC.md §4's ceiling
-        // and this is the same fact as the name, not a new one.
-        //
-        // And it only takes the twelve pixels when there is something to draw: a link with nothing
-        // remembered falls back to a *position* for its name, which is the longest label the column
-        // ever carries and the one that needed fifty-six in the first place. So the column gives up
-        // width exactly when the label got shorter, and never otherwise.
-        Optional<ResourceLocation> icon = targetIcon(link);
         int nameX = cursor;
-        if (icon.isPresent()) {
-            var item = BuiltInRegistries.ITEM.get(icon.get());
-            if (item != net.minecraft.world.item.Items.AIR) {
-                g.pose().pushPose();
-                g.pose().translate(cursor, py + 3, 0);
-                g.pose().scale(0.75F, 0.75F, 1.0F);
-                g.renderItem(new ItemStack(item), 0, 0);
-                g.pose().popPose();
-                screen.hit(cursor, py + 3, 12, 12, () -> { },
-                    displayName(icon.get()), WorkbayScreen.gui("links.target.tip"));
-                nameX = cursor + 14;
-            }
-        }
         // <b>The name gets everything that is left, measured rather than written down.</b> It was
         // a fixed fifty-six, so "Connector" -- the name of one of this mod's own two blocks, and
         // the name half these rows carry -- arrived as "Connec...". The status column beside it
         // was cut for a longest word of "No machine" measured wrong.
-        int nameRight = px + STATUS_X - 4;
+        // <b>And the status column is measured too, which is what leaves the name enough.</b>
+        // STATUS_W is 54, sized for the longest reading there is ("No machine"); every row not
+        // showing that one was holding pixels the name needed. With the list scoped to all bays --
+        // which adds the bay badge -- the name was down to forty-four, and "Block Placer" and
+        // "Fluid Extractor" both arrived cut. Photographed with F3's outlines on, next to the Add
+        // list that OPEN_ISSUES #74 is about; same fault, same fix, one row over.
+        //
+        // Right-aligned rather than left, so the column still has a straight edge to read down.
+        String statusText = statusShort(link.status()).getString();
+        int statusW = Math.min(STATUS_W, Draw.width(screen.font(), statusText));
+        int statusRight = px + STATUS_X + STATUS_W;
+        int nameRight = statusRight - statusW - 6;
         nameW = nameRight - nameX;
-        if (!screen.renaming()) {
+        if (!screen.renaming(config.id())) {
             text(g, label, nameX, py + 5, nameW, on ? Draw.TEXT : Draw.TEXT_FAINT);
         }
         // Right-click the name to give the link one of your own. On the name itself rather than on
@@ -1069,7 +1097,7 @@ class BaysPage extends WorkbayPage {
         final int renameW = nameW;
         screen.hit(renameX, py + 3, renameW, 12, () -> {
             if (screen.back()) {
-                screen.beginRename(renameX, py + 2, renameW, 12, config.name(),
+                screen.beginRename(config.id(), renameX, py + 2, renameW, 12, config.name(),
                     typed -> screen.sendText(WorkbayAction.SET_LINK_NAME, typed, config.id()));
             }
         }, link.label().<Component>map(Component::literal).orElseGet(() -> fullName(link)),
@@ -1084,8 +1112,7 @@ class BaysPage extends WorkbayPage {
         // what the link is doing, which is the thing no other text on the row carries -- the
         // status swatch is a 10px chip a player scanning thirty rows does not read.
         boolean broken = link.status().isProblem();
-        text(g, statusShort(link.status()).getString(), px + STATUS_X, py + 5, STATUS_W,
-            statusColour(link.status()));
+        textRight(g, statusText, statusRight, py + 5, statusW, statusColour(link.status()));
         if (config.internal()) {
             // Bay to bay is the one target a player may change from the row: there is no Connector
             // in the world to move, so the click has to live somewhere and this column is where
@@ -1557,7 +1584,7 @@ class BaysPage extends WorkbayPage {
      * place for the same rules to be written down.
      */
     private void applyPicked() {
-        int bay = snapshot().selectedBay();
+        int bay = screen.selectedBay();
         pickedLinks.forEach(id -> screen.send(WorkbayAction.LINK_ASSIGN_BAY, bay, id));
         pickedBays.forEach(target -> screen.send(WorkbayAction.CREATE_INTERNAL_LINK, target));
         closePicker();
@@ -1572,7 +1599,7 @@ class BaysPage extends WorkbayPage {
      * belonging to the wrong bay, and the fix is to hand it over, not to make a second one.
      */
     private void candidates(GuiGraphics g, int mouseX, int mouseY, WorkbaySnapshot snap) {
-        int selected = snap.selectedBay();
+        int selected = screen.selectedBay();
 
         List<WorkbaySnapshot.Link> loose = snap.links().stream()
             .filter(link -> link.config().bay() != selected)
@@ -1614,7 +1641,6 @@ class BaysPage extends WorkbayPage {
                 checkbox(g, px, py + 3, ticked);
                 resourceIcon(g, config.resource(), px + 18, py + 3);
                 String label = labelOf(link);
-                text(g, label, px + 34, py + 5, 70, ticked ? Draw.TEXT : Draw.TEXT_DIM);
                 // An internal link's target is a machine in the Backshop, which this client has
                 // never loaded, so asking for the block there gets air. Name the bay instead --
                 // the same branch the row itself makes.
@@ -1629,17 +1655,27 @@ class BaysPage extends WorkbayPage {
                 // And drawn only when it is a second fact. A link into a room derives both from
                 // the room, so the row read "Room 1 ... Room 1" -- the same word twice, which is
                 // the one thing a two-column row must never be.
-                if (!from.equals(label)) {
-                    textRight(g, from, px + 202, py + 5, 92,
+                // <b>The name gets what is left, measured.</b> Seventy was written here by
+                // hand on a row 254 wide, so "Creative Energy Cell" -- the sort of block this list
+                // exists to point at -- arrived as "Creative Energ..." with a column of nothing
+                // beside it. Same fault and same fix as the link row's own name column, which
+                // stopped writing its width down for exactly this reason. OPEN_ISSUES #74.
+                boolean secondFact = !from.equals(label);
+                int fromRight = px + 202;
+                int fromW = secondFact ? Math.min(92, Draw.width(screen.font(), from)) : 0;
+                int labelW = (secondFact ? fromRight - fromW - 6 : fromRight) - (px + 34);
+                text(g, label, px + 34, py + 5, labelW, ticked ? Draw.TEXT : Draw.TEXT_DIM);
+                if (secondFact) {
+                    textRight(g, from, fromRight, py + 5, fromW,
                         config.internal() ? Draw.BLUE : Draw.TEXT_DIM);
                 }
-                textRight(g, "B" + (config.bay() + 1), px + LIST_W - 18, py + 5, 20,
-                    Draw.TEXT_FAINT);
+                textRight(g, bayBadge(config), px + LIST_W - 18, py + 5, 20, Draw.TEXT_FAINT);
                 screen.hit(px, py, LIST_W - 14, ROW_PITCH - 2, () -> {
                     if (!pickedLinks.remove(config.id())) {
                         pickedLinks.add(config.id());
                     }
-                }, WorkbayScreen.gui("links.add.link", label, config.bay() + 1),
+                }, config.detached() ? WorkbayScreen.gui("links.add.detached", label)
+                    : WorkbayScreen.gui("links.add.link", label, config.bay() + 1),
                     WorkbayScreen.gui("links.add.link.tip", selected + 1));
             } else {
                 int bay = bays.get(index);
@@ -1711,7 +1747,7 @@ class BaysPage extends WorkbayPage {
         };
         var kept = snap.links().stream()
             .filter(link -> switch (filter) {
-                case THIS_BAY -> link.config().bay() == snap.selectedBay();
+                case THIS_BAY -> link.config().bay() == screen.selectedBay();
                 case ALL_BAYS -> true;
                 case PROBLEMS -> link.status().isProblem();
             });
@@ -1736,7 +1772,8 @@ class BaysPage extends WorkbayPage {
         return switch (status) {
             case RUNNING -> Draw.GREEN;
             case IDLE -> Draw.BLUE;
-            case DISABLED, HELD_BY_REDSTONE -> Draw.GREY;
+            // Grey, with the other two states the player chose. Detached is not a fault.
+            case DISABLED, HELD_BY_REDSTONE, DETACHED -> Draw.GREY;
             case TARGET_MISSING, CONNECTOR_GONE -> Draw.RED;
             // Amber is "you can fix this from here". The face config and an unreachable machine
             // both are; a target that has gone is not.
@@ -1750,6 +1787,11 @@ class BaysPage extends WorkbayPage {
      * not fit a 60-pixel column: "No face for this" arrived on screen as "No face f", which reads
      * as a rendering fault rather than as a fault in the link. Same split as {@code bay.short.*}.
      */
+    /** Which bay a row is on, or a dash for one that is on none. OPEN_ISSUES #70. */
+    private static String bayBadge(BusConfig config) {
+        return config.detached() ? "—" : "B" + (config.bay() + 1);
+    }
+
     private static Component statusShort(BusRunner.BusStatus status) {
         return WorkbayScreen.gui("status.short." + status.name().toLowerCase(java.util.Locale.ROOT));
     }

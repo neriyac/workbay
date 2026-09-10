@@ -454,7 +454,7 @@ public class WorkbayBlockEntity extends BlockEntity {
             return Pip.NONE;
         }
         return switch (runner.status(bus.id())) {
-            case RUNNING, IDLE, DISABLED, HELD_BY_REDSTONE -> Pip.OK;
+            case RUNNING, IDLE, DISABLED, HELD_BY_REDSTONE, DETACHED -> Pip.OK;
             case CONNECTOR_GONE, TARGET_MISSING -> Pip.BROKEN;
             // Listed rather than defaulted, so a new BusStatus is a compile error here as well as
             // in the two screens. A default would have quietly called it ATTENTION.

@@ -87,10 +87,22 @@ public class WorkbayMenu extends AbstractContainerMenu {
         return snapshot;
     }
 
+    /**
+     * What the client asked for, until the server's own answer agrees with it. Without it the
+     * optimistic selection below survives for at most five ticks and is then quietly replaced by
+     * a snapshot that was built before the click -- which is the whole of OPEN_ISSUES #71, and why
+     * setting it client-side was not enough on its own. SELECT_BAY is a clamp on the server and
+     * never refuses, so this always clears.
+     */
+    private int pendingBay = -1;
+
     /** Applied optimistically on the client before the packet goes out, so clicks feel immediate. */
     public void applySnapshot(WorkbaySnapshot updated) {
         this.snapshot = updated;
-        this.selectedBay = updated.selectedBay();
+        if (pendingBay < 0 || updated.selectedBay() == pendingBay) {
+            this.selectedBay = updated.selectedBay();
+            pendingBay = -1;
+        }
     }
 
     public int selectedBay() {
@@ -99,6 +111,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
 
     public void setSelectedBayClientSide(int bay) {
         this.selectedBay = bay;
+        this.pendingBay = bay;
     }
 
     /**
@@ -186,7 +199,11 @@ public class WorkbayMenu extends AbstractContainerMenu {
             case LINK_CYCLE_RESOURCE ->
                 editLink(linkId, link -> link.withResource(link.resource().step(back)));
             case LINK_TOGGLE_ENABLED -> editLink(linkId, link -> link.withEnabled(!link.enabled()));
-            case LINK_REMOVE -> linkId.ifPresent(workbay::removeBus);
+            // <b>Detach, not delete.</b> The Connector is still standing in the world and still
+            // paired; taking it off a bay must not throw away its filter, rate, speed and name,
+            // because the Add list is the only way back and it can only offer links that exist.
+            // Breaking the Connector is what deletes a link for good. OPEN_ISSUES #70.
+            case LINK_REMOVE -> editLink(linkId, link -> link.withBay(BusConfig.NO_BAY));
             case LINK_CYCLE_TARGET_FACE -> editLink(linkId,
                 link -> link.withTargetFace(BusConfig.stepFace(link.targetFace(), back)));
             case SET_FILTER -> editLink(linkId, link -> link.withFilter(

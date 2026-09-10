@@ -170,10 +170,30 @@ function Post-Click([int]$gx, [int]$gy, [switch]$Right, [switch]$Shift) {
   Start-Sleep -Milliseconds 250
 }
 
+# Sneak and click, for placing a block against a container -- without it the container swallows
+# the right-click and simply opens. Its own function rather than a switch on Post-Click, because
+# the hold is what makes it work: sneak is sampled by the game per tick through `glfwGetKey`, not
+# taken off the click's own modifier flags, so the key has to still be down several ticks later.
+# Sixty milliseconds was not enough and opened the chest.
+function Post-SneakClick([int]$gx, [int]$gy, [switch]$Left) {
+  $h = MC-Window
+  $sc = Scan 0xA0
+  [MP]::PostMessage($h, 0x0100, [IntPtr]0xA0, [IntPtr](1 -bor ($sc -shl 16))) | Out-Null
+  Start-Sleep -Milliseconds 500
+  if ($Left) { Post-Click $gx $gy } else { Post-Click $gx $gy -Right }
+  Start-Sleep -Milliseconds 400
+  [MP]::PostMessage($h, 0x0101, [IntPtr]0xA0, [IntPtr](1 -bor ($sc -shl 16) -bor 0xC0000000)) | Out-Null
+  Start-Sleep -Milliseconds 200
+}
+
 # WM_MOUSEWHEEL is the one that takes SCREEN coordinates, not client ones. A negative count steps
 # forward through the hotbar, the same way it does through mc-drive.ps1's Scroll.
 function Post-Scroll([int]$gx, [int]$gy, [int]$notches) {
   $h = MC-Window
+  # Aim first. A screen decides what a wheel notch scrolls from where the pointer is, and the
+  # pointer only moves when a WM_MOUSEMOVE says so -- so a wheel event on its own scrolled
+  # whatever the last click happened to be over.
+  Post-Aim $gx $gy
   $at = Post-Where $gx $gy
   $p = New-Object MP+POINT; $p.X = $at.X; $p.Y = $at.Y
   [MP]::ClientToScreen($h, [ref]$p) | Out-Null

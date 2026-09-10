@@ -149,6 +149,20 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         return menu.snapshot();
     }
 
+    /**
+     * <b>The bay the player has clicked</b>, which is not always the bay the last snapshot named.
+     *
+     * <p>A snapshot is rebuilt every five ticks and is the <em>server's</em> answer, so between a
+     * click on bay 3 and the packet coming back it still says bay 2. Reading it was harmless for
+     * everything that only draws -- the rack marker was a frame behind -- and destructive for the
+     * one thing that writes: Add assigned the picked links to the bay before the one the player
+     * was looking at. OPEN_ISSUES #71. Every page reads the selection through here now, so the
+     * screen cannot disagree with itself about which bay it is showing.
+     */
+    public int selectedBay() {
+        return menu.selectedBay();
+    }
+
     public int left() {
         return leftPos;
     }
@@ -157,12 +171,27 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         return topPos;
     }
 
+    /**
+     * Which line's rename field is open, if any.
+     *
+     * <p><b>A flag is not enough, and shipping one proved it.</b> Every line that can be renamed
+     * hides its own text while a field is over it, because the field is drawn on top and a name
+     * left underneath shows through. With one boolean for the whole screen, opening a Connector's
+     * rename box hid <em>every</em> name on the screen -- thirty link rows and the bay title all
+     * went blank at once, and the player who opened one box had to close it again to read anything
+     * else. OPEN_ISSUES #76. The subject is whatever the caller uses to tell its own lines apart:
+     * a link's UUID, a bay's index, a room's.
+     */
+    @Nullable
+    private Object renameSubject;
+
     /** Opens the rename field over a line of the page. Called from the page while it draws. */
-    public void beginRename(int x, int y, int w, int h, String initial,
+    public void beginRename(Object subject, int x, int y, int w, int h, String initial,
         java.util.function.Consumer<String> committed) {
         if (renaming != null) {
             return;
         }
+        renameSubject = subject;
         renaming = new WBTextField(font, x, y, w, h);
         renaming.setMaxLength(48);
         renaming.setValue(initial);
@@ -173,8 +202,9 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         addRenderableWidget(renaming);
     }
 
-    public boolean renaming() {
-        return renaming != null;
+    /** True only for the one line whose field is open, so no other line hides its own name. */
+    public boolean renaming(Object subject) {
+        return renaming != null && java.util.Objects.equals(renameSubject, subject);
     }
 
     /**
@@ -237,6 +267,7 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         String value = renaming.getValue();
         removeWidget(renaming);
         renaming = null;
+        renameSubject = null;
         setFocused(null);
         var committed = onRenamed;
         onRenamed = null;

@@ -136,6 +136,13 @@ public class BusRunner {
             return;
         }
         for (BusConfig bus : buses) {
+            // Attached to no bay, so there is no machine end to move anything to or from. Checked
+            // before anything reads `record.bay(bus.bay())`, which is what a negative index would
+            // walk straight into. OPEN_ISSUES #70.
+            if (bus.detached()) {
+                statuses.put(bus.id(), BusStatus.DETACHED);
+                continue;
+            }
             if (!bus.enabled()) {
                 statuses.put(bus.id(), BusStatus.DISABLED);
                 continue;
@@ -550,11 +557,21 @@ public class BusRunner {
          *
          * <p>Appended at the end because a status travels on the snapshot as its ordinal.
          */
-        NEEDS_RESONATOR;
+        NEEDS_RESONATOR,
+        /**
+         * Attached to no bay. The player took it off one with the X and has not put it on another;
+         * it is waiting in the Add list. <b>Not a problem</b> — it is a thing the player did on
+         * purpose, the same way DISABLED is, and counting it as one would put a red number in the
+         * header for every link anybody ever detached.
+         *
+         * <p>Appended at the end because a status travels on the snapshot as its ordinal.
+         */
+        DETACHED;
 
         /** True for a status the player has to do something about. Drives the problem count. */
         public boolean isProblem() {
-            return this != RUNNING && this != IDLE && this != DISABLED && this != HELD_BY_REDSTONE;
+            return this != RUNNING && this != IDLE && this != DISABLED && this != HELD_BY_REDSTONE
+                && this != DETACHED;
         }
     }
 }

@@ -209,6 +209,11 @@ class RoomsPage extends WorkbayPage {
         }
     }
 
+    /** The rename subject for a room row -- namespaced, so it cannot collide with a bay's. */
+    private static String roomRename(int index) {
+        return "room:" + index;
+    }
+
     private void ladder(GuiGraphics g, int mouseX, int mouseY) {
         WorkbaySnapshot snap = snapshot();
         for (int i = 0; i < LADDER.length; i++) {
@@ -272,9 +277,10 @@ class RoomsPage extends WorkbayPage {
 
             String name = room.name().isEmpty()
                 ? WorkbayScreen.gui("rooms.name", room.index() + 1).getString() : room.name();
-            // Hidden while any rename is open, exactly as BAYS and LINKS do it: the field is drawn
-            // over the line it replaces, and a name left underneath shows through it.
-            if (!screen.renaming()) {
+            // Hidden while THIS room's rename is open, exactly as BAYS and LINKS do it: the field
+            // is drawn over the line it replaces, and a name left underneath shows through it.
+            // Which room, not whether any -- OPEN_ISSUES #76.
+            if (!screen.renaming(roomRename(room.index()))) {
                 text(g, name, px + ROOM_NAME_X, py + TEXT_Y, ROOM_NAME_W, Draw.TEXT);
             }
             // Right-click the name to give the room one of your own -- the same gesture a link's
@@ -288,7 +294,7 @@ class RoomsPage extends WorkbayPage {
             final boolean built = room.built();
             screen.hit(nameX, py + 3, ROOM_NAME_W, 12, () -> {
                 if (built && screen.back()) {
-                    screen.beginRename(nameX, nameY + 4, ROOM_NAME_W, 12, named,
+                    screen.beginRename(roomRename(index), nameX, nameY + 4, ROOM_NAME_W, 12, named,
                         typed -> screen.sendText(WorkbayAction.SET_ROOM_NAME, index, typed));
                 }
             }, Component.literal(name),

@@ -127,6 +127,25 @@ public record BusConfig(
      * tells four rows apart; a stored default was the same three words on every one of them, and it
      * went stale the moment the link was retargeted.
      */
+    /**
+     * The bay of a link that belongs to no bay. SPEC.md §9's links are per bay; this is the one
+     * value outside that, and it exists so the X on a link row can stop being destructive.
+     *
+     * <p><b>Detached, not deleted.</b> The X removed the row outright, and the Add list can only
+     * offer links that exist -- so a Connector still standing in the world, still paired, still
+     * pointing at its chest, was reachable from no list on the screen and could only be revived by
+     * walking to it and right-clicking, which mints a fresh link with the filter, rate, speed and
+     * name gone. OPEN_ISSUES #70. A detached link keeps all of that and waits in the Add list.
+     * Deleting one for real is what breaking its Connector does, which is SPEC.md §0's model
+     * anyway: a Connector <em>is</em> the link.
+     */
+    public static final int NO_BAY = -1;
+
+    /** True for a link that is not attached to any bay, and therefore never runs. */
+    public boolean detached() {
+        return bay < 0;
+    }
+
     public static BusConfig create(UUID id, int bay, Resource resource, Mode mode,
         GlobalPos connector, GlobalPos target) {
         return new BusConfig(id, "", bay, resource, mode, connector, target,

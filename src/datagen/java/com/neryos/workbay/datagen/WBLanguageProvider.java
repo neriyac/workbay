@@ -260,9 +260,14 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("links.mode.insert"), "Sends into the target");
         add(WorkbayLang.guiKey("links.mode.extract"), "Pulls out of the target");
         add(WorkbayLang.guiKey("links.mode.tip"), "Click to turn this link around.");
-        add(WorkbayLang.guiKey("links.remove"), "Remove this link");
-        add(WorkbayLang.guiKey("links.remove.tip"), "The Connector stays where it is. Right-click it "
-            + "to link it again.");
+        add(WorkbayLang.guiKey("links.remove"), "Take off this bay");
+        add(WorkbayLang.guiKey("links.remove.tip"), "The link keeps its filter, rate and name and "
+            + "waits under Add. Breaking the Connector is what deletes one.");
+        add(WorkbayLang.guiKey("links.add.detached"), "%s, on no bay");
+        add(WorkbayLang.guiKey("status.detached"), "Not on a bay");
+        add(WorkbayLang.guiKey("status.short.detached"), "No bay");
+        add(WorkbayLang.guiKey("status.detached.tip"), "Taken off its bay and kept. Put it on one "
+            + "with Add.");
         add(WorkbayLang.guiKey("links.enable"), "Off");
         add(WorkbayLang.guiKey("links.enable.tip"), "A new link starts off. Click to turn it on.");
         add(WorkbayLang.guiKey("links.disable"), "On");

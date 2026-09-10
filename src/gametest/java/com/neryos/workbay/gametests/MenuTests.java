@@ -278,6 +278,90 @@ public class MenuTests {
      * client cannot see, and a speed is an index into a fixed list precisely because a free number
      * would not divide the tick wheel; both are asked for out of range on purpose.
      */
+    /**
+     * OPEN_ISSUES #70. The X used to call {@code removeBus}, and the Add list can only offer links
+     * that exist -- so the Connector standing in the world became unreachable from the screen and
+     * the filter, rate, speed and name it carried were gone for good. Detaching keeps all of it.
+     *
+     * <p>Asserts the two halves that make the row usable again: the link is still on the network
+     * with everything it carried, and it is no longer on the bay -- which is what puts it in the
+     * Add list, because that list is "every link not on this bay".
+     */
+    @GameTest
+    @TestHolder(description = "Taking a link off a bay keeps the link, its filter and its rate.")
+    public static void takingALinkOffABayKeepsIt(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
+            BusConfig link = BusConfig.create(java.util.UUID.randomUUID(), 0,
+                BusConfig.Resource.ITEM, BusConfig.Mode.INSERT,
+                GlobalPos.of(level.dimension(), workbayPos.above()),
+                GlobalPos.of(level.dimension(), workbayPos.above(2)))
+                .withName("Furnace feed")
+                .withRate(24);
+            workbay.addBus(link);
+            WorkbayMenu menu = menuFor(workbay, player);
+
+            menu.act(WorkbayAction.LINK_REMOVE, 0, Optional.of(link.id()));
+
+            BusConfig after = workbay.buses().stream()
+                .filter(bus -> bus.id().equals(link.id()))
+                .findFirst()
+                .orElseThrow(() -> new GameTestAssertException(
+                    "the X deleted the link outright, so the Connector it belongs to is now in no "
+                        + "list on the screen and cannot be attached to any bay again"));
+            helper.assertTrue(after.detached(), "the link is still on a bay after the X");
+            helper.assertValueEqual(after.name(), "Furnace feed", "the name it was given");
+            helper.assertValueEqual(after.rate(), 24, "the rate it was set to");
+
+            // And back on, which is the whole point: this is what the Add list sends.
+            menu.act(WorkbayAction.LINK_ASSIGN_BAY, 1, Optional.of(link.id()));
+            BusConfig reattached = workbay.buses().stream()
+                .filter(bus -> bus.id().equals(link.id())).findFirst().orElseThrow();
+            helper.assertValueEqual(reattached.bay(), 1, "the bay it was put back on");
+            helper.assertFalse(reattached.detached(), "still detached after being assigned a bay");
+            helper.succeed();
+        });
+    }
+
+    /**
+     * OPEN_ISSUES #71. A snapshot is the server's answer and is rebuilt every five ticks, so
+     * between a click on a bay and the packet landing it still names the bay before. Add reads the
+     * selection to decide which bay the picked links go to, so for that window it assigned them to
+     * the wrong one -- and the screen's own optimistic value was not enough on its own, because
+     * the next snapshot quietly overwrote it with the stale number.
+     */
+    @GameTest
+    @TestHolder(description = "A bay clicked on the client survives a snapshot built before the click.")
+    public static void aClickedBaySurvivesAStaleSnapshot(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
+            WorkbayMenu menu = menuFor(workbay, player);
+            WorkbaySnapshot stale = WorkbayMenu.build(workbay, player, 0);
+
+            menu.setSelectedBayClientSide(1);
+            menu.applySnapshot(stale);
+            helper.assertValueEqual(menu.selectedBay(), 1,
+                "the bay the player clicked, after a snapshot built before the click arrived");
+
+            // And the server's own answer wins again the moment it agrees, so the two cannot drift.
+            menu.applySnapshot(WorkbayMenu.build(workbay, player, 1));
+            helper.assertValueEqual(menu.selectedBay(), 1, "the bay both ends now agree on");
+            menu.applySnapshot(WorkbayMenu.build(workbay, player, 0));
+            helper.assertValueEqual(menu.selectedBay(), 0,
+                "a selection changed by anything but this client");
+            helper.succeed();
+        });
+    }
+
     @GameTest
     @TestHolder(description = "A link's rate and speed can be set from the menu, and both are clamped to what is legal.")
     public static void aLinksRateAndSpeedAreSetAndClamped(final DynamicTest test) {
