@@ -34,7 +34,8 @@ public class ConnectorScreen extends AbstractContainerScreen<ConnectorMenu> {
     private static final int FIELD_Y = 26;
     private static final int FIELD_H = 16;
     private static final int HINT_Y = FIELD_Y + FIELD_H + 6;
-    private static final int SAVE_Y = HINT_Y + 14;
+    private static final int USE_Y = HINT_Y + 13;
+    private static final int SAVE_Y = USE_Y + 16;
     private static final int SAVE_H = 20;
     private static final int HEIGHT = SAVE_Y + SAVE_H + MARGIN;
 
@@ -79,6 +80,19 @@ public class ConnectorScreen extends AbstractContainerScreen<ConnectorMenu> {
         // on different bays at once. What a bay owns is a row. What this panel names is the block.
         Component hint = WorkbayLang.gui("connector.hint", menu.view().fallback());
         Draw.text(g, font, hint.getString(), px, topPos + HINT_Y, ROW_W, Draw.TEXT_DIM);
+
+        // <b>What this block is doing</b>, which is the one other thing it can answer for itself.
+        // A Connector carries a channel for every time a bay added it, and none at all until one
+        // does -- so a freshly placed one says where to go rather than leaving the player holding
+        // a block that appears to do nothing. The panel was a title, a box and a button before,
+        // which is the emptiness OPEN_ISSUES #92 objected to on the room door.
+        // Never amber: amber is this mod's colour for a problem, and a Connector nobody has
+        // added to a bay yet is the normal state of one that was placed a second ago.
+        int carried = menu.view().channels();
+        Draw.text(g, font, (carried == 0 ? WorkbayLang.gui("connector.unused")
+            : carried == 1 ? WorkbayLang.gui("connector.channel")
+            : WorkbayLang.gui("connector.channels", carried)).getString(),
+            px, topPos + USE_Y, ROW_W, Draw.TEXT_DIM);
 
         boolean over = isHovering(MARGIN, SAVE_Y, ROW_W, SAVE_H, mouseX, mouseY);
         Draw.button(g, px, topPos + SAVE_Y, ROW_W, SAVE_H, over, false);

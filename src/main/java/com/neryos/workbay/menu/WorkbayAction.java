@@ -62,8 +62,16 @@ public enum WorkbayAction {
      * bay itself, or a bay this Workbay does not have, falls back to the next other bay.
      */
     CREATE_INTERNAL_LINK,
-    /** {@code link} names the row and {@code arg} the bay to hand it to. */
-    LINK_ASSIGN_BAY,
+    /**
+     * Gives bay {@code arg} a channel through the Connector {@code link} names — <b>the Connector's
+     * own id, not a row's</b>. Always mints; never moves a row off another bay, because one
+     * Connector is meant to be used from as many bays as the player likes. SPEC.md §0.
+     *
+     * <p>Named LINK_ASSIGN_BAY while Add moved rows between bays. Renamed in place rather than
+     * appended: an action travels as its ordinal, so moving this one would silently rename every
+     * action after it.
+     */
+    ADD_CHANNEL,
     /** Internal links only. {@code link} names the row; steps its target to the next other bay. */
     LINK_CYCLE_TARGET_BAY,
     /** {@code link} names the row; steps which face of the target block it reaches into. */

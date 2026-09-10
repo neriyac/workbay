@@ -686,12 +686,15 @@ public class DuplicationTests {
         ServerLevel level = helper.getLevel();
         ItemStack connector = new ItemStack(WBBlocks.CONNECTOR.get());
         WorkbayBlock.pair(connector, workbay.record().orElseThrow(),
-            GlobalPos.of(level.dimension(), workbay.getBlockPos()), bay);
+            GlobalPos.of(level.dimension(), workbay.getBlockPos()));
 
         BlockState state = WBBlocks.CONNECTOR.get().defaultBlockState()
             .setValue(ConnectorBlock.FACING, Direction.DOWN);
         level.setBlock(at, state, Block.UPDATE_ALL);
         WBBlocks.CONNECTOR.get().setPlacedBy(level, at, state, player, connector);
+        GlobalPos here = GlobalPos.of(level.dimension(), at);
+        com.neryos.workbay.menu.WorkbayMenu.addChannel(workbay, workbay.record().orElseThrow(),
+            workbay.connectorAt(here).orElseThrow().id(), bay);
 
         var links = workbay.buses();
         if (links.isEmpty()) {

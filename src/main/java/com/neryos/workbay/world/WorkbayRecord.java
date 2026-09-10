@@ -37,7 +37,16 @@ public record WorkbayRecord(
     List<Bay> bays,
     List<UUID> rooms,
     List<com.neryos.workbay.bus.BusConfig> buses,
-    int deployedCount) {
+    int deployedCount,
+    /**
+     * Every Connector paired to this network and standing in the world. <b>A Connector is one
+     * object, and this is where it lives</b> — placing one adds an entry here and no channel at
+     * all; every channel is minted later, by a player pressing Add on a bay. Before this list
+     * existed a Connector was only ever represented by the rows it happened to carry, so placing
+     * one had to mint a row for it to be findable, and the row a player never asked for is the
+     * fault this whole list exists to delete.
+     */
+    List<Connector> connectors) {
 
     public static final Codec<WorkbayRecord> CODEC = RecordCodecBuilder.create(i -> i.group(
         UUIDUtil.CODEC.fieldOf("Id").forGetter(WorkbayRecord::id),
@@ -56,37 +65,79 @@ public record WorkbayRecord(
             .forGetter(WorkbayRecord::buses),
         // How many live Workbay blocks are currently bound to this record. Read by placement to
         // decide whether an unbound item may reuse this network or must be refused (SPEC.md §14).
-        Codec.INT.optionalFieldOf("DeployedCount", 0).forGetter(WorkbayRecord::deployedCount)
+        Codec.INT.optionalFieldOf("DeployedCount", 0).forGetter(WorkbayRecord::deployedCount),
+        // Optional and empty: a record written before Connectors were objects reads back with
+        // none, and WorkbayMenu#build fills them in from the rows those Connectors carry.
+        Connector.CODEC.listOf().optionalFieldOf("Connectors", List.of())
+            .forGetter(WorkbayRecord::connectors)
     ).apply(i, WorkbayRecord::new));
+
+    /**
+     * One Connector, as the network knows it. SPEC.md §0.
+     *
+     * <p><b>The name lives here and nowhere else.</b> A Connector may carry a channel on every bay
+     * of its Workbay at once, and all of them are the same block on the same machine — so a name
+     * stored per channel is four names for one object, and renaming it from the world panel could
+     * only ever reach one of them. OPEN_ISSUES #97.
+     *
+     * <p>{@code target} and {@code targetBlock} are stamped when the Connector is placed, which is
+     * the one moment the block at the far end is guaranteed to be loaded; every channel minted from
+     * this Connector later is born pointing at them.
+     */
+    public record Connector(UUID id, GlobalPos pos, String name, GlobalPos target,
+        Optional<ResourceLocation> targetBlock) {
+
+        public static final Codec<Connector> CODEC = RecordCodecBuilder.create(i -> i.group(
+            UUIDUtil.CODEC.fieldOf("Id").forGetter(Connector::id),
+            GlobalPos.CODEC.fieldOf("Pos").forGetter(Connector::pos),
+            Codec.STRING.optionalFieldOf("Name", "").forGetter(Connector::name),
+            GlobalPos.CODEC.fieldOf("Target").forGetter(Connector::target),
+            ResourceLocation.CODEC.optionalFieldOf("TargetBlock").forGetter(Connector::targetBlock)
+        ).apply(i, Connector::new));
+
+        public Connector withName(String nowName) {
+            return new Connector(id, pos, nowName, target, targetBlock);
+        }
+    }
+
+    /** The Connector standing at a position, if this network owns one there. */
+    public Optional<Connector> connectorAt(GlobalPos pos) {
+        return connectors.stream().filter(c -> c.pos().equals(pos)).findFirst();
+    }
+
+    public WorkbayRecord withConnectors(List<Connector> newConnectors) {
+        return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
+            lastKnownPos, bays, rooms, buses, deployedCount, List.copyOf(newConnectors));
+    }
 
     public WorkbayRecord withUpgrades(Upgrades newUpgrades) {
         return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, newUpgrades,
-            lastKnownPos, bays, rooms, buses, deployedCount);
+            lastKnownPos, bays, rooms, buses, deployedCount, connectors);
     }
 
     public WorkbayRecord withLastKnownPos(GlobalPos pos) {
         return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
-            Optional.of(pos), bays, rooms, buses, deployedCount);
+            Optional.of(pos), bays, rooms, buses, deployedCount, connectors);
     }
 
     public WorkbayRecord withLocked(boolean nowLocked) {
         return new WorkbayRecord(id, code, owner, ownerName, nowLocked, bayColumn, upgrades,
-            lastKnownPos, bays, rooms, buses, deployedCount);
+            lastKnownPos, bays, rooms, buses, deployedCount, connectors);
     }
 
     public WorkbayRecord withBays(List<Bay> newBays) {
         return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
-            lastKnownPos, List.copyOf(newBays), rooms, buses, deployedCount);
+            lastKnownPos, List.copyOf(newBays), rooms, buses, deployedCount, connectors);
     }
 
     public WorkbayRecord withRooms(List<UUID> newRooms) {
         return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
-            lastKnownPos, bays, List.copyOf(newRooms), buses, deployedCount);
+            lastKnownPos, bays, List.copyOf(newRooms), buses, deployedCount, connectors);
     }
 
     public WorkbayRecord withBuses(List<com.neryos.workbay.bus.BusConfig> newBuses) {
         return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
-            lastKnownPos, bays, rooms, List.copyOf(newBuses), deployedCount);
+            lastKnownPos, bays, rooms, List.copyOf(newBuses), deployedCount, connectors);
     }
 
     /**
@@ -98,7 +149,7 @@ public record WorkbayRecord(
      */
     public WorkbayRecord withDeployedCount(int nowDeployedCount) {
         return new WorkbayRecord(id, code, owner, ownerName, locked, bayColumn, upgrades,
-            lastKnownPos, bays, rooms, buses, Math.max(0, nowDeployedCount));
+            lastKnownPos, bays, rooms, buses, Math.max(0, nowDeployedCount), connectors);
     }
 
 

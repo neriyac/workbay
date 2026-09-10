@@ -286,7 +286,18 @@ public class WorkbayBlockEntity extends BlockEntity {
         return buses().stream().filter(bus -> bus.connector().equals(connector)).toList();
     }
 
-    /** Breaking a Connector takes its links with it. SPEC.md §0: the block <em>is</em> the link. */
+    /**
+     * Breaking a Connector takes the Connector and every channel it carried. SPEC.md §0: the block
+     * <em>is</em> the link, and there is nothing left for a channel to point at.
+     */
+    public void removeConnectorAt(GlobalPos connector) {
+        removeLinksAt(connector);
+        editRecord(record -> record.connectorAt(connector).map(found -> record.withConnectors(
+            record.connectors().stream().filter(c -> !c.pos().equals(connector)).toList()))
+            .orElse(null));
+    }
+
+    /** Every channel anchored by the Connector at one position, without touching the Connector. */
     public void removeLinksAt(GlobalPos connector) {
         editBuses(record -> {
             List<BusConfig> going = record.buses().stream()
@@ -307,6 +318,14 @@ public class WorkbayBlockEntity extends BlockEntity {
      * (removing a link that is already gone) does not touch the registry or fire {@code setChanged}.
      */
     private void editBuses(java.util.function.Function<WorkbayRecord, List<BusConfig>> edit) {
+        editRecord(record -> {
+            List<BusConfig> updated = edit.apply(record);
+            return updated == null ? null : record.withBuses(updated);
+        });
+    }
+
+    /** Reads this Workbay's record, applies an edit and writes it back. Null means no change. */
+    private void editRecord(java.util.function.UnaryOperator<WorkbayRecord> edit) {
         if (!(level instanceof ServerLevel server) || workbayId == null) {
             return;
         }
@@ -315,12 +334,56 @@ public class WorkbayBlockEntity extends BlockEntity {
         if (record == null) {
             return;
         }
-        List<BusConfig> updated = edit.apply(record);
+        WorkbayRecord updated = edit.apply(record);
         if (updated == null) {
             return;
         }
-        registry.put(record.withBuses(updated));
+        registry.put(updated);
         setChanged();
+    }
+
+    public List<WorkbayRecord.Connector> connectors() {
+        return record().map(WorkbayRecord::connectors).orElse(List.of());
+    }
+
+    public Optional<WorkbayRecord.Connector> connectorAt(GlobalPos pos) {
+        return record().flatMap(record -> record.connectorAt(pos));
+    }
+
+    /**
+     * Remembers a Connector, or replaces what was remembered about the one already at that
+     * position. Placing a Connector calls this and mints <b>no channel</b>: a channel exists
+     * because a player pressed Add on a bay, and nothing else creates one.
+     */
+    public void addConnector(WorkbayRecord.Connector connector) {
+        editRecord(record -> {
+            List<WorkbayRecord.Connector> updated = new ArrayList<>(record.connectors().stream()
+                .filter(c -> !c.pos().equals(connector.pos())).toList());
+            updated.add(connector);
+            return record.withConnectors(updated);
+        });
+    }
+
+    /**
+     * <b>The only way a Connector's name is written.</b> One block, one name, however many bays it
+     * carries a channel on -- so the name is a field of the Connector and no channel has one of
+     * its own to disagree with. OPEN_ISSUES #97.
+     */
+    public void renameConnector(GlobalPos pos, String name) {
+        editRecord(record -> record.connectorAt(pos).map(connector -> record.withConnectors(
+            record.connectors().stream()
+                .map(c -> c.pos().equals(pos) ? c.withName(name) : c).toList()))
+            .orElse(null));
+    }
+
+    /**
+     * What a link row is called. An external row takes its Connector's name; an <b>internal</b>
+     * bay-to-bay row has no Connector -- its anchor is the Workbay itself, shared by every internal
+     * row -- so that one row is its own object and keeps its own name.
+     */
+    public String nameOf(BusConfig link) {
+        return link.internal() ? link.name()
+            : connectorAt(link.connector()).map(WorkbayRecord.Connector::name).orElse("");
     }
 
     /** A bay's face config changed, so its cached machine-end handler has to be re-resolved. */

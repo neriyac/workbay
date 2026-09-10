@@ -453,31 +453,45 @@ public class BusTests {
     }
 
     /**
-     * Pairs a Connector to the Workbay, sticks it on the block below {@code at}, and returns the
-     * link that placing it created. Mirrors the player's two actions exactly: right-click the
-     * Workbay with the Connector, then place it against the thing you want linked.
+     * Pairs a Connector to the Workbay, sticks it on the block below {@code at}, adds it to bay 1
+     * and returns the channel that made. Mirrors the player's three actions exactly: right-click
+     * the Workbay with the Connector, place it against the thing you want reached, then press Add
+     * on the bay and tick it.
      */
     private static BusConfig connect(ExtendedGameTestHelper helper, WorkbayBlockEntity workbay,
         BlockPos at, Direction facing, GameTestPlayer player) {
         ServerLevel level = helper.getLevel();
         ItemStack connector = new ItemStack(WBBlocks.CONNECTOR.get());
         WorkbayBlock.pair(connector, workbay.record().orElseThrow(),
-            GlobalPos.of(level.dimension(), workbay.getBlockPos()), 0);
+            GlobalPos.of(level.dimension(), workbay.getBlockPos()));
 
         BlockState state = WBBlocks.CONNECTOR.get().defaultBlockState()
             .setValue(ConnectorBlock.FACING, facing);
         level.setBlock(at, state, Block.UPDATE_ALL);
         WBBlocks.CONNECTOR.get().setPlacedBy(level, at, state, player, connector);
 
-        var links = workbay.buses();
-        if (links.isEmpty()) {
-            helper.fail("placing a paired Connector did not create a link");
-            throw new IllegalStateException("no link");
-        }
-        // A placed Connector makes a link that is switched off, so nothing moves before the player
-        // has looked at the row. These tests are about what moves once it is on, so they turn it on
-        // the way a player does. aNewLinkStartsSwitchedOff asserts the default itself.
-        return links.get(links.size() - 1).withEnabled(true);
+        // A new channel is switched off, so nothing moves before the player has looked at the row.
+        // These tests are about what moves once it is on, so they turn it on the way a player does.
+        // aNewLinkStartsSwitchedOff asserts the default itself.
+        return addChannel(helper, workbay, GlobalPos.of(level.dimension(), at), 0)
+            .withEnabled(true);
+    }
+
+    /**
+     * The player's third action, and the one that makes a channel: open the bay, press Add,
+     * tick the Connector. Placing one no longer mints anything (SPEC.md §0), so a fixture that
+     * wants a channel has to ask for one -- through the very method the button calls.
+     */
+    private static com.neryos.workbay.bus.BusConfig addChannel(ExtendedGameTestHelper helper,
+        WorkbayBlockEntity workbay, net.minecraft.core.GlobalPos at, int bay) {
+        var known = workbay.connectorAt(at).orElseThrow(() ->
+            new IllegalStateException("placing a paired Connector did not register it"));
+        int before = workbay.buses().size();
+        com.neryos.workbay.menu.WorkbayMenu.addChannel(workbay,
+            workbay.record().orElseThrow(), known.id(), bay);
+        helper.assertValueEqual(workbay.buses().size(), before + 1,
+            "channels after adding the Connector at " + at.pos() + " to bay " + (bay + 1));
+        return workbay.buses().getLast();
     }
 
     private static void tearDown(ExtendedGameTestHelper helper, BlockPos workbayPos) {
@@ -1493,15 +1507,20 @@ public class BusTests {
     }
 
     /**
-     * Handing a link to another bay, which is what the Add picker does. The assertion that matters
-     * is the second one: the runner caches a resolved capability per link, and that cache is keyed
-     * on the link but built from the bay it had at the time. Without dropping it on the edit, the
-     * link keeps pulling out of the bay it used to belong to and every screen in the mod says it
-     * belongs to the new one.
+     * <b>Rule 2 of SPEC.md §0: adding a Connector to a bay never takes anything away from another.</b>
+     *
+     * <p>Add used to <em>move</em> a row: ticking a Connector on bay 2 pulled it off bay 1, so a
+     * player who wanted power in one bay and cobble out of another kept losing the first every
+     * time they set up the second. One Connector is meant to serve every bay at once.
+     *
+     * <p>Both halves are watched, not just counted. The bay-1 channel keeps moving iron after the
+     * bay-2 channel exists, and the bay-2 channel really pulls out of bay 2 — the runner caches a
+     * resolved capability per link and that cache is built from the bay the link had at the time,
+     * so a count on its own would pass against a channel talking to the wrong bay.
      */
     @GameTest(timeoutTicks = 900)
-    @TestHolder(description = "Reassigning a link to another bay moves where it actually pulls from.")
-    public static void assigningALinkToAnotherBayMovesWhereItPullsFrom(final DynamicTest test) {
+    @TestHolder(description = "Adding a Connector to a second bay leaves the first bay's channel alone.")
+    public static void addingAConnectorToASecondBayLeavesTheFirstAlone(final DynamicTest test) {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
 
         test.onGameTest(ExtendedGameTestHelper.class, helper -> {
@@ -1522,37 +1541,48 @@ public class BusTests {
                 Direction.NORTH);
             BlockPos bay0 = BayGeometry.machinePos(record.bayColumn(), 0);
             BlockPos bay1 = BayGeometry.machinePos(record.bayColumn(), 1);
-            // Only bay 1 has anything. A link on bay 0 must move nothing until it is reassigned,
-            // and everything after.
-            if (backshop.getBlockEntity(bay1) instanceof Container hosted) {
-                hosted.setItem(0, new ItemStack(Items.GOLD_INGOT, 32));
+            // Each bay holds a different metal, so the chest says which bay a channel pulled from.
+            if (backshop.getBlockEntity(bay0) instanceof Container first) {
+                first.setItem(0, new ItemStack(Items.IRON_INGOT, 32));
+            }
+            if (backshop.getBlockEntity(bay1) instanceof Container second) {
+                second.setItem(0, new ItemStack(Items.GOLD_INGOT, 32));
             }
 
+            // The first channel: bay 1, pulling iron into the chest.
             BusConfig link = connect(helper, workbay, chestPos.above(), Direction.DOWN, player);
             workbay.addBus(workbay.bus(link.id()).orElseThrow()
                 .withMode(BusConfig.Mode.INSERT).withEnabled(true).withRate(8).withSpeed(10));
+            GlobalPos here = GlobalPos.of(level.dimension(), chestPos.above());
 
+            // The same Connector, added on bay 2. This is the tick in the Add list.
             player.moveTo(workbayPos.getX() + 0.5, workbayPos.getY(), workbayPos.getZ() + 0.5);
             WorkbayMenu menu = new WorkbayMenu(1, player.getInventory(), workbay,
-                WorkbayMenu.build(workbay, player, 0));
-            menu.act(WorkbayAction.LINK_ASSIGN_BAY, 1, Optional.of(link.id()));
+                WorkbayMenu.build(workbay, player, 1));
+            menu.act(WorkbayAction.ADD_CHANNEL, 1,
+                Optional.of(workbay.connectorAt(here).orElseThrow().id()));
 
-            helper.assertValueEqual(workbay.bus(link.id()).orElseThrow().bay(), 1,
-                "the reassigned link's bay");
+            helper.assertValueEqual(workbay.bus(link.id()).orElseThrow().bay(), 0,
+                "the first channel's bay after adding the same Connector to bay 2");
+            helper.assertValueEqual(workbay.linksAt(here).size(), 2,
+                "channels on one Connector after adding it to a second bay");
+            BusConfig second = workbay.linksAt(here).stream()
+                .filter(bus -> !bus.id().equals(link.id())).findFirst().orElseThrow();
+            helper.assertValueEqual(second.bay(), 1, "the new channel's bay");
+            workbay.addBus(workbay.bus(second.id()).orElseThrow()
+                .withMode(BusConfig.Mode.INSERT).withEnabled(true).withRate(8).withSpeed(10));
 
             helper.startSequence()
                 .thenWaitUntil(() -> {
-                    if (countIn(level, chestPos, Items.GOLD_INGOT) < 32) {
-                        throw new GameTestAssertException("the reassigned link has moved "
-                            + countIn(level, chestPos, Items.GOLD_INGOT) + " of 32 gold out of "
-                            + "bay 2; status is " + workbay.busStatus(link.id()));
-                    }
-                })
-                .thenExecute(() -> {
-                    if (backshop.getBlockEntity(bay0) instanceof Container old
-                        && !old.isEmpty()) {
-                        helper.fail("the reassigned link touched bay 1, which it no longer "
-                            + "belongs to");
+                    if (countIn(level, chestPos, Items.IRON_INGOT) < 32
+                        || countIn(level, chestPos, Items.GOLD_INGOT) < 32) {
+                        throw new GameTestAssertException("one Connector carrying two channels has "
+                            + "delivered " + countIn(level, chestPos, Items.IRON_INGOT)
+                            + " of 32 iron out of bay 1 and "
+                            + countIn(level, chestPos, Items.GOLD_INGOT)
+                            + " of 32 gold out of bay 2; statuses are "
+                            + workbay.busStatus(link.id()) + " and "
+                            + workbay.busStatus(second.id()));
                     }
                 })
                 .thenExecute(() -> tearDown(helper, workbayPos))

@@ -514,16 +514,18 @@ public class RoomTests {
         GameTestPlayer player) {
         ItemStack held = new ItemStack(WBBlocks.CONNECTOR.get());
         com.neryos.workbay.content.workbay.WorkbayBlock.pair(held, workbay.record().orElseThrow(),
-            net.minecraft.core.GlobalPos.of(workbay.getLevel().dimension(), workbay.getBlockPos()),
-            bay);
+            net.minecraft.core.GlobalPos.of(workbay.getLevel().dimension(), workbay.getBlockPos()));
         var state = WBBlocks.CONNECTOR.get().defaultBlockState()
             .setValue(com.neryos.workbay.content.connector.ConnectorBlock.FACING, facing);
         int before = workbay.buses().size();
         where.setBlock(at, state, Block.UPDATE_ALL);
         WBBlocks.CONNECTOR.get().setPlacedBy(where, at, state, player, held);
+        net.minecraft.core.GlobalPos here = net.minecraft.core.GlobalPos.of(where.dimension(), at);
+        com.neryos.workbay.menu.WorkbayMenu.addChannel(workbay, workbay.record().orElseThrow(),
+            workbay.connectorAt(here).orElseThrow().id(), bay);
         helper.assertValueEqual(workbay.buses().size(), before + 1,
-            "links after placing a paired Connector at " + at + " in "
-                + where.dimension().location());
+            "channels after adding the Connector at " + at + " in "
+                + where.dimension().location() + " to bay " + (bay + 1));
         return workbay.buses().getLast().withEnabled(true);
     }
 
@@ -1241,7 +1243,7 @@ public class RoomTests {
                     registry.put(new WorkbayRecord(was.id(), was.code(), back.getUUID(),
                         back.getGameProfile().getName(), was.locked(), was.bayColumn(),
                         was.upgrades(), was.lastKnownPos(), was.bays(), was.rooms(), was.buses(),
-                        was.deployedCount()));
+                        was.deployedCount(), was.connectors()));
                     com.neryos.workbay.world.AnchorPresence.resume(
                         helper.getLevel().getServer(), back.getUUID());
                 })

@@ -7,6 +7,7 @@ import com.neryos.workbay.bus.BusConfig;
 import com.neryos.workbay.content.workbay.WorkbayBlockEntity;
 import com.neryos.workbay.init.WBBlockEntities;
 import com.neryos.workbay.init.WBDataComponents;
+import com.neryos.workbay.world.WorkbayRecord;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
@@ -124,9 +125,15 @@ public class ConnectorBlock extends BaseEntityBlock {
     }
 
     /**
-     * Placing a paired Connector is what creates the link. An unpaired one still places — it is a
-     * perfectly ordinary block that simply does nothing yet — and says so, because silently doing
-     * nothing is how a player concludes the mod is broken.
+     * Placing a paired Connector hands it to the network, and <b>mints no channel</b>. An unpaired
+     * one still places — it is a perfectly ordinary block that simply does nothing yet — and says
+     * so, because silently doing nothing is how a player concludes the mod is broken.
+     *
+     * <p>It used to make one channel, on whichever bay was selected when the item was paired. That
+     * is a row the player never asked for, on a bay they were not thinking about — SPEC.md §0's
+     * <em>nothing is ever created by itself</em>. What placing a Connector answers is "this block
+     * belongs to that network, stuck to that machine"; which bay talks through it is a question
+     * about a bay, and it is answered on the bay's own Add list.
      */
     @Override
     public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack) {
@@ -148,10 +155,8 @@ public class ConnectorBlock extends BaseEntityBlock {
         // hand, kept through a stack split and shown in the hotbar. A rename box on the item would
         // have been a second screen, a second packet and a second place for "what is this called"
         // to live; renaming an item is the game's own answer to the same question. Empty custom
-        // name leaves the link deriving its name from its target, exactly as before.
-        addLink(level, pos, state, connector,
-            connector.pairing().map(ConnectorPairing::bay).orElse(0), BusConfig.Resource.ITEM,
-            placer instanceof Player player ? player : null,
+        // name leaves every row deriving its name from the target, exactly as before.
+        register(level, pos, state, connector, placer instanceof Player player ? player : null,
             nameOn(stack));
     }
 
@@ -189,7 +194,7 @@ public class ConnectorBlock extends BaseEntityBlock {
     }
 
     /**
-     * Breaking the Connector removes its links. Done here rather than in
+     * Breaking the Connector removes it and its channels. Done here rather than in
      * {@code BlockEntity#setRemoved}, which also fires on chunk unload — a Workbay whose Connectors
      * happen to be in an unloaded chunk must not quietly lose them.
      */
@@ -198,7 +203,7 @@ public class ConnectorBlock extends BaseEntityBlock {
         if (!state.is(newState.getBlock()) && !level.isClientSide
             && level.getBlockEntity(pos) instanceof ConnectorBlockEntity connector) {
             GlobalPos here = GlobalPos.of(level.dimension(), pos);
-            connector.workbay().ifPresent(workbay -> workbay.removeLinksAt(here));
+            connector.workbay().ifPresent(workbay -> workbay.removeConnectorAt(here));
         }
         super.onRemove(state, level, pos, newState, movedByPiston);
     }
@@ -209,9 +214,9 @@ public class ConnectorBlock extends BaseEntityBlock {
         return custom == null ? "" : custom.getString().strip();
     }
 
-    private static void addLink(Level level, BlockPos pos, BlockState state,
-        ConnectorBlockEntity connector, int bay, BusConfig.Resource resource,
-        @Nullable Player player, String name) {
+    /** Hands this block to the network as a Connector it owns. No channel: SPEC.md §0. */
+    private static void register(Level level, BlockPos pos, BlockState state,
+        ConnectorBlockEntity connector, @Nullable Player player, String name) {
         WorkbayBlockEntity workbay = connector.workbay().orElse(null);
         if (workbay == null) {
             if (player != null) {
@@ -224,18 +229,15 @@ public class ConnectorBlock extends BaseEntityBlock {
         // Stamped here and nowhere else: this is the one moment the block at the far end is known
         // to be loaded, and from now on the screen can say "Chest" rather than two coordinates and
         // the flow map can draw the chest. See BusConfig#targetBlock.
-        workbay.addBus(BusConfig.create(UUID.randomUUID(), bay, resource,
-            BusConfig.Mode.INSERT,
-            GlobalPos.of(level.dimension(), pos),
-            GlobalPos.of(level.dimension(), targetPos))
-            .withTargetBlock(java.util.Optional.ofNullable(
+        workbay.addConnector(new WorkbayRecord.Connector(UUID.randomUUID(),
+            GlobalPos.of(level.dimension(), pos), name,
+            GlobalPos.of(level.dimension(), targetPos),
+            java.util.Optional.ofNullable(
                 net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(
-                    level.getBlockState(targetPos).getBlock())))
-            .withName(name));
+                    level.getBlockState(targetPos).getBlock()))));
         if (player != null) {
             WorkbaySounds.confirm(player, WorkbayLang.message("connector_linked",
-                level.getBlockState(target(state, pos)).getBlock().getName(), bay + 1,
-                pairing.code()),
+                level.getBlockState(targetPos).getBlock().getName(), pairing.code()),
                 net.minecraft.sounds.SoundEvents.COPPER_BULB_TURN_ON, 1.0F);
         }
     }

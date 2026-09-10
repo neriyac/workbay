@@ -93,15 +93,15 @@ public class WBLanguageProvider extends LanguageProvider {
             + "was placed. You still have it.");
 
         // The Connector, which is where every link comes from. SPEC.md §0.
-        // <b>Paired to the Workbay; the bay is only where its first row lands.</b> A Connector
-        // belongs to a network and can end up carrying rows on several bays at once, so nothing
-        // may say it is "on" one.
-        add(WorkbayLang.messageKey("connector_paired"), "Connector paired. Place it against the "
-            + "block you want to link — its first row lands on bay %s.");
+        // <b>Paired to the network, and to no bay at all.</b> A Connector may carry a channel
+        // on every bay of its Workbay at once, so nothing may say it is "on" one -- and pairing
+        // no longer picks one, because placing it no longer mints anything.
+        add(WorkbayLang.messageKey("connector_paired"), "Connector paired to %s. Place it, then "
+            + "add it to a bay.");
         add(WorkbayLang.messageKey("connector_unpaired"), "This Connector isn't paired yet. "
             + "Right-click a Workbay with it first.");
-        add(WorkbayLang.messageKey("connector_linked"), "Linked to %s on bay %s. Workbay %s has a "
-            + "row for it, switched off until you turn it on.");
+        add(WorkbayLang.messageKey("connector_linked"), "Connector set on %s, for %s. Add it on a "
+            + "bay to give that bay a channel.");
         add(WorkbayLang.messageKey("connector_no_workbay"), "The Workbay this Connector is paired "
             + "to isn't loaded. Go back to it and place this again.");
 
@@ -142,7 +142,9 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("button.eject.tip"), "Take this machine out of its bay, with "
             + "everything inside it.");
         add(WorkbayLang.guiKey("links.target.tip"), "What this link is pointed at.");
-        add(WorkbayLang.guiKey("links.rename.tip"), "Right-click to name this link. Empty goes back to the derived name.");
+        add(WorkbayLang.guiKey("links.rename.tip"), "Right-click to name this Connector. The "
+            + "name is the block's, so every channel through it reads the same. Empty goes back "
+            + "to the derived name.");
         add(WorkbayLang.guiKey("button.rename"), "Rename");
         add(WorkbayLang.guiKey("button.rename.tip"), "Name this bay. Return commits, Escape cancels, empty goes back to the machine's.");
         add(WorkbayLang.guiKey("redstone.always"), "Redstone: always");
@@ -206,11 +208,12 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("faces.drag"), "Drag to turn");
         add(WorkbayLang.guiKey("faces.empty"), "Rack a machine to set its faces.");
 
-        add(WorkbayLang.guiKey("links.none"), "No links yet. Pair a Connector and place it on "
-            + "something.");
+        add(WorkbayLang.guiKey("links.none"), "No channels on this bay yet. Press Add and pick a "
+            + "Connector.");
         add(WorkbayLang.guiKey("links.pair"), "Pair a Connector");
         add(WorkbayLang.guiKey("links.pair.tip"), "Pairs the held Connector to this Workbay. Place "
-            + "it on the block you want linked; its first row lands on this bay.");
+            + "it on the block you want to reach, then add it to whichever bays should talk "
+            + "through it.");
         add(WorkbayLang.guiKey("links.internal"), "Link a bay");
         add(WorkbayLang.guiKey("links.internal.tip"), "A link straight to another bay, with no Connector to place.");
         add(WorkbayLang.guiKey("links.internal.retarget"), "Change which bay");
@@ -237,24 +240,28 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("links.type.tip"), "Click to change what this link carries. Right-click steps back.");
         add(WorkbayLang.guiKey("links.none.here"), "No links on this bay. %s on other bays \u2014 press Add to move one here.");
         add(WorkbayLang.guiKey("links.adding"), "TO BAY %s");
-        add(WorkbayLang.guiKey("links.add"), "Add a link");
+        add(WorkbayLang.guiKey("links.add"), "Add a channel");
         add(WorkbayLang.guiKey("links.add.close"), "Back to this bay's links");
-        add(WorkbayLang.guiKey("links.add.tip"), "Everything this bay could be attached to: a loose Connector, or another bay.");
-        add(WorkbayLang.guiKey("links.add.none.links"), "No links on other bays. Pair a Connector "
-            + "and place it on something.");
+        add(WorkbayLang.guiKey("links.add.tip"), "Everything this bay can talk through: a "
+            + "Connector standing in the world, or another bay.");
+        add(WorkbayLang.guiKey("links.add.none.links"), "No Connectors yet. Pair one and place it "
+            + "against a chest, tank or machine.");
         add(WorkbayLang.guiKey("links.add.none.bays"), "No other bays. Rack a second one first.");
-        add(WorkbayLang.guiKey("links.add.tab.connectors"), "Links other bays hold");
+        add(WorkbayLang.guiKey("links.add.tab.connectors"), "Connectors in the world");
         add(WorkbayLang.guiKey("links.add.tab.bays"), "Bays in this Workbay");
-        add(WorkbayLang.guiKey("links.add.tab.tip"), "Connectors standing in the world, or the bays in this rack.");
-        add(WorkbayLang.guiKey("links.add.apply"), "Attach %s ticked");
-        add(WorkbayLang.guiKey("links.add.apply.tip"), "Attaches everything ticked on both tabs in "
+        add(WorkbayLang.guiKey("links.add.tab.tip"), "Every Connector this network owns, or the "
+            + "bays in this rack.");
+        add(WorkbayLang.guiKey("links.add.apply"), "Add %s ticked");
+        add(WorkbayLang.guiKey("links.add.apply.tip"), "Adds everything ticked on both tabs in "
             + "one go, then closes the picker.");
-        add(WorkbayLang.guiKey("links.add.link"), "%s, held by bay %s");
-        add(WorkbayLang.guiKey("links.add.again"), "%s, already on this bay");
-        add(WorkbayLang.guiKey("links.add.again.tip"), "Gives this bay a second row on the same "
-            + "Connector. Each row is its own channel — its own resource, direction, filter "
-            + "and rate.");
-        add(WorkbayLang.guiKey("links.add.link.tip"), "Hands this link to bay %s. The Connector stays where it is.");
+        add(WorkbayLang.guiKey("links.add.connector"), "New channel through %s");
+        add(WorkbayLang.guiKey("links.add.connector.tip"), "Gives bay %s its own channel through "
+            + "this Connector — its own resource, direction, filter and rate. Every other bay "
+            + "keeps what it has; one Connector can serve all of them at once.");
+        add(WorkbayLang.guiKey("links.add.connector.back"), "Give %s its channel back");
+        add(WorkbayLang.guiKey("links.add.connector.back.tip"), "A channel through this Connector "
+            + "is waiting off its bay. This puts it on bay %s with its resource, filter and rate "
+            + "kept, instead of adding a blank one beside it.");
         add(WorkbayLang.guiKey("links.add.bay"), "Bay %s");
         add(WorkbayLang.guiKey("links.add.bay.tip"), "Makes a link straight to that bay. No "
             + "Connector, no block in the world.");
@@ -274,7 +281,7 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("links.remove"), "Take off this bay");
         add(WorkbayLang.guiKey("links.remove.tip"), "The link keeps its filter, rate and name and "
             + "waits under Add. Breaking the Connector is what deletes one.");
-        add(WorkbayLang.guiKey("links.add.detached"), "%s, on no bay");
+
         add(WorkbayLang.messageKey("workbay_stamped"), "This Workbay will join network %s.");
         add(WorkbayLang.messageKey("network_reused_named"), "Joined network %s.");
         add(WorkbayLang.messageKey("room_occupied"), "Somebody is in that room.");
@@ -510,6 +517,10 @@ public class WBLanguageProvider extends LanguageProvider {
         // field is left empty -- which is the block's own coordinates, not a stored default.
         add(WorkbayLang.guiKey("connector.title"), "Name this Connector");
         add(WorkbayLang.guiKey("connector.hint"), "Empty leaves it \"%s\"");
+        add(WorkbayLang.guiKey("connector.unused"), "No channels yet · open a bay, press Add "
+            + "and pick this");
+        add(WorkbayLang.guiKey("connector.channel"), "Carries one channel");
+        add(WorkbayLang.guiKey("connector.channels"), "Carries %s channels, across its bays");
         add(WorkbayLang.guiKey("connector.save"), "Save");
 
         add(WorkbayLang.guiKey("door.title"), "Way out");
@@ -603,7 +614,7 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.tooltipKey("code"), "Code %s");
         add(WorkbayLang.tooltipKey("connector_unpaired"), "Not paired. Right-click a Workbay with "
             + "this to pair it.");
-        add(WorkbayLang.tooltipKey("connector_paired"), "Paired \u00b7 first row on bay %s");
+        add(WorkbayLang.tooltipKey("connector_paired"), "Paired \u00b7 network %s");
 
         // The guide, on every item's Information tab in JEI and EMI. SPEC.md §6's voice at the one
         // length it is ever allowed: a player right-clicking a Workbay in a recipe viewer used to
@@ -628,13 +639,16 @@ public class WBLanguageProvider extends LanguageProvider {
             + "Each one is consumed when it goes in, and there is no taking it out again.");
 
         add(WorkbayLang.infoKey("connector.1"), "One end of a link, as a block you can point at. "
-            + "Right-click a Workbay with it to pair the two; its tooltip then names which Workbay "
-            + "and which bay. Place it against a chest, tank or machine and the link exists. Break "
-            + "it and the link is gone.");
+            + "Right-click a Workbay with it to pair the two; its tooltip then names the network. "
+            + "Place it against a chest, tank or machine and the network can reach that block. It "
+            + "carries nothing yet — open a bay, press Add, and pick it. Break it and every "
+            + "channel through it is gone.");
         add(WorkbayLang.infoKey("connector.2"), "It reaches all six faces of the block it is stuck "
-            + "to, so which side you put it on does not matter. One Connector carries as many rows "
-            + "as you give it: press Add on a bay and pick it again, and the new row is its own "
-            + "channel with its own resource, direction, filter and rate.");
+            + "to, so which side you put it on does not matter — and one Connector serves every "
+            + "bay at once. Add it on the bay holding your power cube for energy, and again on the "
+            + "bay holding your generator for items: two channels, one plate, each with its own "
+            + "resource, direction, filter and rate. Its name is the block's, so renaming it "
+            + "anywhere renames it everywhere.");
         add(WorkbayLang.infoKey("connector.3"), "A link out of the dimension its Workbay stands in "
             + "needs a Resonator. Anything inside that dimension, and anything in the Backshop, "
             + "does not.");

@@ -451,20 +451,24 @@ public class PerfBench {
         return workbay;
     }
 
-    /** The player's two actions: pair a Connector to the Workbay, then stick it on the target. */
+    /** The player's three: pair a Connector, stick it on the target, add it to bay 1. */
     private static BusConfig connect(ExtendedGameTestHelper helper, WorkbayBlockEntity workbay,
         BlockPos at, GameTestPlayer player) {
         ServerLevel level = helper.getLevel();
         ItemStack connector = new ItemStack(WBBlocks.CONNECTOR.get());
         WorkbayBlock.pair(connector, workbay.record().orElseThrow(),
-            GlobalPos.of(level.dimension(), workbay.getBlockPos()), 0);
+            GlobalPos.of(level.dimension(), workbay.getBlockPos()));
         BlockState state = WBBlocks.CONNECTOR.get().defaultBlockState()
             .setValue(ConnectorBlock.FACING, Direction.DOWN);
         level.setBlock(at, state, Block.UPDATE_ALL);
         WBBlocks.CONNECTOR.get().setPlacedBy(level, at, state, player, connector);
+        GlobalPos here = GlobalPos.of(level.dimension(), at);
+        com.neryos.workbay.menu.WorkbayMenu.addChannel(workbay, workbay.record().orElseThrow(),
+            workbay.connectorAt(here).orElseThrow(() ->
+                new GameTestAssertException("placing a paired Connector registered none")).id(), 0);
         List<BusConfig> links = workbay.buses();
         if (links.isEmpty()) {
-            throw new GameTestAssertException("placing a paired Connector made no link");
+            throw new GameTestAssertException("adding the Connector to a bay made no channel");
         }
         return links.get(links.size() - 1);
     }

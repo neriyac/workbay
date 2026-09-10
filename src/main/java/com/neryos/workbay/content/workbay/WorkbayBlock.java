@@ -198,12 +198,10 @@ public class WorkbayBlock extends BaseEntityBlock {
         if (blank) {
             return stamp(stack, record, player);
         }
-        int bay = firstOccupiedBay(record);
-        pair(stack, record, GlobalPos.of(level.dimension(), pos), bay);
-        // Which bay, because this path always lands on the first occupied one and a player with a
-        // full rack has no way to know that from a message that does not say it. Aiming somewhere
-        // else is the screen's Pair button.
-        WorkbaySounds.confirm(player, WorkbayLang.message("connector_paired", bay + 1),
+        pair(stack, record, GlobalPos.of(level.dimension(), pos));
+        // Which network, because that is the whole of what pairing decides now: a Connector is
+        // owned by a network and used from whichever bays the player picks later.
+        WorkbaySounds.confirm(player, WorkbayLang.message("connector_paired", record.code()),
             net.minecraft.sounds.SoundEvents.COMPARATOR_CLICK, 1.6F);
         return net.minecraft.world.ItemInteractionResult.CONSUME;
     }
@@ -265,15 +263,11 @@ public class WorkbayBlock extends BaseEntityBlock {
     }
 
     /** Stamps a Connector item with the Workbay and bay its link will land on. */
-    public static void pair(ItemStack stack, WorkbayRecord record, GlobalPos workbayPos, int bay) {
+    public static void pair(ItemStack stack, WorkbayRecord record, GlobalPos workbayPos) {
         stack.set(WBDataComponents.PAIRING.get(),
-            new ConnectorPairing(record.id(), workbayPos, record.code(), bay));
+            new ConnectorPairing(record.id(), workbayPos, record.code()));
     }
 
-    private static int firstOccupiedBay(WorkbayRecord record) {
-        return record.bays().stream().filter(bay -> bay.hosted().isPresent())
-            .mapToInt(WorkbayRecord.Bay::index).min().orElse(0);
-    }
 
     /**
      * SPEC.md §14: the machines keep running, so say so before the player walks away thinking they

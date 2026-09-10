@@ -4,6 +4,7 @@ import com.neryos.workbay.bus.BusConfig;
 import com.neryos.workbay.bus.BusRunner;
 import com.neryos.workbay.menu.WorkbayAction;
 import com.neryos.workbay.menu.WorkbaySnapshot;
+import com.neryos.workbay.world.WorkbayRecord.Connector;
 import com.neryos.workbay.world.BayGeometry;
 import com.neryos.workbay.world.FaceConfig;
 import net.minecraft.ChatFormatting;
@@ -180,7 +181,7 @@ class BaysPage extends WorkbayPage {
      * whole reason the picker has a confirm button: attaching links one at a time closed the list
      * after each one, which for a bay that needs six of them is five needless round trips.
      */
-    private static final java.util.Set<UUID> pickedLinks = new java.util.LinkedHashSet<>();
+    private static final java.util.Set<UUID> pickedConnectors = new java.util.LinkedHashSet<>();
     private static final java.util.Set<Integer> pickedBays = new java.util.LinkedHashSet<>();
 
     /**
@@ -858,14 +859,18 @@ class BaysPage extends WorkbayPage {
             text(g, WorkbayScreen.gui("links.adding", screen.selectedBay() + 1),
                 x(LIST_X + 4), y(linksY + 4), 48, Draw.TEXT);
             // Laid out left to right with the widths written down, because the first version put
-            // the Bays tab and Back on top of each other: heading to LIST_X+52, two 44-wide tabs,
-            // then Back, then the confirm where Pair sits on the normal list.
-            tab(g, mouseX, mouseY, x(LIST_X + 56), AddTab.CONNECTORS, "Links");
-            tab(g, mouseX, mouseY, x(LIST_X + 102), AddTab.BAYS, "Bays");
+            // the Bays tab and Back on top of each other: heading to LIST_X+52, the tabs, then
+            // Back, then the confirm where Pair sits on the normal list.
+            //
+            // <b>"Connectors", not "Links".</b> The list is one row per Connector now, and a tab
+            // naming the rows it does not list is the same lie the panel in the world used to
+            // tell. The word is ten characters, so this tab is wider than the one beside it.
+            tab(g, mouseX, mouseY, x(LIST_X + 56), 62, AddTab.CONNECTORS, "Connectors");
+            tab(g, mouseX, mouseY, x(LIST_X + 120), 44, AddTab.BAYS, "Bays");
 
             // Confirm, where Pair sits on the normal list: the count is the whole point of the
             // checkboxes, so it is on the button rather than anywhere the eye has to hunt for it.
-            int picked = pickedLinks.size() + pickedBays.size();
+            int picked = pickedConnectors.size() + pickedBays.size();
             boolean confirmHover = screen.hovered(pairX, y(linksY), 46, 18, mouseX, mouseY);
             Draw.button(g, pairX, y(linksY), 46, 18, confirmHover, false);
             textCentre(g, picked == 0 ? "Add" : "Add " + picked, pairX + 23, y(linksY + 5), 42,
@@ -876,7 +881,7 @@ class BaysPage extends WorkbayPage {
 
             // No icon beside the word: "Back" is 22px and the icon another 12, which did not fit
             // the 36 the button had and spilled over its right edge.
-            int backX = x(LIST_X + 160);
+            int backX = x(LIST_X + 166);
             boolean backHover = screen.hovered(backX, y(linksY), 40, 18, mouseX, mouseY);
             Draw.button(g, backX, y(linksY), 40, 18, backHover, false);
             textCentre(g, "Back", backX + 20, y(linksY + 5), 36, Draw.TEXT);
@@ -1591,12 +1596,13 @@ class BaysPage extends WorkbayPage {
     }
 
     /** One of the picker's two tabs, drawn as a button that stays pressed while it is the one shown. */
-    private void tab(GuiGraphics g, int mouseX, int mouseY, int px, AddTab which, String label) {
+    private void tab(GuiGraphics g, int mouseX, int mouseY, int px, int w, AddTab which,
+        String label) {
         boolean active = addTab == which;
-        boolean hover = screen.hovered(px, y(linksY), 44, 18, mouseX, mouseY);
-        Draw.button(g, px, y(linksY), 44, 18, hover, active);
-        textCentre(g, label, px + 22, y(linksY + 5), 40, active ? Draw.TEXT : Draw.TEXT_DIM);
-        screen.hit(px, y(linksY), 44, 18, () -> {
+        boolean hover = screen.hovered(px, y(linksY), w, 18, mouseX, mouseY);
+        Draw.button(g, px, y(linksY), w, 18, hover, active);
+        textCentre(g, label, px + w / 2, y(linksY + 5), w - 4, active ? Draw.TEXT : Draw.TEXT_DIM);
+        screen.hit(px, y(linksY), w, 18, () -> {
             addTab = which;
             scroll = 0;
         }, WorkbayScreen.gui("links.add.tab." + which.name().toLowerCase(java.util.Locale.ROOT)),
@@ -1605,7 +1611,7 @@ class BaysPage extends WorkbayPage {
 
     private void closePicker() {
         adding = false;
-        pickedLinks.clear();
+        pickedConnectors.clear();
         pickedBays.clear();
         scroll = 0;
     }
@@ -1614,35 +1620,35 @@ class BaysPage extends WorkbayPage {
      * Attaches everything that is ticked, then leaves the picker.
      *
      * <p>One action per pick rather than one action carrying a list. The two are different actions
-     * on the server -- handing over an existing link, and minting a new internal one -- and each
-     * already validates its own arguments, so a batching packet would buy nothing but a second
-     * place for the same rules to be written down.
+     * on the server -- minting a channel through a Connector, and minting an internal one -- and
+     * each already validates its own arguments, so a batching packet would buy nothing but a
+     * second place for the same rules to be written down.
      */
     private void applyPicked() {
         int bay = screen.selectedBay();
-        pickedLinks.forEach(id -> screen.send(WorkbayAction.LINK_ASSIGN_BAY, bay, id));
+        pickedConnectors.forEach(id -> screen.send(WorkbayAction.ADD_CHANNEL, bay, id));
         pickedBays.forEach(target -> screen.send(WorkbayAction.CREATE_INTERNAL_LINK, target));
         closePicker();
     }
 
     /**
-     * What the selected bay could be attached to: on the Links tab every link currently held by
-     * another bay, and on the Bays tab every other bay, for a link that needs no Connector.
+     * What the selected bay could be given a channel through: on the Connectors tab <b>every
+     * Connector this network owns</b>, and on the Bays tab every other bay, for a channel that
+     * needs no Connector at all.
      *
-     * <p>Reassigning rather than creating is deliberate. A Connector is the link (SPEC.md §0), so a
-     * Connector already standing in the world is not a link waiting to be made -- it is a link
-     * belonging to the wrong bay, and the fix is to hand it over, not to make a second one.
+     * <p><b>A list of Connectors, not of channels.</b> A Connector is one object; it is offered to
+     * every bay, always, and ticking it on two bays gives two channels through the same block --
+     * power into the bay holding the energy cube, cobble out of the bay holding the generator. The
+     * list used to be of rows, so a Connector carrying four appeared four times and ticking one of
+     * them moved it off the bay that had it. Adding never takes anything away. SPEC.md §0.
      */
     private void candidates(GuiGraphics g, int mouseX, int mouseY, WorkbaySnapshot snap) {
         int selected = screen.selectedBay();
 
-        // <b>A Connector already on this bay is still on the list.</b> Pulling it in again is a
-        // second row on the same Connector, and each row is its own channel -- items in on one,
-        // energy out on the next, through the same plate. An internal link is the exception: a
-        // second bay-to-bay row is what the Bays tab mints.
-        List<WorkbaySnapshot.Link> loose = snap.links().stream()
-            .filter(link -> link.config().bay() != selected || !link.config().internal())
-            .toList();
+        // Every Connector, every time, on every bay. Nothing is filtered out for already being in
+        // use here: using one twice on one bay is two channels, and using it on a second bay is
+        // the whole reason a Connector is an object rather than a row.
+        List<Connector> loose = snap.connectors();
         // Bays that exist and are not this one. A bay with no machine is still worth offering: the
         // link outlives the machine, and racking one later is the normal order of work.
         List<Integer> bays = java.util.stream.IntStream.range(0, snap.bayCapacity())
@@ -1671,35 +1677,32 @@ class BaysPage extends WorkbayPage {
             }
 
             if (addTab == AddTab.CONNECTORS) {
-                WorkbaySnapshot.Link link = loose.get(index);
-                BusConfig config = link.config();
-                boolean ticked = pickedLinks.contains(config.id());
+                Connector connector = loose.get(index);
+                boolean ticked = pickedConnectors.contains(connector.id());
                 if (hover) {
-                    com.neryos.workbay.client.LinkHighlight.set(config.target());
+                    com.neryos.workbay.client.LinkHighlight.set(connector.target());
                 }
                 checkbox(g, px, py + 3, ticked);
-                // <b>The block it is stuck to, not what it carries.</b> OPEN_ISSUES #77: this
-                // list is a list of Connectors, and a Connector on an Energy Cube is recognised
-                // as an Energy Cube long before a drop or a cell is decoded as "fluid" or
-                // "energy". The resource is one click away on the row it lands on, and it is the
-                // one fact about a link that the player is about to change anyway. An internal
-                // link has no block in the world, so it keeps the arrow it always had.
-                Optional<ResourceLocation> pickIcon = targetIcon(link);
+                // <b>The block it is stuck to, not what it carries.</b> OPEN_ISSUES #77: a
+                // Connector on an Energy Cube is recognised as an Energy Cube long before a drop
+                // or a cell is decoded as "fluid" or "energy" -- and it carries nothing yet
+                // anyway, because what it carries is decided on the row this tick mints.
+                Optional<ResourceLocation> pickIcon = connector.targetBlock()
+                    .filter(id -> !id.equals(ResourceLocation.withDefaultNamespace("air")));
                 if (pickIcon.isPresent()
                     && BuiltInRegistries.ITEM.get(pickIcon.get()) != net.minecraft.world.item.Items.AIR) {
                     WBIcons.sprite(g, new ItemStack(BuiltInRegistries.ITEM.get(pickIcon.get())),
                         px + 18, py + 3, 12, true);
                 } else {
-                    resourceIcon(g, config.resource(), px + 18, py + 3);
+                    // The Connector's own item, for one whose far end this client has never
+                    // loaded: the row is about the plate, and a plate is what it draws.
+                    WBIcons.sprite(g, new ItemStack(
+                        com.neryos.workbay.init.WBBlocks.CONNECTOR.get()), px + 18, py + 3, 12,
+                        true);
                 }
-                String label = labelOf(link);
-                // An internal link's target is a machine in the Backshop, which this client has
-                // never loaded, so asking for the block there gets air. Name the bay instead --
-                // the same branch the row itself makes.
-                String from = config.internal()
-                    ? link.targetBay().map(b -> "\u2192 Bay " + (b + 1))
-                        .orElse(WorkbayScreen.gui("links.unknown").getString())
-                    : targetName(link);
+                String blockName = connectorTarget(connector);
+                String label = connector.name().isBlank() ? blockName : connector.name();
+                String from = blockName;
                 // Right-aligned against the badge rather than parked on a fixed x: the two
                 // strings are "what it is" and "where it points", and a fixed column left a
                 // forty-pixel hole between them on every row whose name was short.
@@ -1713,24 +1716,32 @@ class BaysPage extends WorkbayPage {
                 // beside it. Same fault and same fix as the link row's own name column, which
                 // stopped writing its width down for exactly this reason. OPEN_ISSUES #74.
                 boolean secondFact = !from.equals(label);
-                int fromRight = px + 202;
-                int fromW = secondFact ? Math.min(92, Draw.width(screen.font(), from)) : 0;
+                int fromRight = px + 186;
+                // <b>Measured, not capped at ninety-two.</b> That number was written for a list
+                // of rows with a bay badge and an arrow on it; this list has one row per Connector
+                // and room to spare, and "Rotary Condensentrator" -- the block this rig is built
+                // on -- arrived as "Rotary Condensent...". OPEN_ISSUES #74, one list over.
+                int fromW = secondFact ? Draw.width(screen.font(), from) : 0;
                 int labelW = (secondFact ? fromRight - fromW - 6 : fromRight) - (px + 34);
                 text(g, label, px + 34, py + 5, labelW, ticked ? Draw.TEXT : Draw.TEXT_DIM);
                 if (secondFact) {
-                    textRight(g, from, fromRight, py + 5, fromW,
-                        config.internal() ? Draw.BLUE : Draw.TEXT_DIM);
+                    textRight(g, from, fromRight, py + 5, fromW, Draw.TEXT_DIM);
                 }
-                textRight(g, bayBadge(config), px + LIST_W - 18, py + 5, 20, Draw.TEXT_FAINT);
+                // Which bays already talk through it -- "B1 B2", or nothing for one nobody has
+                // used yet. The fact a player needs beside a list whose whole point is that one
+                // Connector serves several bays at once.
+                textRight(g, inUse(snap, connector), px + LIST_W - 18, py + 5, 44, Draw.TEXT_FAINT);
+                boolean waiting = snap.links().stream().anyMatch(other ->
+                    other.config().detached() && !other.config().internal()
+                        && other.config().connector().equals(connector.pos()));
                 screen.hit(px, py, LIST_W - 14, ROW_PITCH - 2, () -> {
-                    if (!pickedLinks.remove(config.id())) {
-                        pickedLinks.add(config.id());
+                    if (!pickedConnectors.remove(connector.id())) {
+                        pickedConnectors.add(connector.id());
                     }
-                }, config.detached() ? WorkbayScreen.gui("links.add.detached", label)
-                    : config.bay() == selected ? WorkbayScreen.gui("links.add.again", label)
-                    : WorkbayScreen.gui("links.add.link", label, config.bay() + 1),
-                    config.bay() == selected ? WorkbayScreen.gui("links.add.again.tip")
-                        : WorkbayScreen.gui("links.add.link.tip", selected + 1));
+                }, waiting ? WorkbayScreen.gui("links.add.connector.back", label)
+                    : WorkbayScreen.gui("links.add.connector", label),
+                    waiting ? WorkbayScreen.gui("links.add.connector.back.tip", selected + 1)
+                        : WorkbayScreen.gui("links.add.connector.tip", selected + 1));
             } else {
                 int bay = bays.get(index);
                 boolean ticked = pickedBays.contains(bay);
@@ -1946,6 +1957,29 @@ class BaysPage extends WorkbayPage {
             .map(BaysPage::displayName).map(Component::getString)
             .orElseGet(() -> link.config().target().pos().getX() + " "
                 + link.config().target().pos().getZ());
+    }
+
+    /**
+     * What a Connector in the Add list points at: the block it is stuck to when this client knows
+     * it, and otherwise where it is. Same fallback ladder as a row's own target column, and the
+     * same reason -- a Connector's target is nearly always in a chunk nobody is standing in.
+     */
+    private static String connectorTarget(Connector connector) {
+        return connector.targetBlock()
+            .filter(id -> !id.equals(ResourceLocation.withDefaultNamespace("air")))
+            .map(BaysPage::displayName).map(Component::getString)
+            .orElseGet(() -> connector.target().pos().getX() + " "
+                + connector.target().pos().getZ());
+    }
+
+    /** Which bays already hold a channel through this Connector, as "B1 B2". Empty for none. */
+    private static String inUse(WorkbaySnapshot snap, Connector connector) {
+        return snap.links().stream()
+            .filter(link -> !link.config().internal() && !link.config().detached()
+                && link.config().connector().equals(connector.pos()))
+            .map(link -> link.config().bay()).distinct().sorted()
+            .map(bay -> "B" + (bay + 1))
+            .collect(java.util.stream.Collectors.joining(" "));
     }
 
     /** The whole answer, for a tooltip: the block and the room it is standing in. */

@@ -52,3 +52,6 @@ night/
 
 # Screenshots from driving a client. Evidence for a session, not part of the mod.
 shots/
+
+### Claude Code scratch worktrees ###
+.claude/

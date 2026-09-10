@@ -63,10 +63,18 @@ public record WorkbaySnapshot(
      * tell that from a bill they have not paid. On the snapshot rather than read from the
      * client's own config for {@link #remoteScreens}' reason -- the knob is the server's.
      */
-    boolean charged) {
+    boolean charged,
+    /**
+     * Every Connector this network owns, whether or not it carries a channel anywhere. What the
+     * Add list is a list <em>of</em>: a Connector is one object, it is offered to every bay, and
+     * ticking it on two bays gives you two channels through the same block. A list of rows would
+     * show one Connector four times and could only ever offer to move one of them.
+     */
+    List<WorkbayRecord.Connector> connectors) {
 
     public static final WorkbaySnapshot EMPTY = new WorkbaySnapshot("", false, 1, 0, 0, 1,
-        List.of(), List.of(), WorkbayRecord.Upgrades.NONE, 1, 1, false, List.of(), false);
+        List.of(), List.of(), WorkbayRecord.Upgrades.NONE, 1, 1, false, List.of(), false,
+        List.of());
 
     public static final Codec<WorkbaySnapshot> CODEC = RecordCodecBuilder.create(i -> i.group(
         Codec.STRING.fieldOf("Code").forGetter(WorkbaySnapshot::code),
@@ -82,7 +90,9 @@ public record WorkbaySnapshot(
         Codec.INT.fieldOf("MaxDeployed").forGetter(WorkbaySnapshot::maxDeployed),
         Codec.BOOL.optionalFieldOf("RemoteScreens", false).forGetter(WorkbaySnapshot::remoteScreens),
         Room.CODEC.listOf().optionalFieldOf("Rooms", List.of()).forGetter(WorkbaySnapshot::rooms),
-        Codec.BOOL.optionalFieldOf("Charged", false).forGetter(WorkbaySnapshot::charged)
+        Codec.BOOL.optionalFieldOf("Charged", false).forGetter(WorkbaySnapshot::charged),
+        WorkbayRecord.Connector.CODEC.listOf().optionalFieldOf("Connectors", List.of())
+            .forGetter(WorkbaySnapshot::connectors)
     ).apply(i, WorkbaySnapshot::new));
 
     /**
@@ -205,6 +215,10 @@ public record WorkbaySnapshot(
          * <p>Derived on every draw rather than stored at creation. A stored default was literally
          * the word "Bay link" on every internal row, and baking the target into it instead would go
          * stale the first time somebody retargeted the link.
+         *
+         * <p>{@code config.name()} on a snapshot is <b>the Connector's</b> name, stamped onto every
+         * one of its rows by {@code WorkbayMenu#build}. The rows of one Connector therefore always
+         * read alike, because there is only one name and it is not stored on any of them.
          */
         public Optional<String> label() {
             if (!config.name().isBlank()) {

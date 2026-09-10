@@ -54,7 +54,7 @@ public class ConnectorTests {
     private static ItemStack paired(ServerLevel level, WorkbayBlockEntity workbay) {
         ItemStack stack = new ItemStack(WBBlocks.CONNECTOR.get());
         WorkbayBlock.pair(stack, workbay.record().orElseThrow(),
-            GlobalPos.of(level.dimension(), workbay.getBlockPos()), 0);
+            GlobalPos.of(level.dimension(), workbay.getBlockPos()));
         return stack;
     }
 
@@ -145,7 +145,7 @@ public class ConnectorTests {
 
     @GameTest
     @TestHolder(description = "Pairing a Connector and placing it creates a link on the Workbay.")
-    public static void placingAPairedConnectorMakesALink(final DynamicTest test) {
+    public static void placingAPairedConnectorMakesNoChannelAndOffersIt(final DynamicTest test) {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
 
         test.onGameTest(ExtendedGameTestHelper.class, helper -> {
@@ -163,27 +163,31 @@ public class ConnectorTests {
                 helper.fail("pairing a Connector left no pairing component on the item");
                 return;
             }
-            helper.assertValueEqual(workbay.buses().size(), 0, "links before the Connector is placed");
+            helper.assertValueEqual(workbay.connectors().size(), 0,
+                "Connectors the network holds before this one is placed");
 
             place(level, chestPos.above(), Direction.DOWN, stack, player);
 
-            helper.assertValueEqual(workbay.buses().size(), 1, "links after placing the Connector");
-            BusConfig link = workbay.buses().get(0);
-            if (!link.target().pos().equals(chestPos)) {
-                helper.fail("the link points at " + link.target().pos() + ", not at the chest it "
-                    + "was placed against (" + chestPos + ")");
+            helper.assertValueEqual(workbay.buses().size(), 0,
+                "channels after placing a Connector — placing one never mints a channel");
+            WorkbayRecord.Connector known = workbay
+                .connectorAt(GlobalPos.of(level.dimension(), chestPos.above()))
+                .orElseThrow(() -> new net.minecraft.gametest.framework.GameTestAssertException(
+                    "placing a paired Connector did not put it on the network, so no bay's Add "
+                        + "list can offer it and the block does nothing forever"));
+            if (!known.target().pos().equals(chestPos)) {
+                helper.fail("the Connector points at " + known.target().pos() + ", not at the chest "
+                    + "it was placed against (" + chestPos + ")");
                 return;
             }
-            helper.assertValueEqual(link.connector().pos(), chestPos.above(), "the link's Connector");
-            helper.assertValueEqual(link.resource(), BusConfig.Resource.ITEM, "the link's resource");
-            // What the link points at, remembered on the link itself. The server can only read the
-            // far block while its chunk is loaded, which for a real base is almost never -- so
-            // without this stamp the row has nothing to call the link but two coordinates and the
-            // flow map draws a box with no icon. This is the one moment the block is guaranteed
-            // to be there, so this is where it has to be taken.
-            helper.assertValueEqual(link.targetBlock().orElse(null),
+            // What it points at, remembered on the Connector. The server can only read the far
+            // block while its chunk is loaded, which for a real base is almost never -- so without
+            // this stamp the Add list has nothing to call it but two coordinates and the flow map
+            // draws a box with no icon. This is the one moment the block is guaranteed to be
+            // there, so this is where it has to be taken.
+            helper.assertValueEqual(known.targetBlock().orElse(null),
                 net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(Blocks.CHEST),
-                "the block the link remembers being placed against");
+                "the block the Connector remembers being placed against");
             helper.succeed();
         });
     }
@@ -215,23 +219,24 @@ public class ConnectorTests {
 
             int bays = workbay.record().orElseThrow().bayCapacity();
             helper.assertTrue(bays >= 2, "a base Workbay is supposed to have two bays, not " + bays);
-            int before = workbay.buses().getFirst().bay();
+            GlobalPos here = GlobalPos.of(level.dimension(), connectorPos);
+            com.neryos.workbay.menu.WorkbayMenu.addChannel(workbay, workbay.record().orElseThrow(),
+                workbay.connectorAt(here).orElseThrow().id(), 0);
             for (int attempt = 0; attempt < bays + 4; attempt++) {
                 poke(level, connectorPos, player);
             }
 
-            GlobalPos here = GlobalPos.of(level.dimension(), connectorPos);
             helper.assertTrue(
                 player.containerMenu instanceof com.neryos.workbay.menu.ConnectorMenu,
                 "right-clicking a placed Connector left the player with "
                     + player.containerMenu.getClass().getSimpleName()
                     + " open, not its rename panel");
             helper.assertValueEqual(workbay.linksAt(here).size(), 1,
-                "links one Connector holds after being right-clicked " + (bays + 4) + " times");
+                "channels one Connector holds after being right-clicked " + (bays + 4) + " times");
             helper.assertValueEqual(workbay.buses().size(), 1,
-                "links on the whole Workbay after one Connector was poked past every bay");
-            helper.assertValueEqual(workbay.buses().getFirst().bay(), before,
-                "the bay the one link sits on after every one of those right-clicks");
+                "channels on the whole Workbay after one Connector was poked past every bay");
+            helper.assertValueEqual(workbay.buses().getFirst().bay(), 0,
+                "the bay the one channel sits on after every one of those right-clicks");
             helper.succeed();
         });
     }
@@ -274,7 +279,8 @@ public class ConnectorTests {
                 java.util.UUID.randomUUID(), "tester", false,
                 new net.minecraft.world.level.ChunkPos(0, 0),
                 com.neryos.workbay.world.WorkbayRecord.Upgrades.NONE,
-                java.util.Optional.empty(), java.util.List.of(), java.util.List.of(), saved, 1);
+                java.util.Optional.empty(), java.util.List.of(), java.util.List.of(), saved, 1,
+                java.util.List.of());
 
             helper.assertValueEqual(record.buses().stream()
                 .filter(bus -> !bus.internal()).count(), 4L,
@@ -290,17 +296,16 @@ public class ConnectorTests {
     }
 
     /**
-     * <b>How a second channel is made.</b> The Add list on a bay screen offers every Connector the
-     * network holds, including the ones this bay already carries a row for; ticking one that is
-     * already here mints a fresh row on the same Connector, where {@code LINK_ASSIGN_BAY} used to
-     * reassign a link to the bay it was already on and do nothing at all.
+     * <b>How a channel is made, and how a second one on the same bay is.</b> Placing a Connector
+     * mints nothing at all; the Add list on a bay screen offers every Connector the network holds,
+     * and ticking one gives that bay a channel — again and again, as many as the player wants.
      *
-     * <p>Fresh is the point: the new row starts on ITEM, INSERT, off and unfiltered, so it is a
-     * channel of its own rather than a copy of the row it was made from.
+     * <p>Fresh is the point: each new row starts on ITEM, INSERT, off and unfiltered, so it is a
+     * channel of its own rather than a copy of the row beside it.
      */
     @GameTest
-    @TestHolder(description = "Pulling a Connector into the bay it is already on adds a second row.")
-    public static void pullingAConnectorIntoItsOwnBayAgainIsASecondRow(final DynamicTest test) {
+    @TestHolder(description = "Placing a Connector makes no channel, and Add makes one every time.")
+    public static void addingAConnectorToOneBayTwiceIsTwoChannels(final DynamicTest test) {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
 
         test.onGameTest(ExtendedGameTestHelper.class, helper -> {
@@ -314,26 +319,32 @@ public class ConnectorTests {
             WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
             place(level, connectorPos, Direction.DOWN, paired(level, workbay), player);
 
-            BusConfig first = workbay.buses().getFirst();
-            int bay = first.bay();
+            GlobalPos here = GlobalPos.of(level.dimension(), connectorPos);
+            helper.assertValueEqual(workbay.buses().size(), 0,
+                "channels after placing a Connector — nothing is ever created by itself");
+            java.util.UUID connectorId = workbay.connectorAt(here).orElseThrow(() ->
+                new net.minecraft.gametest.framework.GameTestAssertException(
+                    "placing a paired Connector did not put it on the network, so no bay can "
+                        + "offer it")).id();
+
+            int bay = 0;
             // The menu's own reach check is eight blocks, and a mock player is created wherever
             // the test structure happens to land. MenuTests#menuFor does the same.
             player.moveTo(workbayPos.getX() + 0.5, workbayPos.getY(), workbayPos.getZ() + 0.5);
             com.neryos.workbay.menu.WorkbayMenu menu = new com.neryos.workbay.menu.WorkbayMenu(
                 1, player.getInventory(), workbay,
                 com.neryos.workbay.menu.WorkbayMenu.build(workbay, player, bay));
-            menu.act(com.neryos.workbay.menu.WorkbayAction.LINK_ASSIGN_BAY, bay,
-                java.util.Optional.of(first.id()));
-            menu.act(com.neryos.workbay.menu.WorkbayAction.LINK_ASSIGN_BAY, bay,
-                java.util.Optional.of(first.id()));
+            menu.act(com.neryos.workbay.menu.WorkbayAction.ADD_CHANNEL, bay,
+                java.util.Optional.of(connectorId));
+            menu.act(com.neryos.workbay.menu.WorkbayAction.ADD_CHANNEL, bay,
+                java.util.Optional.of(connectorId));
 
-            GlobalPos here = GlobalPos.of(level.dimension(), connectorPos);
-            helper.assertValueEqual(workbay.linksAt(here).size(), 3,
-                "rows on one Connector after pulling it into its own bay twice");
+            helper.assertValueEqual(workbay.linksAt(here).size(), 2,
+                "channels on one Connector after adding it to one bay twice");
             helper.assertTrue(workbay.buses().stream().allMatch(bus -> bus.bay() == bay),
-                "every row landed on the bay it was pulled into");
+                "every row landed on the bay it was added to");
             helper.assertValueEqual(workbay.buses().stream().map(BusConfig::id).distinct().count(),
-                3L, "distinct link ids, so the rows are their own channels and not one row twice");
+                2L, "distinct link ids, so the rows are their own channels and not one row twice");
             helper.succeed();
         });
     }
@@ -357,10 +368,16 @@ public class ConnectorTests {
             level.setBlock(chestPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
             WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
             place(level, connectorPos, Direction.DOWN, paired(level, workbay), player);
-            helper.assertValueEqual(workbay.buses().size(), 1, "links after placing the Connector");
+            GlobalPos here = GlobalPos.of(level.dimension(), connectorPos);
+            com.neryos.workbay.menu.WorkbayMenu.addChannel(workbay, workbay.record().orElseThrow(),
+                workbay.connectorAt(here).orElseThrow().id(), 0);
+            helper.assertValueEqual(workbay.buses().size(), 1, "channels after adding it to bay 1");
 
             level.setBlock(connectorPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
-            helper.assertValueEqual(workbay.buses().size(), 0, "links after breaking the Connector");
+            helper.assertValueEqual(workbay.buses().size(), 0,
+                "channels after breaking the Connector");
+            helper.assertValueEqual(workbay.connectors().size(), 0,
+                "Connectors the network still offers after this one was broken");
             helper.succeed();
         });
     }
@@ -427,6 +444,88 @@ public class ConnectorTests {
                     + "minecraft:mineable/pickaxe block tag.");
                 return;
             }
+            helper.succeed();
+        });
+    }
+
+    /**
+     * <b>Rule 1 of SPEC.md §0: a Connector has one name.</b> Renaming it from the panel its
+     * right-click opens changes it everywhere that Connector appears — every channel, on every bay.
+     *
+     * <p>OPEN_ISSUES #97: the name used to be a field on a channel, so the panel wrote to whichever
+     * one it found first. With four channels, three kept the coordinates and one got the name, on a
+     * screen titled "Name this Connector". The name is a field of the Connector now and no channel
+     * has one of its own to disagree with.
+     *
+     * <p>Asserted off the snapshot the screens actually draw, not off the record, because the
+     * stamping that carries the Connector's name onto each row is the half that could be missed —
+     * and a second Connector standing beside it proves the rename reached one object, not all of
+     * them.
+     */
+    @GameTest
+    @TestHolder(description = "Renaming a Connector in the world renames every channel it carries, on every bay.")
+    public static void renamingAConnectorRenamesEveryChannelOnEveryBay(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(7, 5, 7));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos chestPos = helper.absolutePos(new BlockPos(4, 1, 4));
+            BlockPos connectorPos = chestPos.above();
+            BlockPos otherChest = helper.absolutePos(new BlockPos(2, 1, 4));
+            BlockPos otherConnector = otherChest.above();
+
+            level.setBlock(chestPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            level.setBlock(otherChest, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
+            place(level, connectorPos, Direction.DOWN, paired(level, workbay), player);
+            place(level, otherConnector, Direction.DOWN, paired(level, workbay), player);
+
+            GlobalPos here = GlobalPos.of(level.dimension(), connectorPos);
+            GlobalPos there = GlobalPos.of(level.dimension(), otherConnector);
+            java.util.UUID id = workbay.connectorAt(here).orElseThrow().id();
+
+            // Four channels through one Connector, spread over both bays of a base Workbay: this is
+            // the shape the old panel got wrong.
+            player.moveTo(workbayPos.getX() + 0.5, workbayPos.getY(), workbayPos.getZ() + 0.5);
+            com.neryos.workbay.menu.WorkbayMenu menu = new com.neryos.workbay.menu.WorkbayMenu(
+                1, player.getInventory(), workbay,
+                com.neryos.workbay.menu.WorkbayMenu.build(workbay, player, 0));
+            for (int bay : new int[] { 0, 0, 1, 1 }) {
+                menu.act(com.neryos.workbay.menu.WorkbayAction.ADD_CHANNEL, bay,
+                    java.util.Optional.of(id));
+            }
+            menu.act(com.neryos.workbay.menu.WorkbayAction.ADD_CHANNEL, 1,
+                java.util.Optional.of(workbay.connectorAt(there).orElseThrow().id()));
+            helper.assertValueEqual(workbay.linksAt(here).size(), 4,
+                "channels on the Connector being renamed");
+
+            // The player's own gesture: right-click the placed Connector, type, press Save.
+            com.neryos.workbay.menu.ConnectorMenu.open(player, connectorPos);
+            if (!(player.containerMenu instanceof com.neryos.workbay.menu.ConnectorMenu panel)) {
+                helper.fail("right-clicking a placed Connector did not open its rename panel");
+                return;
+            }
+            panel.act(com.neryos.workbay.menu.WorkbayAction.SET_CONNECTOR_NAME, "Ore feed", player);
+
+            // Off the snapshot, because that is what every screen in the mod reads.
+            com.neryos.workbay.menu.WorkbaySnapshot snap =
+                com.neryos.workbay.menu.WorkbayMenu.build(workbay, player, 0);
+            java.util.List<com.neryos.workbay.menu.WorkbaySnapshot.Link> renamed = snap.links()
+                .stream().filter(link -> link.config().connector().equals(here)).toList();
+            helper.assertValueEqual(renamed.size(), 4, "rows of the renamed Connector on the screen");
+            for (com.neryos.workbay.menu.WorkbaySnapshot.Link link : renamed) {
+                helper.assertValueEqual(link.label().orElse(""), "Ore feed",
+                    "the name on the bay " + (link.config().bay() + 1) + " row of the renamed "
+                        + "Connector");
+            }
+            helper.assertTrue(snap.links().stream()
+                .filter(link -> link.config().connector().equals(there))
+                .allMatch(link -> link.label().isEmpty()),
+                "the Connector next to it kept its own name, so the rename named one object");
+            helper.assertValueEqual(workbay.connectorAt(here).orElseThrow().name(), "Ore feed",
+                "the name the network stored for the Connector");
             helper.succeed();
         });
     }

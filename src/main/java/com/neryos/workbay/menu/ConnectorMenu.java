@@ -1,9 +1,9 @@
 package com.neryos.workbay.menu;
 
-import com.neryos.workbay.bus.BusConfig;
 import com.neryos.workbay.content.connector.ConnectorBlockEntity;
 import com.neryos.workbay.content.workbay.WorkbayBlockEntity;
 import com.neryos.workbay.init.WBMenus;
+import com.neryos.workbay.world.WorkbayRecord;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -25,8 +25,9 @@ import java.util.Optional;
  * <p><b>A rename panel and nothing else.</b> The gesture used to mint a link -- the next resource
  * this Connector did not carry, then the next bay of the network -- which made one block appear
  * four times in a list that is supposed to have one row per Connector. A Connector is one object
- * with one name and one home bay, and the only thing the world gesture is for is the name; every
- * other question about it is answered on the bay screen, where the bay is.
+ * with one name, used from as many bays as the player likes, and the only thing the world gesture
+ * is for is the name; which bay talks through it is a question about a bay, answered on the bay
+ * screen where the bay is.
  *
  * <p><b>Its own menu type</b> rather than the Workbay's, for {@link RoomDoorMenu}'s reason:
  * {@link WorkbayMenu} is built from a Workbay block entity, and a player standing at a Connector
@@ -40,18 +41,20 @@ public class ConnectorMenu extends AbstractContainerMenu {
     /**
      * {@code name} is what the player gave it, empty for one that was never named; {@code fallback}
      * is what it is called then -- <b>its own coordinates</b>, resolved server-side because that is
-     * where the block is. {@code bay} is the home bay, or -1 for a Connector on no bay at all.
+     * where the block is. {@code channels} is how many channels this Connector currently carries,
+     * across every bay: <b>never a bay number</b>, because one Connector can be in use on all of
+     * them at once and naming one of them would be picking a favourite. OPEN_ISSUES #97.
      */
-    public record View(BlockPos pos, String name, String fallback, int bay, boolean linked) {
+    public record View(BlockPos pos, String name, String fallback, int channels, boolean linked) {
 
-        public static final View EMPTY = new View(BlockPos.ZERO, "", "", -1, false);
+        public static final View EMPTY = new View(BlockPos.ZERO, "", "", 0, false);
 
         public static final StreamCodec<RegistryFriendlyByteBuf, View> STREAM_CODEC =
             StreamCodec.composite(
                 BlockPos.STREAM_CODEC, View::pos,
                 ByteBufCodecs.stringUtf8(64), View::name,
                 ByteBufCodecs.stringUtf8(64), View::fallback,
-                ByteBufCodecs.VAR_INT, View::bay,
+                ByteBufCodecs.VAR_INT, View::channels,
                 ByteBufCodecs.BOOL, View::linked,
                 View::new);
     }
@@ -89,36 +92,43 @@ public class ConnectorMenu extends AbstractContainerMenu {
     }
 
     /**
-     * The one thing this screen does. Empty clears the name and the row goes back to the
-     * coordinates, exactly the way an empty bay name goes back to the machine's own.
+     * The one thing this screen does. Empty clears the name and every row of this Connector goes
+     * back to naming its target, exactly the way an empty bay name goes back to the machine's own.
+     *
+     * <p><b>It writes to the Connector.</b> The name used to be a field on a link, so this panel
+     * wrote to whichever row it happened to find first and the other three kept the coordinates --
+     * a panel titled "Name this Connector" renaming one channel of it. OPEN_ISSUES #97.
      */
     public void act(WorkbayAction action, String text, ServerPlayer player) {
         if (action != WorkbayAction.SET_CONNECTOR_NAME) {
             return;
         }
-        link(player.serverLevel(), view.pos()).ifPresent(found ->
-            found.workbay().addBus(found.link().withName(text.strip())));
+        ServerLevel level = player.serverLevel();
+        found(level, view.pos()).ifPresent(found -> found.workbay()
+            .renameConnector(GlobalPos.of(level.dimension(), view.pos()), text.strip()));
         player.closeContainer();
     }
 
-    /** A Connector's single link, and the Workbay holding it. #77: there is never more than one. */
-    private record Found(WorkbayBlockEntity workbay, BusConfig link) {}
+    /** A Connector as its network knows it, and the Workbay that knows it. */
+    private record Found(WorkbayBlockEntity workbay, WorkbayRecord.Connector connector) {}
 
-    private static Optional<Found> link(ServerLevel level, BlockPos pos) {
+    private static Optional<Found> found(ServerLevel level, BlockPos pos) {
         if (!(level.getBlockEntity(pos) instanceof ConnectorBlockEntity connector)) {
             return Optional.empty();
         }
         GlobalPos here = GlobalPos.of(level.dimension(), pos);
-        return connector.workbay().flatMap(workbay -> workbay.linksAt(here).stream().findFirst()
-            .map(bus -> new Found(workbay, bus)));
+        return connector.workbay().flatMap(workbay -> workbay.connectorAt(here)
+            .map(known -> new Found(workbay, known)));
     }
 
     public static void open(ServerPlayer player, BlockPos pos) {
-        Optional<Found> found = link(player.serverLevel(), pos);
+        ServerLevel level = player.serverLevel();
+        Optional<Found> found = found(level, pos);
         View view = new View(pos,
-            found.map(f -> f.link().name()).orElse(""),
+            found.map(f -> f.connector().name()).orElse(""),
             pos.getX() + " " + pos.getY() + " " + pos.getZ(),
-            found.map(f -> f.link().bay()).orElse(-1),
+            found.map(f -> f.workbay()
+                .linksAt(GlobalPos.of(level.dimension(), pos)).size()).orElse(0),
             found.isPresent());
         player.openMenu(new SimpleMenuProvider(
             (id, inventory, who) -> new ConnectorMenu(id, view),

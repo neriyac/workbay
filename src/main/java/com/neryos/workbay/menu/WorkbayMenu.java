@@ -221,11 +221,11 @@ public class WorkbayMenu extends AbstractContainerMenu {
                 BusConfig.SPEEDS[(int) Math.clamp(arg, 0, BusConfig.SPEEDS.length - 1)]));
             case SET_BAY_NAME -> editBay(serverPlayer, record,
                 bay -> bay.withName(text.orElse("").strip()));
-            // Capped where every other player-typed name in this mod is capped. The packet already
-            // limits the string to 64 bytes on the wire; this is the second half of that, because
-            // a name is drawn on a fifty-six pixel column and stored in the registry forever.
-            case SET_LINK_NAME -> editLink(linkId,
-                link -> link.withName(text.orElse("").strip()));
+            // <b>Names the Connector, not the row.</b> Capped where every other player-typed name
+            // in this mod is capped: the packet already limits the string to 64 bytes on the wire,
+            // and a name is drawn on a fifty-six pixel column and kept in the registry forever.
+            // An internal row has no Connector, so that one names itself. OPEN_ISSUES #97.
+            case SET_LINK_NAME -> renameLink(linkId, text.orElse("").strip());
             case CYCLE_REDSTONE -> editBay(serverPlayer, record,
                 bay -> bay.withRedstone(bay.redstone().step(back)));
             case ENTER_ROOM -> {
@@ -279,25 +279,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
                 }
             }
             case CREATE_INTERNAL_LINK -> createInternalLink(serverPlayer, record, (int) arg);
-            case LINK_ASSIGN_BAY -> {
-                int bay = (int) arg;
-                if (bay >= 0 && bay < record.bayCapacity()) {
-                    editLink(linkId, link -> link.bay() == bay && !link.internal()
-                        ? link : link.withBay(bay));
-                    // <b>Pulling a Connector into the bay it is already on is a second row.</b>
-                    // A Connector may be pulled in as many times as the player likes and each row
-                    // is its own channel -- own resource, direction, filter, rate and name -- so
-                    // the same Connector on the same machine carries items in on one row and
-                    // energy out on another. That is the promise (SPEC.md §0); a cap on it was
-                    // the thing the Multichannel upgrade used to sell.
-                    linkId.flatMap(workbay::bus)
-                        .filter(link -> link.bay() == bay && !link.internal())
-                        .ifPresent(link -> workbay.addBus(BusConfig.create(UUID.randomUUID(), bay,
-                            BusConfig.Resource.ITEM, BusConfig.Mode.INSERT,
-                            link.connector(), link.target())
-                            .withTargetBlock(link.targetBlock())));
-                }
-            }
+            case ADD_CHANNEL -> addChannel(record, linkId, (int) arg);
             case LINK_CYCLE_TARGET_BAY -> editLink(linkId, link -> link.internal()
                 ? link.withTarget(GlobalPos.of(WorkbayDimensions.BACKSHOP,
                     BayGeometry.machinePos(record.bayColumn(),
@@ -413,6 +395,53 @@ public class WorkbayMenu extends AbstractContainerMenu {
 
     private void editLink(Optional<UUID> linkId, java.util.function.UnaryOperator<BusConfig> edit) {
         linkId.flatMap(workbay::bus).ifPresent(link -> workbay.addBus(edit.apply(link)));
+    }
+
+    /**
+     * A name belongs to the <b>Connector</b>, which is one object however many bays it carries a
+     * channel on: renaming from any row, from the Add list or from the block's own panel in the
+     * world lands on all of them at once. An internal bay-to-bay row has no Connector to name --
+     * every internal row shares the Workbay as its anchor -- so that one keeps a name of its own.
+     */
+    private void renameLink(Optional<UUID> linkId, String name) {
+        linkId.flatMap(workbay::bus).ifPresent(link -> {
+            if (link.internal()) {
+                workbay.addBus(link.withName(name));
+            } else {
+                workbay.renameConnector(link.connector(), name);
+            }
+        });
+    }
+
+    /**
+     * Gives this bay a channel through a Connector. <b>Adding never takes anything away.</b> The
+     * same Connector may carry a channel on every bay of the Workbay at once -- energy into the
+     * bay holding the power cube, cobble out of the bay holding the generator, through one plate
+     * on one machine -- so this only ever mints, and no other bay's rows are touched.
+     *
+     * <p>The one thing it does not mint is a second blank beside a channel the player took off
+     * this Workbay with the X: that one kept its resource, direction, filter and rate, and giving
+     * it back is what the player meant. OPEN_ISSUES #70.
+     */
+    private void addChannel(WorkbayRecord record, Optional<UUID> connectorId, int bay) {
+        connectorId.ifPresent(id -> addChannel(workbay, record, id, bay));
+    }
+
+    /** Static so a gametest presses the button rather than re-writing what the button does. */
+    public static void addChannel(WorkbayBlockEntity workbay, WorkbayRecord record,
+        UUID connectorId, int bay) {
+        if (bay < 0 || bay >= record.bayCapacity()) {
+            return;
+        }
+        record.connectors().stream().filter(connector -> connector.id().equals(connectorId))
+            .findFirst()
+            .ifPresent(connector -> workbay.addBus(workbay.linksAt(connector.pos()).stream()
+                .filter(BusConfig::detached).findFirst()
+                .map(waiting -> waiting.withBay(bay))
+                .orElseGet(() -> BusConfig.create(UUID.randomUUID(), bay,
+                    BusConfig.Resource.ITEM, BusConfig.Mode.INSERT,
+                    connector.pos(), connector.target())
+                    .withTargetBlock(connector.targetBlock()))));
     }
 
     /**
@@ -637,9 +666,9 @@ public class WorkbayMenu extends AbstractContainerMenu {
             return;
         }
         WorkbayBlock.pair(held, record,
-            GlobalPos.of(serverPlayer.level().dimension(), workbay.getBlockPos()), selectedBay);
+            GlobalPos.of(serverPlayer.level().dimension(), workbay.getBlockPos()));
         WorkbaySounds.confirm(serverPlayer,
-            com.neryos.workbay.WorkbayLang.message("connector_paired", selectedBay + 1));
+            com.neryos.workbay.WorkbayLang.message("connector_paired", record.code()));
     }
 
     /**
@@ -1065,6 +1094,14 @@ public class WorkbayMenu extends AbstractContainerMenu {
             bays.add(readBay(record, index, backshop, workbay));
         }
 
+        // A record written before Connectors were objects knows only the rows they carry, so the
+        // Connector each row is anchored by is minted here, once, keeping the name that row had.
+        // Nothing else in the mod can mint one -- placing the block is the only other way in.
+        List.copyOf(workbay.buses()).stream()
+            .filter(link -> !link.internal() && workbay.connectorAt(link.connector()).isEmpty())
+            .forEach(link -> workbay.addConnector(new WorkbayRecord.Connector(UUID.randomUUID(),
+                link.connector(), link.name(), link.target(), link.targetBlock())));
+
         List<WorkbaySnapshot.Link> links = new ArrayList<>();
         List<BusConfig> backfill = new ArrayList<>();
         for (BusConfig link : List.copyOf(workbay.buses())) {
@@ -1072,7 +1109,11 @@ public class WorkbayMenu extends AbstractContainerMenu {
             if (link.targetBlock().isEmpty() && isRealBlock(block)) {
                 backfill.add(link.withTargetBlock(block));
             }
-            links.add(new WorkbaySnapshot.Link(link, workbay.busStatus(link.id()), block,
+            // Stamped, not stored: the row travels carrying its Connector's name so that every
+            // reader on the client -- the row, the tooltip, the flow map, the Add list -- reads
+            // one name for one block without any of them having to know where it lives.
+            links.add(new WorkbaySnapshot.Link(link.withName(workbay.nameOf(link)),
+                workbay.busStatus(link.id()), block,
                 link.internal() ? Optional.of(currentTargetBay(record, link)) : Optional.empty(),
                 roomOf(player, record, link)));
         }
@@ -1086,7 +1127,8 @@ public class WorkbayMenu extends AbstractContainerMenu {
             com.neryos.workbay.config.WorkbayConfig.SERVER.maxDeployedWorkbaysPerNetwork.get(),
             com.neryos.workbay.remote.RemoteConfig.remoteScreensEnabled(),
             readRooms(player, record),
-            com.neryos.workbay.config.WorkbayConfig.SERVER.chargesForRunning());
+            com.neryos.workbay.config.WorkbayConfig.SERVER.chargesForRunning(),
+            workbay.connectors());
     }
 
     /**

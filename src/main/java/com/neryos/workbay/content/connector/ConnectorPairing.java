@@ -11,7 +11,11 @@ import net.minecraft.network.codec.StreamCodec;
 import java.util.UUID;
 
 /**
- * Which Workbay a Connector belongs to, and which bay its link lands on. SPEC.md §0 and §9.
+ * Which Workbay a Connector belongs to. SPEC.md §0 and §9.
+ *
+ * <p><b>No bay.</b> It carried one, and placing the Connector minted a channel on it — a row on a
+ * bay the player was not thinking about when they pressed Pair. A Connector belongs to a network
+ * and may carry a channel on every bay of it at once, so there is no one bay to name.
  *
  * <p>Carried on the item so a Connector is paired <em>before</em> it is placed — the block already
  * knows its Workbay when {@code setPlacedBy} runs, and there is no second step where a freshly
@@ -23,19 +27,14 @@ import java.util.UUID;
  *
  * <p>{@code code} is for the tooltip. A tooltip renders on the client, which has no registry to ask.
  */
-public record ConnectorPairing(UUID workbayId, GlobalPos workbayPos, String code, int bay) {
+public record ConnectorPairing(UUID workbayId, GlobalPos workbayPos, String code) {
 
     public static final Codec<ConnectorPairing> CODEC = RecordCodecBuilder.create(i -> i.group(
         UUIDUtil.CODEC.fieldOf("WorkbayId").forGetter(ConnectorPairing::workbayId),
         GlobalPos.CODEC.fieldOf("WorkbayPos").forGetter(ConnectorPairing::workbayPos),
-        Codec.STRING.fieldOf("Code").forGetter(ConnectorPairing::code),
-        Codec.INT.optionalFieldOf("Bay", 0).forGetter(ConnectorPairing::bay)
+        Codec.STRING.fieldOf("Code").forGetter(ConnectorPairing::code)
     ).apply(i, ConnectorPairing::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, ConnectorPairing> STREAM_CODEC =
         ByteBufCodecs.fromCodecWithRegistries(CODEC);
-
-    public ConnectorPairing withBay(int newBay) {
-        return new ConnectorPairing(workbayId, workbayPos, code, newBay);
-    }
 }

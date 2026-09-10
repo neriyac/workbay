@@ -220,13 +220,16 @@ public class MenuTests {
             // The link, made the only way a link is ever made.
             ItemStack connector = new ItemStack(WBBlocks.CONNECTOR.get());
             WorkbayBlock.pair(connector, workbay.record().orElseThrow(),
-                GlobalPos.of(level.dimension(), workbayPos), 0);
+                GlobalPos.of(level.dimension(), workbayPos));
             BlockPos connectorPos = chestPos.above();
             BlockState placed = WBBlocks.CONNECTOR.get().defaultBlockState()
                 .setValue(ConnectorBlock.FACING, Direction.DOWN);
             level.setBlock(connectorPos, placed, Block.UPDATE_ALL);
             WBBlocks.CONNECTOR.get().setPlacedBy(level, connectorPos, placed, player, connector);
-            helper.assertValueEqual(workbay.buses().size(), 1, "links after placing the Connector");
+            helper.assertValueEqual(workbay.buses().size(), 0,
+                "channels after placing a Connector — placing one mints none");
+            addChannel(workbay, GlobalPos.of(level.dimension(), connectorPos), 0);
+            helper.assertValueEqual(workbay.buses().size(), 1, "channels after adding it to bay 1");
 
             // Older than the stamp: this is what every link saved before it looks like on disk.
             BusConfig link = workbay.buses().get(0);
@@ -249,6 +252,16 @@ public class MenuTests {
             level.setBlock(workbayPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
             helper.succeed();
         });
+    }
+
+    /**
+     * The player's third action: open a bay, press Add, tick the Connector. Placing one mints no
+     * channel (SPEC.md §0), so a fixture that wants one asks the way the button asks.
+     */
+    private static void addChannel(WorkbayBlockEntity workbay, GlobalPos connector, int bay) {
+        WorkbayMenu.addChannel(workbay, workbay.record().orElseThrow(),
+            workbay.connectorAt(connector).orElseThrow(() -> new GameTestAssertException(
+                "placing a paired Connector did not register it on the network")).id(), bay);
     }
 
     private static WorkbayBlockEntity placeWorkbay(ExtendedGameTestHelper helper, BlockPos pos,
@@ -303,11 +316,13 @@ public class MenuTests {
             GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
             BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
             WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
+            GlobalPos connectorPos = GlobalPos.of(level.dimension(), workbayPos.above());
+            workbay.addConnector(new com.neryos.workbay.world.WorkbayRecord.Connector(
+                java.util.UUID.randomUUID(), connectorPos, "Furnace feed",
+                GlobalPos.of(level.dimension(), workbayPos.above(2)), Optional.empty()));
             BusConfig link = BusConfig.create(java.util.UUID.randomUUID(), 0,
-                BusConfig.Resource.ITEM, BusConfig.Mode.INSERT,
-                GlobalPos.of(level.dimension(), workbayPos.above()),
+                BusConfig.Resource.ITEM, BusConfig.Mode.INSERT, connectorPos,
                 GlobalPos.of(level.dimension(), workbayPos.above(2)))
-                .withName("Furnace feed")
                 .withRate(24);
             workbay.addBus(link);
             WorkbayMenu menu = menuFor(workbay, player);
@@ -318,18 +333,20 @@ public class MenuTests {
                 .filter(bus -> bus.id().equals(link.id()))
                 .findFirst()
                 .orElseThrow(() -> new GameTestAssertException(
-                    "the X deleted the link outright, so the Connector it belongs to is now in no "
-                        + "list on the screen and cannot be attached to any bay again"));
+                    "the X deleted the channel outright, so its filter and rate are gone"));
             helper.assertTrue(after.detached(), "the link is still on a bay after the X");
-            helper.assertValueEqual(after.name(), "Furnace feed", "the name it was given");
             helper.assertValueEqual(after.rate(), 24, "the rate it was set to");
 
-            // And back on, which is the whole point: this is what the Add list sends.
-            menu.act(WorkbayAction.LINK_ASSIGN_BAY, 1, Optional.of(link.id()));
+            // And back on, which is the whole point: this is what the Add list sends. Adding the
+            // Connector to a bay gives back the channel that is waiting rather than a blank one.
+            menu.act(WorkbayAction.ADD_CHANNEL, 1,
+                Optional.of(workbay.connectorAt(connectorPos).orElseThrow().id()));
+            helper.assertValueEqual(workbay.buses().size(), 1,
+                "channels after putting the Connector back — the waiting one, not a second");
             BusConfig reattached = workbay.buses().stream()
                 .filter(bus -> bus.id().equals(link.id())).findFirst().orElseThrow();
             helper.assertValueEqual(reattached.bay(), 1, "the bay it was put back on");
-            helper.assertFalse(reattached.detached(), "still detached after being assigned a bay");
+            helper.assertValueEqual(reattached.rate(), 24, "the rate it kept across the round trip");
             helper.succeed();
         });
     }
@@ -456,7 +473,8 @@ public class MenuTests {
                     + "still unreachable with anything in it");
                 return;
             }
-            helper.assertValueEqual(pairing.bay(), 2, "the bay the Pair button aimed at");
+            helper.assertValueEqual(pairing.code(), workbay.record().orElseThrow().code(),
+                "the network code the Pair button stamped on it");
             helper.assertValueEqual(pairing.workbayId(), workbay.record().orElseThrow().id(),
                 "the network the Connector was paired to");
             helper.succeed();
@@ -579,11 +597,12 @@ public class MenuTests {
             workbay.forgetBay(0);
 
             ItemStack connector = new ItemStack(WBBlocks.CONNECTOR.get());
-            WorkbayBlock.pair(connector, record, GlobalPos.of(level.dimension(), workbayPos), 0);
+            WorkbayBlock.pair(connector, record, GlobalPos.of(level.dimension(), workbayPos));
             BlockState state = WBBlocks.CONNECTOR.get().defaultBlockState()
                 .setValue(ConnectorBlock.FACING, Direction.DOWN);
             level.setBlock(chestPos.above(), state, Block.UPDATE_ALL);
             WBBlocks.CONNECTOR.get().setPlacedBy(level, chestPos.above(), state, player, connector);
+            addChannel(workbay, GlobalPos.of(level.dimension(), chestPos.above()), 0);
             BusConfig link = workbay.buses().get(0);
             // A placed Connector's link starts disabled (SPEC.md §7); this test is about the face
             // config, so it turns the link on itself rather than testing that too.
@@ -777,11 +796,12 @@ public class MenuTests {
             WorkbayBlockEntity workbay = placeWorkbay(helper, pos, player);
             ItemStack connector = new ItemStack(WBBlocks.CONNECTOR.get());
             WorkbayBlock.pair(connector, workbay.record().orElseThrow(),
-                GlobalPos.of(level.dimension(), pos), 0);
+                GlobalPos.of(level.dimension(), pos));
             BlockState state = WBBlocks.CONNECTOR.get().defaultBlockState()
                 .setValue(ConnectorBlock.FACING, Direction.DOWN);
             level.setBlock(targetPos.above(), state, Block.UPDATE_ALL);
             WBBlocks.CONNECTOR.get().setPlacedBy(level, targetPos.above(), state, player, connector);
+            addChannel(workbay, GlobalPos.of(level.dimension(), targetPos.above()), 0);
 
             BusConfig link = workbay.buses().get(0);
             WorkbayMenu menu = menuFor(workbay, player);
@@ -847,11 +867,12 @@ public class MenuTests {
                 level.setBlock(targetPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
                 ItemStack connector = new ItemStack(WBBlocks.CONNECTOR.get());
                 WorkbayBlock.pair(connector, workbay.record().orElseThrow(),
-                    GlobalPos.of(level.dimension(), pos), 0);
+                    GlobalPos.of(level.dimension(), pos));
                 BlockState state = WBBlocks.CONNECTOR.get().defaultBlockState()
                     .setValue(ConnectorBlock.FACING, Direction.DOWN);
                 level.setBlock(targetPos.above(), state, Block.UPDATE_ALL);
                 WBBlocks.CONNECTOR.get().setPlacedBy(level, targetPos.above(), state, player, connector);
+                addChannel(workbay, GlobalPos.of(level.dimension(), targetPos.above()), 0);
                 ids.add(workbay.buses().get(workbay.buses().size() - 1).id());
             }
 
