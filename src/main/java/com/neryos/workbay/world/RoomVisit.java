@@ -337,6 +337,33 @@ public final class RoomVisit {
     }
 
     /**
+     * A bucket is not a block. The client PASSes {@code useItemOn} on one and sends
+     * {@code ServerboundUseItem}, so no {@code EntityPlaceEvent} fires and {@link #onPlace} never
+     * sees the lava. In a room it needs {@link RoomGuest#BUILD} like any placement; outside every
+     * room -- a bay, whose standing spot the next visitor lands on -- nobody pours anything.
+     * Night 2026-09-11, 1A #6.
+     */
+    @SubscribeEvent
+    public static void onRightClickItem(
+        net.neoforged.neoforge.event.entity.player.PlayerInteractEvent.RightClickItem event) {
+        net.minecraft.world.item.Item item = event.getItemStack().getItem();
+        if (!(item instanceof net.minecraft.world.item.BucketItem
+            || item instanceof net.minecraft.world.item.SolidBucketItem
+            || item instanceof net.minecraft.world.item.DispensibleContainerItem)) {
+            return;
+        }
+        if (!(event.getEntity() instanceof ServerPlayer player)
+            || !player.level().dimension().equals(WorkbayDimensions.BACKSHOP)) {
+            return;
+        }
+        net.minecraft.core.BlockPos where = player.blockPosition();
+        if (refused(player, where, true)
+            || RoomRegistry.get(player.server).roomAt(where).isEmpty()) {
+            event.setCanceled(true);
+        }
+    }
+
+    /**
      * And the same for whatever is <em>standing</em> in the room, not only what is built into it.
      *
      * <p>Blocks were the obvious half and the only half at first, which left a look-only guest

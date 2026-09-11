@@ -13,6 +13,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
@@ -760,6 +761,46 @@ public class RoomTests {
             site.player().gameMode.destroyBlock(chest);
             helper.assertFalse(site.backshop().getBlockState(chest).is(Blocks.CHEST),
                 "the owner cannot break a block in their own room, so the guard refuses everybody");
+            helper.succeed();
+        });
+    }
+
+    /**
+     * Night 2026-09-11, 1A #6. A bucket is not a block: the client PASSes {@code useItemOn} and
+     * sends {@code ServerboundUseItem}, which fires {@code RightClickItem}, not
+     * {@code EntityPlaceEvent} -- so a look-only guest could pour lava in a room, and anybody could
+     * pour it on a bay's standing spot. Posted straight on the bus, which is what the packet does.
+     */
+    @GameTest
+    @TestHolder(description = "A look-only guest's bucket is refused in the room; the owner's is not.")
+    public static void aLookOnlyGuestCannotPourABucketInTheRoom(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            Site site = site(helper, 1);
+            GameTestPlayer guest = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            RoomRegistry registry = RoomRegistry.get(helper.getLevel().getServer());
+            helper.assertTrue(RoomVisit.enter(site.player(), site.record(), 0), "entering was refused");
+            RoomRecord room = room(helper, site);
+            registry.putRoom(room.withGuest(guest.getUUID(), guest.getGameProfile().getName(),
+                com.neryos.workbay.world.RoomGuest.LOOK));
+            RoomVisit.enter(guest, registry.byId(site.record().id()).orElseThrow(), 0);
+            helper.assertTrue(guest.level().dimension().equals(WorkbayDimensions.BACKSHOP),
+                "the guest is not in the room, so refusing their bucket proves nothing");
+
+            guest.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.LAVA_BUCKET));
+            var guestPour = new net.neoforged.neoforge.event.entity.player.PlayerInteractEvent
+                .RightClickItem(guest, InteractionHand.MAIN_HAND);
+            net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(guestPour);
+            helper.assertTrue(guestPour.isCanceled(),
+                "a look-only guest's lava bucket was not refused in somebody else's room");
+
+            site.player().setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.LAVA_BUCKET));
+            var ownerPour = new net.neoforged.neoforge.event.entity.player.PlayerInteractEvent
+                .RightClickItem(site.player(), InteractionHand.MAIN_HAND);
+            net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(ownerPour);
+            helper.assertFalse(ownerPour.isCanceled(),
+                "the owner's bucket is refused in their own room, so the guard refuses everybody");
             helper.succeed();
         });
     }
