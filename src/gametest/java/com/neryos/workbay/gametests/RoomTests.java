@@ -453,9 +453,10 @@ public class RoomTests {
             // 2 -> 3. Bay to bay, no Connector anywhere.
             player.moveTo(site.workbayPos().getX() + 0.5, site.workbayPos().getY(),
                 site.workbayPos().getZ() + 0.5);
+            // The owner's menu: a fresh Workbay is locked, and this test's own player is a stranger.
             com.neryos.workbay.menu.WorkbayMenu menu = new com.neryos.workbay.menu.WorkbayMenu(1,
-                player.getInventory(), workbay,
-                com.neryos.workbay.menu.WorkbayMenu.build(workbay, player, 0));
+                site.player().getInventory(), workbay,
+                com.neryos.workbay.menu.WorkbayMenu.build(workbay, site.player(), 0));
             menu.act(com.neryos.workbay.menu.WorkbayAction.SELECT_BAY, 0, java.util.Optional.empty());
             menu.act(com.neryos.workbay.menu.WorkbayAction.CREATE_INTERNAL_LINK, 1,
                 java.util.Optional.empty());

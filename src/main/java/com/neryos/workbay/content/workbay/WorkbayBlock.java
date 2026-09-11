@@ -215,6 +215,12 @@ public class WorkbayBlock extends BaseEntityBlock {
         if (record == null) {
             return net.minecraft.world.ItemInteractionResult.FAIL;
         }
+        // The menu's lock, on the world gesture too: a stranger must not pair a Connector into
+        // somebody else's Add list, nor stamp a blank Workbay with their network for later.
+        if (record.locked() && !record.owner().equals(player.getUUID())) {
+            WorkbaySounds.refuse(player, WorkbayLang.message("locked"));
+            return net.minecraft.world.ItemInteractionResult.FAIL;
+        }
         if (blank) {
             return stamp(stack, record, player);
         }

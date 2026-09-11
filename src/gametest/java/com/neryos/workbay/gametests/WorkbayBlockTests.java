@@ -411,4 +411,40 @@ public class WorkbayBlockTests {
             helper.succeed();
         });
     }
+
+    /**
+     * Night audit 1A finding 8. Right-clicking a Workbay with a blank Workbay stamped the item with
+     * that network for whoever held it -- a pre-staged capture of a sleeping network. The stamp now
+     * honours the lock the way the menu does.
+     */
+    @GameTest
+    @TestHolder(description = "A stranger cannot stamp a blank Workbay on a locked one; the owner can.")
+    public static void aStrangerCannotStampABlankWorkbayOnALockedOne(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer owner = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos pos = helper.absolutePos(new BlockPos(1, 1, 1));
+            place(helper, level, pos, owner, new ItemStack(WBBlocks.WORKBAY.get()));
+            var hit = new net.minecraft.world.phys.BlockHitResult(
+                net.minecraft.world.phys.Vec3.atCenterOf(pos), Direction.UP, pos, false);
+
+            GameTestPlayer stranger = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            ItemStack theirs = new ItemStack(WBBlocks.WORKBAY.get());
+            stranger.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, theirs);
+            level.getBlockState(pos).useItemOn(theirs, level, stranger,
+                net.minecraft.world.InteractionHand.MAIN_HAND, hit);
+            helper.assertTrue(theirs.get(WBDataComponents.BINDING.get()) == null,
+                "a stranger stamped a blank Workbay with somebody else's locked network");
+
+            ItemStack own = new ItemStack(WBBlocks.WORKBAY.get());
+            owner.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, own);
+            level.getBlockState(pos).useItemOn(own, level, owner,
+                net.minecraft.world.InteractionHand.MAIN_HAND, hit);
+            helper.assertTrue(own.get(WBDataComponents.BINDING.get()) != null,
+                "the owner could not stamp a blank Workbay on their own locked one");
+            helper.succeed();
+        });
+    }
 }

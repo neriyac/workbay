@@ -205,7 +205,9 @@ public class RoomRegistry extends SavedData {
         UUID id = UUID.randomUUID();
         ChunkPos column = allocateBayColumn();
         WorkbayRecord record = new WorkbayRecord(id, mintCode(random),
-            defaultName(ownedBy(owner).size() + 1), owner, ownerName, false,
+            // Locked at mint: an unlocked Workbay lets any passer-by eject the owner's machines
+            // into their own hand, so sharing is what the owner opts into with the Lock button.
+            defaultName(ownedBy(owner).size() + 1), owner, ownerName, true,
             column, WorkbayRecord.Upgrades.NONE, Optional.empty(), List.of(), List.of(), List.of(),
             0, List.of());
         byId.put(id, record);

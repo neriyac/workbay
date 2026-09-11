@@ -45,7 +45,7 @@ public record WorkbayBinding(
         Codec.STRING.fieldOf("Code").forGetter(WorkbayBinding::code),
         UUIDUtil.CODEC.fieldOf("Owner").forGetter(WorkbayBinding::owner),
         Codec.STRING.fieldOf("OwnerName").forGetter(WorkbayBinding::ownerName),
-        Codec.BOOL.optionalFieldOf("Locked", false).forGetter(WorkbayBinding::locked),
+        Codec.BOOL.optionalFieldOf("Locked", true).forGetter(WorkbayBinding::locked),
         WorkbayRecord.Upgrades.CODEC.optionalFieldOf("Upgrades", WorkbayRecord.Upgrades.NONE)
             .forGetter(WorkbayBinding::upgrades),
         Codec.INT.optionalFieldOf("Hosted", 0).forGetter(WorkbayBinding::hosted),

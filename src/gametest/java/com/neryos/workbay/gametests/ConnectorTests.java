@@ -529,4 +529,44 @@ public class ConnectorTests {
             helper.succeed();
         });
     }
+
+    /**
+     * Night audit 1A finding 8. Right-clicking a Workbay with a Connector paired it to that network
+     * whoever held it, so a stranger's anvil-named Connector landed in the owner's Add list. The
+     * world gesture now honours the lock the way the menu does.
+     */
+    @GameTest
+    @TestHolder(description = "A stranger right-clicking a locked Workbay with a Connector pairs nothing; the owner pairs.")
+    public static void aStrangerCannotPairAConnectorOnALockedWorkbay(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer owner = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(1, 1, 1));
+            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, owner);
+            if (!workbay.record().orElseThrow().locked()) {
+                helper.fail("a fresh Workbay is not locked");
+                return;
+            }
+            var hit = new net.minecraft.world.phys.BlockHitResult(
+                net.minecraft.world.phys.Vec3.atCenterOf(workbayPos), Direction.UP, workbayPos, false);
+
+            GameTestPlayer stranger = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            ItemStack theirs = new ItemStack(WBBlocks.CONNECTOR.get());
+            stranger.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, theirs);
+            level.getBlockState(workbayPos).useItemOn(theirs, level, stranger,
+                net.minecraft.world.InteractionHand.MAIN_HAND, hit);
+            helper.assertTrue(theirs.get(WBDataComponents.PAIRING.get()) == null,
+                "a stranger paired a Connector on somebody else's locked Workbay");
+
+            ItemStack own = new ItemStack(WBBlocks.CONNECTOR.get());
+            owner.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, own);
+            level.getBlockState(workbayPos).useItemOn(own, level, owner,
+                net.minecraft.world.InteractionHand.MAIN_HAND, hit);
+            helper.assertTrue(own.get(WBDataComponents.PAIRING.get()) != null,
+                "the owner could not pair a Connector on their own locked Workbay");
+            helper.succeed();
+        });
+    }
 }

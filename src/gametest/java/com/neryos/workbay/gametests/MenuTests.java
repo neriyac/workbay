@@ -811,9 +811,9 @@ public class MenuTests {
             GameTestPlayer owner = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
             BlockPos pos = helper.absolutePos(new BlockPos(1, 1, 1));
             WorkbayBlockEntity workbay = placeWorkbay(helper, pos, owner);
-            menuFor(workbay, owner).act(WorkbayAction.TOGGLE_LOCK, 0, Optional.empty());
+            // Locked at mint (night audit 1A finding 1); the toggle is the owner's way out of it.
             if (!workbay.record().orElseThrow().locked()) {
-                helper.fail("the owner could not lock their own Workbay");
+                helper.fail("a fresh Workbay is not locked");
                 return;
             }
 
@@ -1016,6 +1016,55 @@ public class MenuTests {
             WorkbayTickets.release(level.getServer().getLevel(WorkbayDimensions.BACKSHOP),
                 record.id(), record.bayColumn());
             level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            helper.succeed();
+        });
+    }
+
+    /**
+     * Night audit 1A finding 1. A Workbay was minted <b>unlocked</b>, and an unlocked Workbay let
+     * anyone who right-clicked it eject the owner's machines into their own inventory. A fresh
+     * Workbay is now locked; the owner opts into sharing with the Lock button.
+     */
+    @GameTest
+    @TestHolder(description = "A fresh Workbay is locked: a stranger cannot eject the owner's machine, the owner can.")
+    public static void aFreshWorkbayRefusesAStrangersEject(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer owner = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos pos = helper.absolutePos(new BlockPos(1, 1, 1));
+            WorkbayBlockEntity workbay = placeWorkbay(helper, pos, owner);
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            WorkbayTickets.force(backshop, record.id(), record.bayColumn());
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+
+            owner.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Blocks.FURNACE, 1));
+            menuFor(workbay, owner).act(WorkbayAction.RACK, 0, Optional.empty());
+            if (!backshop.getBlockState(machinePos).is(Blocks.FURNACE)) {
+                helper.fail("the owner could not rack a furnace into their own fresh Workbay");
+                return;
+            }
+
+            GameTestPlayer stranger = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            stranger.moveTo(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5);
+            WorkbayMenu theirs = new WorkbayMenu(2, stranger.getInventory(), workbay,
+                WorkbayMenu.build(workbay, stranger, 0));
+            theirs.act(WorkbayAction.SELECT_BAY, 0, Optional.empty());
+            theirs.act(WorkbayAction.EJECT, 0, Optional.empty());
+
+            helper.assertTrue(backshop.getBlockState(machinePos).is(Blocks.FURNACE),
+                "a stranger ejected the owner's machine out of a fresh Workbay");
+            helper.assertValueEqual(stranger.getInventory().countItem(Blocks.FURNACE.asItem()), 0,
+                "furnaces in the stranger's inventory");
+
+            // Positive control: the same eject from the owner lands.
+            menuFor(workbay, owner).act(WorkbayAction.EJECT, 0, Optional.empty());
+            helper.assertTrue(backshop.getBlockState(machinePos).isAir(),
+                "the owner could not eject from their own fresh Workbay");
+            helper.assertValueEqual(owner.getInventory().countItem(Blocks.FURNACE.asItem()), 1,
+                "furnaces back in the owner's inventory");
             helper.succeed();
         });
     }
