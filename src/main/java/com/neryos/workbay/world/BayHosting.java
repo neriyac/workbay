@@ -65,22 +65,26 @@ public final class BayHosting {
         // 1. The block itself.
         backshop.setBlock(pos, state, Block.UPDATE_ALL);
 
-        // 2 and 3. What the item was carrying. minecraft:block_entity_data excludes x, y, z,
-        // components and keepPacked, so the BlockState is not carried by the item and the facing
-        // above is ours to choose - which is why it is stored per bay rather than inferred.
-        BlockItem.updateCustomBlockEntityTag(backshop, placer, pos, stack);
-        BlockEntity placed = backshop.getBlockEntity(pos);
-        if (placed != null) {
-            placed.applyComponentsFromItemStack(stack);
-        }
-
-        // 4. setBlock alone never calls this, and skipping it leaves machines that record an owner
-        // owner-less and GUI-locked, and leaves bounding blocks unplaced. A foreign block throwing
-        // here is a real outcome: undo the placement rather than leave a half-placed machine.
+        // Steps 2-4 are one guarded block: a foreign loader or setPlacedBy throwing is a real
+        // outcome, and a throw between the setBlock and the caller's hand shrink would leave the
+        // machine standing in the bay AND the item in the hand (night 2026-09-11, 1B #5b). Undo the
+        // placement rather than leave a half-placed machine.
         try {
+            // 2 and 3. What the item was carrying. minecraft:block_entity_data excludes x, y, z,
+            // components and keepPacked, so the BlockState is not carried by the item and the
+            // facing above is ours to choose - which is why it is stored per bay rather than
+            // inferred.
+            BlockItem.updateCustomBlockEntityTag(backshop, placer, pos, stack);
+            BlockEntity placed = backshop.getBlockEntity(pos);
+            if (placed != null) {
+                placed.applyComponentsFromItemStack(stack);
+            }
+
+            // 4. setBlock alone never calls this, and skipping it leaves machines that record an
+            // owner owner-less and GUI-locked, and leaves bounding blocks unplaced.
             block.setPlacedBy(backshop, pos, state, placer, stack);
         } catch (Exception e) {
-            LOG.error("setPlacedBy threw for {} in a bay; refusing to host it",
+            LOG.error("placing {} in a bay threw; refusing to host it",
                 net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(block), e);
             backshop.removeBlockEntity(pos);
             backshop.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
