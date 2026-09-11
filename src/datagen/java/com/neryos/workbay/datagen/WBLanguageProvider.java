@@ -148,8 +148,8 @@ public class WBLanguageProvider extends LanguageProvider {
             + "leave this block.");
         add(WorkbayLang.guiKey("button.lock"), "Lock");
         add(WorkbayLang.guiKey("button.unlock"), "Unlock");
-        add(WorkbayLang.guiKey("button.lock.tip"), "A locked Workbay only lets its owner rack, eject "
-            + "or change anything.");
+        add(WorkbayLang.guiKey("button.lock.tip"), "A locked Workbay opens for its owner alone. "
+            + "Unlock it to let anyone in.");
         add(WorkbayLang.guiKey("button.back"), "Back to bays");
         add(WorkbayLang.guiKey("button.back.tip"), "Return to the bays screen.");
         add(WorkbayLang.guiKey("button.bay_view"), "Bay View");

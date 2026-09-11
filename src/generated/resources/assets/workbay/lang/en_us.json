@@ -31,7 +31,7 @@
   "gui.workbay.button.flow": "Flow map",
   "gui.workbay.button.flow.tip": "See what every link moves, and which flows never leave this block.",
   "gui.workbay.button.lock": "Lock",
-  "gui.workbay.button.lock.tip": "A locked Workbay only lets its owner rack, eject or change anything.",
+  "gui.workbay.button.lock.tip": "A locked Workbay opens for its owner alone. Unlock it to let anyone in.",
   "gui.workbay.button.networks": "Networks",
   "gui.workbay.button.networks.tip": "Which network this Workbay is, and every other one you own. Move one here, or rename it.",
   "gui.workbay.button.open": "Open its screen",
