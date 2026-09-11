@@ -235,4 +235,43 @@ public class RemoteScreenTests {
             helper.succeed();
         });
     }
+
+    /**
+     * Night audit 1A finding 13. The remote screen ships the machine's full save tag to the viewer,
+     * and a hosted container full of nested NBT can put that over the 1 MiB payload cap -- which
+     * disconnects the viewer on the button. Past {@link RemoteScreens#MAX_TAG_BYTES} the remote
+     * path now answers false and the caller falls back to the walk-in, which needs no packet.
+     */
+    @GameTest
+    @TestHolder(description = "A machine whose tag is too big for a packet opens no remote screen, and the viewer is not disconnected.")
+    public static void anOversizedMachineTagFallsBackToTheWalkIn(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            Racked r = rack(helper);
+            GameTestPlayer player = r.player();
+            BlockPos machine = r.machine();
+
+            // Positive control: the same furnace opens while its tag is small.
+            helper.assertTrue(RemoteScreens.open(player, r.backshop(), machine), "no screen opened");
+            player.closeContainer();
+
+            // One item carrying 600 KiB of custom data: the tag is over the limit and under the
+            // cap, so a disconnect here would be the mod's, not vanilla's.
+            var big = new net.minecraft.nbt.CompoundTag();
+            big.putByteArray("Blob", new byte[600 * 1024]);
+            ItemStack stack = new ItemStack(Items.STONE);
+            stack.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA,
+                net.minecraft.world.item.component.CustomData.of(big));
+            ((net.minecraft.world.Container) r.backshop().getBlockEntity(machine)).setItem(0, stack);
+
+            helper.assertFalse(RemoteScreens.open(player, r.backshop(), machine),
+                "a machine whose tag cannot ride a packet still opened a remote screen");
+            helper.assertTrue(player.containerMenu == player.inventoryMenu,
+                "the refused open left a menu on the player");
+            helper.assertFalse(RemoteScreens.isOpenAt(player, machine),
+                "the refused open left the machine reachable");
+            helper.succeed();
+        });
+    }
 }

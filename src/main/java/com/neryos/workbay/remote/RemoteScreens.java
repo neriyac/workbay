@@ -154,6 +154,13 @@ public final class RemoteScreens {
         return true;
     }
 
+    /**
+     * The most machine a remote screen will ship: half the 1 MiB custom-payload cap, so a hosted
+     * container full of nested NBT falls back to the walk-in instead of disconnecting the viewer
+     * on the button (night audit 1A, finding 13).
+     */
+    public static final int MAX_TAG_BYTES = 512 * 1024;
+
     public static boolean open(ServerPlayer player, ServerLevel bay, BlockPos machine) {
         BlockState hosted = bay.getBlockState(machine);
         BlockEntity entity = bay.getBlockEntity(machine);
@@ -161,6 +168,9 @@ public final class RemoteScreens {
             return false;
         }
         CompoundTag tag = entity.saveWithFullMetadata(bay.registryAccess());
+        if (tag.sizeInBytes() > MAX_TAG_BYTES) {
+            return false;
+        }
         SENT.put(player.getUUID(), tag);
         PacketDistributor.sendToPlayer(player, new RemoteMachinePacket(machine, hosted, tag));
 
@@ -213,7 +223,7 @@ public final class RemoteScreens {
             // nothing else -- its container sync carries only the eject flag, which is exactly why
             // Eject worked here and the faces did not.
             CompoundTag tag = live.getUpdateTag(machine.bay().registryAccess());
-            if (!tag.equals(SENT.get(entry.getKey()))) {
+            if (tag.sizeInBytes() <= MAX_TAG_BYTES && !tag.equals(SENT.get(entry.getKey()))) {
                 SENT.put(entry.getKey(), tag);
                 PacketDistributor.sendToPlayer(player, new RemoteMachinePacket(machine.pos(),
                     machine.bay().getBlockState(machine.pos()), tag));
