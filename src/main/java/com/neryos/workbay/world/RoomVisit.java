@@ -144,6 +144,13 @@ public final class RoomVisit {
             return false;
         }
         RoomRegistry registry = RoomRegistry.get(player.server);
+        // A room that does not exist yet is the owner's to mint. Minting first and refusing after
+        // let a stranger's refused entry consume a room region and write a record.
+        if (index >= record.rooms().size() && !record.owner().equals(player.getUUID())) {
+            WorkbaySounds.refuse(player,
+                com.neryos.workbay.WorkbayLang.message("room_not_yours"));
+            return false;
+        }
         RoomRecord room = roomSlot(registry, record, index);
         if (room == null) {
             return false;

@@ -1448,4 +1448,36 @@ public class RoomTests {
             helper.succeed();
         });
     }
+
+    /**
+     * Night audit 1A finding 11. {@code enter} minted the room record before asking whether the
+     * player could enter it, so a stranger's refused ENTER_ROOM still consumed a room region and
+     * wrote a record. A room that does not exist yet is the owner's to mint.
+     */
+    @GameTest
+    @TestHolder(description = "A stranger's refused room entry mints no room record; the owner's mints one.")
+    public static void aStrangerMintsNoRoomRecord(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            Site site = site(helper, 1);
+            GameTestPlayer stranger = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            RoomRegistry registry = RoomRegistry.get(helper.getLevel().getServer());
+            // The record is a value; the rooms it lists are read fresh from the registry each time.
+            java.util.function.Supplier<WorkbayRecord> record =
+                () -> registry.byId(site.record().id()).orElseThrow();
+            helper.assertTrue(registry.roomsOf(record.get()).isEmpty(), "rooms before anybody enters");
+
+            helper.assertFalse(RoomVisit.enter(stranger, record.get(), 0),
+                "a stranger was let into a room that did not exist yet");
+            helper.assertTrue(registry.roomsOf(record.get()).isEmpty(),
+                "a stranger's refused entry minted a room record");
+
+            helper.assertTrue(RoomVisit.enter(site.player(), record.get(), 0),
+                "the owner was refused their own room");
+            helper.assertValueEqual(registry.roomsOf(record.get()).size(), 1, "rooms after the owner enters");
+            RoomVisit.leave(site.player());
+            helper.succeed();
+        });
+    }
 }
