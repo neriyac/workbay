@@ -1256,14 +1256,31 @@ public class WorkbayMenu extends AbstractContainerMenu {
         // that has something to learn is still nothing next to a write per poll.
         backfill.forEach(workbay::addBus);
 
+        // A locked Workbay opens for a stranger -- they may look, not act -- and the snapshot used
+        // to hand them every Connector's and target's coordinates in every dimension, the room
+        // names and the guest lists. Blanked here, in the one place the snapshot is assembled;
+        // the owner's is untouched. Night 2026-09-11, 1A #7.
+        List<WorkbaySnapshot.Room> rooms = readRooms(player, record);
+        List<WorkbayRecord.Connector> connectors = workbay.connectors();
+        if (record.locked() && !record.owner().equals(player.getUUID())) {
+            GlobalPos nowhere = GlobalPos.of(net.minecraft.world.level.Level.OVERWORLD, BlockPos.ZERO);
+            links = links.stream().map(link -> new WorkbaySnapshot.Link(
+                link.config().withPlaces(nowhere, nowhere), link.status(), link.targetBlock(),
+                link.targetBay(), link.targetRoom())).toList();
+            rooms = rooms.stream().map(room -> new WorkbaySnapshot.Room(room.index(), "",
+                room.interior(), room.chunkCost(), room.built(), room.anchored(), room.biome(),
+                room.colour(), List.of())).toList();
+            connectors = List.of();
+        }
+
         return new WorkbaySnapshot(record.label(), record.locked(), record.bayCapacity(), selected,
             workbay.energy().getEnergyStored(), workbay.energy().getMaxEnergyStored(),
             bays, links, record.upgrades(), networksOf(workbay, player),
             com.neryos.workbay.config.WorkbayConfig.SERVER.maxNetworksPerPlayer.get(),
             com.neryos.workbay.remote.RemoteConfig.remoteScreensEnabled(),
-            readRooms(player, record),
+            rooms,
             com.neryos.workbay.config.WorkbayConfig.SERVER.chargesForRunning(),
-            workbay.connectors());
+            connectors);
     }
 
     /**

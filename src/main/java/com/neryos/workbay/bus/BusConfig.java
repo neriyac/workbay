@@ -223,6 +223,12 @@ public record BusConfig(
             machineFace, rate, speed, channel, enabled, filter, internal, Optional.empty());
     }
 
+    /** Both positions replaced and everything else kept: what a stranger's snapshot gets. */
+    public BusConfig withPlaces(GlobalPos nowConnector, GlobalPos nowTarget) {
+        return new BusConfig(id, name, bay, resource, mode, nowConnector, nowTarget, targetFace,
+            machineFace, rate, speed, channel, enabled, filter, internal, targetBlock);
+    }
+
     /** Stamps what this link points at, at the one moment the block is known to be loaded. */
     public BusConfig withTargetBlock(Optional<ResourceLocation> block) {
         return new BusConfig(id, name, bay, resource, mode, connector, target, targetFace,

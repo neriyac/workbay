@@ -1180,4 +1180,45 @@ public class MenuTests {
             helper.succeed();
         });
     }
+    /**
+     * Night 2026-09-11, 1A #7. A locked Workbay opens for a stranger (they may look, not act), and
+     * the snapshot on the menu-open buffer carried every Connector's and target's coordinates in
+     * every dimension, plus room names and guest lists. A stranger's snapshot now carries none of
+     * them; the owner's is unchanged.
+     */
+    @GameTest
+    @TestHolder(description = "A locked Workbay's snapshot carries no coordinates or room names for a stranger.")
+    public static void aLockedSnapshotCarriesNoCoordinatesForAStranger(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer owner = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            GameTestPlayer stranger = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, owner);
+            helper.assertTrue(workbay.record().orElseThrow().locked(), "a fresh Workbay is not locked");
+            GlobalPos connectorPos = GlobalPos.of(level.dimension(), workbayPos.above());
+            GlobalPos targetPos = GlobalPos.of(level.dimension(), workbayPos.above(2));
+            workbay.addConnector(new WorkbayRecord.Connector(java.util.UUID.randomUUID(),
+                connectorPos, "Secret feed", targetPos, Optional.empty()));
+            workbay.addBus(BusConfig.create(java.util.UUID.randomUUID(), 0,
+                BusConfig.Resource.ITEM, BusConfig.Mode.INSERT, connectorPos, targetPos));
+
+            var forStranger = WorkbayMenu.build(workbay, stranger, 0);
+            helper.assertTrue(forStranger.connectors().isEmpty(),
+                "a stranger's snapshot of a locked Workbay lists its Connectors");
+            for (var link : forStranger.links()) {
+                helper.assertFalse(link.config().target().equals(targetPos)
+                        || link.config().connector().equals(connectorPos),
+                    "a stranger's snapshot of a locked Workbay carries a link's real coordinates");
+            }
+            var forOwner = WorkbayMenu.build(workbay, owner, 0);
+            helper.assertValueEqual(forOwner.connectors().size(), 1, "Connectors on the owner's snapshot");
+            helper.assertTrue(forOwner.links().stream()
+                    .anyMatch(link -> link.config().target().equals(targetPos)),
+                "the owner's own snapshot lost the link's coordinates too");
+            helper.succeed();
+        });
+    }
 }
