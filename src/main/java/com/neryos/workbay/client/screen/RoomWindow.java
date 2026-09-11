@@ -1,106 +1,28 @@
 package com.neryos.workbay.client.screen;
 
 import com.neryos.workbay.content.room.RoomColour;
-import com.neryos.workbay.content.workbay.WorkbayUpgrade;
 import com.neryos.workbay.menu.WorkbayAction;
 import com.neryos.workbay.menu.WorkbaySnapshot;
 import net.minecraft.network.chat.Component;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.ItemStack;
 
 /**
- * ROOMS. SPEC.md §5, and the one page where a number is the whole point.
+ * One room's settings -- its lamp, its biome, its guests -- as a window over the BAYS page,
+ * opened from the swatch on the panel of the bay that holds the room. SPEC.md §0: the room's
+ * settings screen stays, reached from the bay.
  *
- * <p>The room ladder is on this page rather than on UPGRADES because <b>what a Frame costs is a
- * chunk count</b>, and a chunk count means nothing without the rooms it applies to beside it. It
- * also keeps UPGRADES at the four rows it was drawn and photographed with.
- *
- * <p>Rows are one line rather than the two UPGRADES uses, because five rungs plus four rooms only
- * fit inside 240 that way. <b>Every column below is a disjoint span of the 296</b>, written as a
- * first and a last x rather than an x plus a width, for one reason: the first draft gave the
- * description, the count and the price overlapping spans and all three printed on top of each
- * other -- "A 14x14 room, 11./ 1" -- on a page nobody had looked at yet. The strings were then cut
- * to the columns they get, which is why a Frame's row says the size and each room's row says the
- * chunks: the count belongs beside the room it is charged for.
+ * <p><b>A window, not two cycle buttons.</b> The cycle buttons were built first and were the
+ * wrong control twice over: the biome one was a twelve-pixel icon that never changed, so
+ * pressing it looked exactly like nothing happening, and neither ever showed what the other
+ * choices <em>were</em>. Mekanism answers the same question with a window --
+ * {@code GuiColorWindow}, {@code GuiRobitSkinSelect} -- and that is the right answer: a value you
+ * pick out of a set is a list, not a step.
  */
-class RoomsPage extends WorkbayPage {
+class RoomWindow extends WorkbayPage {
 
+    /** The BAYS page's own width, so the scrim covers it. */
     private static final int WIDTH = 320;
-
-    private static final int ROW_X = 12;
-    private static final int ROW_W = 296;
-    private static final int ROW_H = 18;
-    private static final int ROW_PITCH = 20;
-    /** One line of text, centred in an 18px row. */
-    private static final int TEXT_Y = 5;
-
-    /**
-     * Clear of the header band, which is now the title and the tab row and nothing else: the
-     * back arrow that used to sit on its own line at y 24 is gone, and the twenty pixels it
-     * cost are the reason four rooms plus five rungs fit inside 240 with room to spare rather
-     * than with one pixel.
-     */
-    private static final int LADDER_Y = 26;
-
-    /**
-     * Everything that costs chunks, in the order the player climbs it. The Anchor is here rather
-     * than on UPGRADES for the same reason as the Frames: what it buys is measured in chunks, and
-     * the switches it turns on are the room rows directly below it.
-     */
-    private static final WorkbayUpgrade[] LADDER = {
-        WorkbayUpgrade.ROOM_FRAME, WorkbayUpgrade.WIDE_ROOM_FRAME, WorkbayUpgrade.VAST_ROOM_FRAME,
-        WorkbayUpgrade.ANNEX_PLATE, WorkbayUpgrade.ANCHOR,
-    };
-
-    /** Every square control on this page. One number, so nothing can be a different size by drift. */
-    private static final int BTN = 18;
-    /**
-     * Eight pixels between controls and eight to a row's edge, not two and four.
-     *
-     * <p>At two they read as one welded strip -- and the hover ring is drawn a pixel outside the
-     * control it belongs to, so lighting the swatch also drew a line down the side of the Anchor
-     * next to it. Every control below is written from the one to its right, so moving the last one
-     * moves the row rather than leaving three constants to be re-added by hand.
-     */
-    private static final int GAP = 8;
-
-    // Ladder columns. 2..20 is the item, and the four spans below never touch.
-    private static final int NAME_X = 22;
-    private static final int NAME_W = 96;
-    private static final int DESC_X = 122;
-    private static final int DESC_W = 62;
-    private static final int COUNT_RIGHT = 214;
-    private static final int COUNT_W = 28;
-    private static final int PRICE_RIGHT = 262;
-    private static final int PRICE_W = 56;
-    private static final int ADD_X = ROW_W - GAP - BTN;
-
-    // Room columns. The three buttons are fixed to the right edge and the two strings share what is
-    // left, so the longest room name and "46x46, 9 chunks" both have their own room.
-    private static final int ROOM_NAME_X = 6;
-    private static final int ROOM_NAME_W = 84;
-    private static final int ROOM_SIZE_W = 100;
-    /**
-     * <b>Three icons, not two icons and a word.</b> "Enter" was a 58-pixel text button beside two
-     * eighteen-pixel ones, which is the shape that made the row read as crowded however much air
-     * went between them: the eye reads a run of same-size squares as a toolbar and a wide slab
-     * beside them as a thing that has been squeezed in. Forty pixels came back to the two strings,
-     * which is where a room's name and size actually needed it.
-     */
-    private static final int ENTER_X = ROW_W - GAP - BTN;
-    private static final int ANCHOR_X = ENTER_X - GAP - BTN;
-    private static final int SETTINGS_X = ANCHOR_X - GAP - BTN;
-    private static final int REMOVE_X = SETTINGS_X - GAP - BTN;
-
-    /**
-     * Which room's X is armed, or -1. <b>The confirm is the screen's, not the server's.</b>
-     * Client-side and static, like Copy's clipboard on BAYS: it is view state, nothing else can
-     * disagree with it, and it costs no round trip. Cleared by drawing any other page, by clicking
-     * anything else, and by the room list changing under it -- an armed X that survives the row
-     * moving is an X that deletes the wrong room. OPEN_ISSUES #62.
-     */
-    private static int armed = -1;
 
     // The settings window.
     private static final int WIN_W = 200;
@@ -139,7 +61,7 @@ class RoomsPage extends WorkbayPage {
      */
     private static final int GUEST_ROWS = 4;
 
-    /** Which room's settings window is open, or -1. Client-side and never sent anywhere. */
+    /** Which bay's room the window shows, or -1 for closed. Client-side and never sent anywhere. */
     private int open = -1;
 
     /**
@@ -179,7 +101,7 @@ class RoomsPage extends WorkbayPage {
      */
     private double barAt = -1;
 
-    RoomsPage(WorkbayScreen screen) {
+    RoomWindow(WorkbayScreen screen) {
         super(screen);
     }
 
@@ -188,20 +110,20 @@ class RoomsPage extends WorkbayPage {
         return WIDTH;
     }
 
-    /**
-     * Exactly as tall as it has rows. Four rooms is 240, which is the floor Minecraft's guiScale
-     * cap guarantees -- a page taller than that is invisible in a narrow band of window sizes
-     * (OPEN_ISSUES), and this one deliberately stops at it. Measured at 880x680 on a 150% display,
-     * which is inside that band: it fits with one pixel to spare.
-     */
+    /** The page underneath: the scrim has to cover all of it. */
     @Override
     int height() {
-        return Math.max(roomsTop() + Math.max(1, snapshot().rooms().size()) * ROW_PITCH + 8,
-            screen.panelHeight());
+        return screen.panelHeight();
     }
 
-    private int roomsTop() {
-        return LADDER_Y + LADDER.length * ROW_PITCH + 6;
+    /** True while a window is up, which is when the page under it hands every input here first. */
+    boolean isOpen() {
+        return open >= 0;
+    }
+
+    /** Which bay's room is showing, or -1. */
+    int bay() {
+        return open;
     }
 
     @Override
@@ -210,224 +132,18 @@ class RoomsPage extends WorkbayPage {
         // that stopped existing -- the search narrowed the list, the window closed -- cannot leave
         // a live rectangle behind for the next press to land in.
         barX = -1;
-        // An armed X must not outlive the row it belongs to: a room list one shorter than it was
-        // is a list where index 2 is a different room.
-        if (armed >= snapshot().rooms().size()) {
-            armed = -1;
-        }
-        header(g, mouseX, mouseY, "ROOMS");
-        ladder(g, mouseX, mouseY);
-        rooms(g, mouseX, mouseY);
-        // Last, so its hit boxes win: the screen dispatches clicks in reverse registration order,
-        // which is exactly "whatever is drawn on top".
         if (open >= 0) {
+            // Over the racked room's own sprite, which draws at Z 150 whatever the order and came
+            // up through the window's title (OPEN_ISSUES' facts). Tooltips are at 400, above this.
+            g.pose().pushPose();
+            g.pose().translate(0, 0, 300);
             settings(g, mouseX, mouseY);
+            g.pose().popPose();
         }
-    }
-
-    /** The rename subject for a room row -- namespaced, so it cannot collide with a bay's. */
-    private static String roomRename(int index) {
-        return "room:" + index;
-    }
-
-    private void ladder(GuiGraphics g, int mouseX, int mouseY) {
-        WorkbaySnapshot snap = snapshot();
-        for (int i = 0; i < LADDER.length; i++) {
-            WorkbayUpgrade upgrade = LADDER[i];
-            int px = x(ROW_X);
-            int py = y(LADDER_Y + i * ROW_PITCH);
-            int installed = snap.upgrades().installed(upgrade);
-            boolean maxed = installed >= upgrade.max();
-            boolean canInstall = !maxed && snap.owned();
-
-            Draw.well(g, px, py, ROW_W, ROW_H);
-            // The whole row answers, not only the plus -- see UpgradesPage. OPEN_ISSUES #68.
-            screen.hit(px, py, ROW_W, ROW_H, () -> { },
-                WorkbayScreen.gui("upgrade." + upgrade.getSerializedName()),
-                WorkbayScreen.gui("upgrade." + upgrade.getSerializedName() + ".long"));
-            // Fourteen in an eighteen-pixel row, not sixteen -- see BaysPage's Pair button.
-            // OPEN_ISSUES #61.
-            WBIcons.sprite(g, new ItemStack(upgrade.item()), px + 2, py + 2, 14, true);
-
-            String key = "upgrade." + upgrade.getSerializedName();
-            // A name is never faint -- see UpgradesPage.
-            text(g, WorkbayScreen.gui(key), px + NAME_X, py + TEXT_Y, NAME_W, Draw.TEXT);
-            text(g, WorkbayScreen.gui(key + ".desc"), px + DESC_X, py + TEXT_Y, DESC_W,
-                Draw.TEXT_FAINT);
-            textRight(g, installed + " / " + upgrade.max(), px + COUNT_RIGHT, py + TEXT_Y, COUNT_W,
-                maxed ? Draw.GREEN : Draw.TEXT_DIM);
-
-            int addX = px + ADD_X;
-            boolean hover = canInstall && screen.hovered(addX, py, BTN, BTN, mouseX, mouseY);
-            Draw.button(g, addX, py, BTN, BTN, hover, maxed, canInstall);
-            WBIcons.draw(g, WBIcons.PLUS, addX + 3, py + 3,
-                canInstall ? Draw.TEXT : Draw.TEXT_FAINT);
-            int ordinal = upgrade.ordinal();
-            screen.hit(addX, py, BTN, BTN,
-                canInstall ? () -> screen.send(WorkbayAction.INSTALL_UPGRADE, ordinal) : () -> { },
-                maxed ? new Component[] {
-                    WorkbayScreen.gui(key), WorkbayScreen.gui("upgrades.maxed") }
-                    : !canInstall ? new Component[] {
-                        WorkbayScreen.gui(key), com.neryos.workbay.WorkbayLang.message("owner_only") }
-                    : new Component[] {
-                        WorkbayScreen.gui(key), WorkbayScreen.gui(key + ".long"),
-                        WorkbayScreen.gui("upgrades.add", WorkbayScreen.gui(key)) });
-        }
-    }
-
-    private void rooms(GuiGraphics g, int mouseX, int mouseY) {
-        WorkbaySnapshot snap = snapshot();
-        int top = roomsTop();
-        // A rule between the two halves. The ladder and the rooms are the same eighteen-pixel row
-        // in the same well, so nine of them in a column read as one list and nothing said which
-        // were things to buy and which were things you own.
-        g.fill(x(ROW_X), y(top - 5), x(ROW_X + ROW_W), y(top - 4), Draw.EDGE_DARK);
-        if (snap.rooms().isEmpty()) {
-            Draw.well(g, x(ROW_X), y(top), ROW_W, ROW_H);
-            text(g, WorkbayScreen.gui("rooms.none"), x(ROW_X) + 6, y(top) + TEXT_Y, ROW_W - 12,
-                Draw.TEXT_FAINT);
-            return;
-        }
-        // What a guest may press on a shared Workbay: the door of a room they were invited into,
-        // and nothing else on the row. Drawn disabled rather than refused on the press, which
-        // used to close the whole screen on the way to saying no. OPEN_ISSUES #107.
-        boolean owned = snap.owned();
-        java.util.UUID me = net.minecraft.client.Minecraft.getInstance().player == null ? null
-            : net.minecraft.client.Minecraft.getInstance().player.getUUID();
-        for (WorkbaySnapshot.Room room : snap.rooms()) {
-            int px = x(ROW_X);
-            int py = y(top + room.index() * ROW_PITCH);
-            Draw.well(g, px, py, ROW_W, ROW_H);
-            boolean mayEnter = owned || (room.built()
-                && room.guests().stream().anyMatch(guest -> guest.id().equals(me)));
-
-            String name = room.name().isEmpty()
-                ? WorkbayScreen.gui("rooms.name", room.index() + 1).getString() : room.name();
-            // Hidden while THIS room's rename is open, exactly as BAYS and LINKS do it: the field
-            // is drawn over the line it replaces, and a name left underneath shows through it.
-            // Which room, not whether any -- OPEN_ISSUES #76.
-            if (!screen.renaming(roomRename(room.index()))) {
-                text(g, name, px + ROOM_NAME_X, py + TEXT_Y, ROOM_NAME_W, Draw.TEXT);
-            }
-            // Right-click the name to give the room one of your own -- the same gesture a link's
-            // name takes, and for the same reason: the row has no spare control and a name is the
-            // one thing a player edits by pointing at the thing that is wrong. Only a built room,
-            // because an unopened slot has no record to remember a name on.
-            final int nameX = px + ROOM_NAME_X;
-            final int nameY = py;
-            final int index = room.index();
-            final String named = room.name();
-            final boolean built = room.built();
-            screen.hit(nameX, py + 3, ROOM_NAME_W, 12, () -> {
-                if (built && screen.back()) {
-                    screen.beginRename(roomRename(index), nameX, nameY + 4, ROOM_NAME_W, 12, named,
-                        typed -> screen.sendText(WorkbayAction.SET_ROOM_NAME, index, typed));
-                }
-            }, Component.literal(name),
-                WorkbayScreen.gui(built ? "rooms.rename.tip" : "rooms.rename.unbuilt"));
-
-            // Size and price on one line, because they are one decision. An unopened slot says so
-            // rather than showing a size it has not got.
-            String size = room.built()
-                ? WorkbayScreen.gui(room.chunkCost() == 1 ? "rooms.size.one" : "rooms.size",
-                    room.interior(), room.interior(), room.chunkCost()).getString()
-                : WorkbayScreen.gui("rooms.empty").getString();
-            // Right-aligned against the controls rather than parked on a fixed x. "Not opened
-            // yet" is 62 pixels in a 96-wide column, so an unopened room drew its one fact in the
-            // middle of the row with a hundred pixels of nothing on either side of it.
-            textRight(g, size, px + REMOVE_X - 8, py + TEXT_Y, ROOM_SIZE_W,
-                room.built() ? Draw.TEXT_DIM : Draw.TEXT_FAINT);
-
-            // Handing the room back. Only a built one has anything to hand back, and the click is
-            // asked twice: once to arm, once to do it. A room is four chunks of somebody's build
-            // and this is the only control on the screen that can take one away.
-            if (room.built() && !owned) {
-                ownerOnly(g, px + REMOVE_X, py, WBIcons.CROSS, WorkbayScreen.gui("rooms.remove"));
-            } else if (room.built()) {
-                boolean sure = armed == room.index();
-                iconButton(g, mouseX, mouseY, px + REMOVE_X, py, WBIcons.CROSS, sure,
-                    () -> armed = sure ? -1 : room.index(),
-                    WorkbayScreen.gui(sure ? "rooms.remove.sure" : "rooms.remove"),
-                    WorkbayScreen.gui(sure ? "rooms.remove.sure.tip" : "rooms.remove.tip"));
-                if (sure) {
-                    // The second click is a separate hit on top of the first, registered after it
-                    // so it wins: the screen dispatches in reverse registration order.
-                    screen.hit(px + REMOVE_X, py, BTN, BTN, () -> {
-                        screen.send(WorkbayAction.REMOVE_ROOM, room.index());
-                        armed = -1;
-                    }, WorkbayScreen.gui("rooms.remove.sure"),
-                        WorkbayScreen.gui("rooms.remove.sure.tip"));
-                }
-            }
-
-            // Only a built room has a shell to paint or chunks to write a biome over, and an
-            // unopened one has no record to remember either choice on -- SPEC.md §8 spends the
-            // region on first entry.
-            if (room.built()) {
-                swatch(g, mouseX, mouseY, px + SETTINGS_X, py, room, owned);
-            }
-
-            // The Anchor toggle only exists once the network owns an Anchor. SPEC.md §4: a control
-            // whose feature is not there is hidden, not drawn faint -- faint is honest for one
-            // session and furniture after two.
-            if (snap.upgrades().anchors() > 0 && room.built() && !owned) {
-                ownerOnly(g, px + ANCHOR_X, py, WBIcons.ANCHOR,
-                    WorkbayScreen.gui(room.anchored() ? "rooms.anchored" : "rooms.unanchored"));
-            } else if (snap.upgrades().anchors() > 0 && room.built()) {
-                iconButton(g, mouseX, mouseY, px + ANCHOR_X, py, WBIcons.ANCHOR, room.anchored(),
-                    () -> screen.send(WorkbayAction.TOGGLE_ROOM_ANCHOR, room.index()),
-                    WorkbayScreen.gui(room.anchored() ? "rooms.anchored" : "rooms.unanchored"),
-                    // The chunks actually held, not the tickets taken. A forced chunk keeps its
-                    // neighbours loaded two out, so a one-chunk room costs a host twenty-five --
-                    // measured, and the room's own footprint is already on the line above.
-                    WorkbayScreen.gui(room.anchored() ? "rooms.anchored.tip" : "rooms.unanchored.tip",
-                        com.neryos.workbay.world.RoomGeometry.anchorChunks(room.chunkCost())));
-            }
-
-            // A door to walk through, or a plus to spend the region on one. Two icons rather than
-            // two words, because "Enter" and "Open" are four letters apart and the thing that
-            // actually differs is whether the room exists yet.
-            if (!mayEnter) {
-                unbuiltButton(g, px + ENTER_X, py, BTN, room.built() ? WBIcons.ENTER : WBIcons.PLUS,
-                    WorkbayScreen.gui(room.built() ? "rooms.enter" : "rooms.open"),
-                    com.neryos.workbay.WorkbayLang.message("room_not_yours"));
-            } else {
-                iconButton(g, mouseX, mouseY, px + ENTER_X, py,
-                    room.built() ? WBIcons.ENTER : WBIcons.PLUS, false,
-                    () -> screen.send(WorkbayAction.ENTER_ROOM, room.index()),
-                    WorkbayScreen.gui(room.built() ? "rooms.enter" : "rooms.open"),
-                    WorkbayScreen.gui("rooms.enter.tip"));
-            }
-        }
-    }
-
-    /**
-     * The room's colour, drawn as the colour itself rather than as an icon of one, and the way into
-     * that room's settings. A swatch is the one control here whose job is to show a value you can
-     * only judge by looking, so the button <b>is</b> the value.
-     */
-    private void swatch(GuiGraphics g, int mouseX, int mouseY, int px, int py,
-        WorkbaySnapshot.Room room, boolean owned) {
-        boolean hover = owned && screen.hovered(px, py, BTN, BTN, mouseX, mouseY);
-        Draw.button(g, px, py, BTN, BTN, hover, open == room.index(), owned);
-        g.fill(px + 4, py + 4, px + BTN - 4, py + BTN - 4, 0xFF000000 | room.colour().tint());
-        int index = room.index();
-        if (!owned) {
-            // The value still shows -- a guest may look at the colour -- but the window behind it
-            // is the owner's. OPEN_ISSUES #107.
-            screen.hit(px, py, BTN, BTN, () -> { }, WorkbayScreen.gui("rooms.settings"),
-                com.neryos.workbay.WorkbayLang.message("owner_only"));
-            return;
-        }
-        screen.hit(px, py, BTN, BTN, () -> setOpen(open == index ? -1 : index),
-            WorkbayScreen.gui("rooms.settings"),
-            WorkbayScreen.gui("rooms.colour",
-                WorkbayScreen.gui("colour." + room.colour().getSerializedName())),
-            WorkbayScreen.gui("rooms.biome", biomeName(room.biome())));
     }
 
     /** Opening or closing the window, and the search field that belongs to it, in one place. */
-    private void setOpen(int index) {
+    void setOpen(int index) {
         open = index;
         tab = Tab.ROOM;
         scroll = 0;
@@ -527,18 +243,10 @@ class RoomsPage extends WorkbayPage {
             Math.round((barAt - barY - knobHeight() / 2.0) * max / travel), 0, max);
     }
 
-    /**
-     * One room's settings, over the page. <b>A window, not two cycle buttons.</b>
-     *
-     * <p>The cycle buttons were built first and were the wrong control twice over: the biome one
-     * was a twelve-pixel icon that never changed, so pressing it looked exactly like nothing
-     * happening, and neither ever showed what the other choices <em>were</em>. Mekanism answers the
-     * same question with a window -- {@code GuiColorWindow}, {@code GuiRobitSkinSelect} -- and that
-     * is the right answer: a value you pick out of a set is a list, not a step.
-     */
+    /** One room's settings, over the page. Closes itself if the room left the bay. */
     private void settings(GuiGraphics g, int mouseX, int mouseY) {
         WorkbaySnapshot.Room room = snapshot().rooms().stream()
-            .filter(r -> r.index() == open && r.built()).findFirst().orElse(null);
+            .filter(r -> r.index() == open).findFirst().orElse(null);
         if (room == null) {
             setOpen(-1);
             return;
@@ -851,7 +559,7 @@ class RoomsPage extends WorkbayPage {
      * {@code biome.<namespace>.<path>}, so a modded biome added to {@code #workbay:room_biomes}
      * names itself and this mod ships no string for it.
      */
-    private static Component biomeName(String id) {
+    static Component biomeName(String id) {
         ResourceLocation location = ResourceLocation.tryParse(id);
         return location == null ? Component.literal(id)
             : Component.translatable("biome." + location.getNamespace() + "."

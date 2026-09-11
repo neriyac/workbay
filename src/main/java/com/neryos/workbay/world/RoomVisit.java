@@ -6,11 +6,8 @@ import com.neryos.workbay.Workbay;
 import com.neryos.workbay.WorkbaySounds;
 import com.neryos.workbay.init.WBAttachments;
 import net.minecraft.core.UUIDUtil;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -36,25 +33,15 @@ public final class RoomVisit {
     private RoomVisit() {}
 
     /**
-     * Where an occupant came from, and the room they are in.
-     *
-     * <p>Persisted, and that is the point: SPEC.md §14 says a player who disconnects inside a room
-     * keeps their return position, unlike a bay visitor, whose visit is simply over.
+     * The room an occupant is in. Persisted, and that is the point: SPEC.md §14 says a player who
+     * disconnects inside a room is still inside it. <b>No return address</b>: where Leave goes is
+     * worked out when Leave is pressed, from where the room's Workbay stands then
+     * ({@link RoomHolding#exit}), because the place a player came in from is stale the moment the
+     * block moves and, for a nested room, is inside a room that may since have been pulled out.
      */
-    public record Inside(UUID room, ResourceKey<Level> dimension, Vec3 where, float yRot, float xRot,
-        java.util.Optional<net.minecraft.core.GlobalPos> workbay, int bay) {
+    public record Inside(UUID room) {
         public static final Codec<Inside> CODEC = RecordCodecBuilder.create(i -> i.group(
-            UUIDUtil.CODEC.fieldOf("room").forGetter(Inside::room),
-            ResourceKey.codec(Registries.DIMENSION).fieldOf("dimension").forGetter(Inside::dimension),
-            Vec3.CODEC.fieldOf("where").forGetter(Inside::where),
-            Codec.FLOAT.fieldOf("y_rot").forGetter(Inside::yRot),
-            Codec.FLOAT.fieldOf("x_rot").forGetter(Inside::xRot),
-            // Which Workbay the player left, so leaving the room can put its screen back up --
-            // OPEN_ISSUES #69. Optional and not defaulted: a room entered through another room's
-            // door has no Workbay to go back to, and `optionalFieldOf(name, default)` would turn a
-            // malformed entry into "there was none" without saying so.
-            net.minecraft.core.GlobalPos.CODEC.optionalFieldOf("workbay").forGetter(Inside::workbay),
-            Codec.INT.optionalFieldOf("bay", 0).forGetter(Inside::bay)
+            UUIDUtil.CODEC.fieldOf("room").forGetter(Inside::room)
         ).apply(i, Inside::new));
     }
 
@@ -82,9 +69,9 @@ public final class RoomVisit {
      * operator: an op who wants in can invite themselves from the screen, and a silent exception
      * here would be a rule that is true until it is not.
      *
-     * <p>An orphaned room -- one no Workbay record lists any more -- has no owner and therefore
-     * admits nobody, which is the right answer: there is no screen anywhere that could invite you
-     * to it.
+     * <p>A room in nobody's bay has no owner to admit anybody, which is the right answer: it can
+     * only be entered from the bay that holds it. Somebody already inside when it was pulled out
+     * is {@link #mayStay}'s question, not this one.
      */
     public static boolean mayEnter(RoomRegistry registry, UUID player, RoomRecord room) {
         return registry.ownerOf(room).map(owner -> owner.equals(player)).orElse(false)
@@ -109,7 +96,12 @@ public final class RoomVisit {
             || room.guestLevel(player).filter(RoomGuest::mayUse).isPresent();
     }
 
-    /** True when this player may still be standing where they are. Used on login and every tick. */
+    /**
+     * True when this player may still be standing where they are. Used on login and every tick.
+     *
+     * <p>A room out of every bay keeps whoever is in it: SPEC.md §0 lets a room be pulled with a
+     * player inside, and nothing happens to them -- the room sleeps and Leave still works.
+     */
     public static boolean mayStay(ServerPlayer player) {
         if (!isInside(player)) {
             return false;
@@ -117,42 +109,22 @@ public final class RoomVisit {
         RoomRegistry registry = RoomRegistry.get(player.server);
         RoomRecord room = registry
             .room(player.getData(WBAttachments.ROOM_RETURN.get()).room()).orElse(null);
-        return room != null
-            && RoomGeometry.inside(player.blockPosition(), room.region(), room.builtTier())
-            && mayEnter(registry, player.getUUID(), room);
+        return room != null && room.contains(player.blockPosition())
+            && (registry.holderOf(room).isEmpty() || mayEnter(registry, player.getUUID(), room));
     }
 
     /**
-     * Sends a player into one of their network's rooms, building or growing it first.
+     * Sends a player into the room standing in bay {@code bay} of {@code record}, building it on
+     * its first visit.
      *
-     * @return false when there is no room to enter — no dimension, no such room slot, or no Room
-     *         Frame installed
+     * @return false when there is no room to enter: no dimension, or nothing but a machine in
+     *         that bay
      */
-    public static boolean enter(ServerPlayer player, WorkbayRecord record, int index) {
-        return enter(player, record, index, null, 0);
-    }
-
-    /**
-     * {@code workbay} is the block the player left to get here and {@code selectedBay} the bay its
-     * screen was showing, so {@link #leave} can put that screen back up. Null for an entry that
-     * came from somewhere with no Workbay -- a room door, or a command.
-     */
-    public static boolean enter(ServerPlayer player, WorkbayRecord record, int index,
-        @org.jetbrains.annotations.Nullable net.minecraft.core.GlobalPos workbay, int selectedBay) {
+    public static boolean enter(ServerPlayer player, WorkbayRecord record, int bay) {
         ServerLevel backshop = player.server.getLevel(WorkbayDimensions.BACKSHOP);
-        if (backshop == null || index < 0 || index >= record.roomCapacity()) {
-            return false;
-        }
         RoomRegistry registry = RoomRegistry.get(player.server);
-        // A room that does not exist yet is the owner's to mint. Minting first and refusing after
-        // let a stranger's refused entry consume a room region and write a record.
-        if (index >= record.rooms().size() && !record.owner().equals(player.getUUID())) {
-            WorkbaySounds.refuse(player,
-                com.neryos.workbay.WorkbayLang.message("room_not_yours"));
-            return false;
-        }
-        RoomRecord room = roomSlot(registry, record, index);
-        if (room == null) {
+        RoomRecord room = registry.roomInBay(record, bay).orElse(null);
+        if (backshop == null || room == null) {
             return false;
         }
         // A Workbay is a block anybody may right-click, and until this line ENTER_ROOM was the one
@@ -163,27 +135,17 @@ public final class RoomVisit {
                 com.neryos.workbay.WorkbayLang.message("room_not_yours"));
             return false;
         }
-        // Every entry re-checks the size, because a Frame installed while nobody was in here has
-        // to grow the shell before anybody stands in it.
-        RoomRecord grown = RoomBuilder.ensure(backshop, room, record.upgrades().roomTier());
-        if (!grown.built()) {
+        // Every entry re-checks the shell, because the first one spends it and a repaint while
+        // nobody was in here has to land before anybody stands in it.
+        RoomRecord built = RoomBuilder.ensure(backshop, room, room.tier());
+        if (!built.built()) {
             return false;
         }
-        if (grown != room) {
-            registry.putRoom(grown);
+        if (built != room) {
+            registry.putRoom(built);
         }
-
-        // A room entered from a room door carries the Workbay the first entry recorded, so a walk
-        // through three doors still knows the way back to the screen it started at.
-        java.util.Optional<net.minecraft.core.GlobalPos> from = isInside(player)
-            ? player.getData(WBAttachments.ROOM_RETURN.get()).workbay()
-            : java.util.Optional.ofNullable(workbay);
-        int bay = isInside(player)
-            ? player.getData(WBAttachments.ROOM_RETURN.get()).bay() : selectedBay;
-        player.setData(WBAttachments.ROOM_RETURN.get(), new Inside(grown.id(),
-            player.level().dimension(), player.position(), player.getYRot(), player.getXRot(),
-            from, bay));
-        Vec3 spot = RoomGeometry.entrySpot(grown.region());
+        player.setData(WBAttachments.ROOM_RETURN.get(), new Inside(built.id()));
+        Vec3 spot = RoomGeometry.entrySpot(built.region());
         BayVisit.admit(player, () -> player.teleportTo(backshop, spot.x, spot.y, spot.z, Set.of(),
             RoomGeometry.ENTRY_YAW, 0.0F));
         if (!player.level().dimension().equals(WorkbayDimensions.BACKSHOP)) {
@@ -194,51 +156,33 @@ public final class RoomVisit {
     }
 
     /**
-     * The room in slot {@code index}, minting rooms up to it as needed.
+     * Gets an occupant out. Silent and harmless if they are not one.
      *
-     * <p>Regions are allocated here rather than at install (SPEC.md §8), so a Room Frame that is
-     * fitted and never used spends nothing. Slots below the one asked for are minted too, because
-     * a room's slot is its position in the list and skipping one would make the fourth room the
-     * second next time it is opened.
-     */
-    private static RoomRecord roomSlot(RoomRegistry registry, WorkbayRecord record, int index) {
-        java.util.List<UUID> ids = new java.util.ArrayList<>(record.rooms());
-        boolean changed = false;
-        while (ids.size() <= index) {
-            ids.add(registry.createRoom().id());
-            changed = true;
-        }
-        if (changed) {
-            registry.put(record.withRooms(ids));
-        }
-        return registry.room(ids.get(index)).orElse(null);
-    }
-
-    /**
-     * Puts an occupant back where they came from. Silent and harmless if they are not one.
-     *
-     * <p>Reads the way home off the <b>player</b>, which is what lets any shell block work with no
-     * Workbay standing in the world at all.
+     * <p><b>Leave always works</b> (SPEC.md §0): the way out is read off the registry, not off a
+     * block, so it works with the Workbay broken, moved, or holding nothing. Where it goes is
+     * {@link RoomHolding#exit}'s answer; a room nested in a room lands the player in the parent
+     * room, beside the Workbay that holds it, and still <em>inside</em> as far as this class is
+     * concerned.
      */
     public static boolean leave(ServerPlayer player) {
         if (!isInside(player)) {
             return false;
         }
-        Inside home = player.getData(WBAttachments.ROOM_RETURN.get());
-        ServerLevel level = player.server.getLevel(home.dimension());
-        if (level == null) {
-            // Their own dimension is gone — a datapack change, most likely. The overworld is a
-            // worse answer than the right one and a much better answer than leaving them sealed in.
-            level = player.server.overworld();
-        }
+        RoomRegistry registry = RoomRegistry.get(player.server);
+        RoomRecord room = registry.room(player.getData(WBAttachments.ROOM_RETURN.get()).room())
+            .orElse(null);
         player.removeData(WBAttachments.ROOM_RETURN.get());
-        ServerLevel back = level;
-        WorkbaySounds.travel(player, () -> player.teleportTo(back, home.where().x, home.where().y,
-            home.where().z, Set.of(), home.yRot(), home.xRot()));
-        // And the screen the player left, back the way a bay visit gives it back. Without this the
-        // way out of a room dropped you in the world with nothing open, so every trip into a room
-        // cost a walk back to the block and a right-click. OPEN_ISSUES #69.
-        home.workbay().ifPresent(at -> BayVisit.oweTheScreen(player, at, home.bay()));
+        RoomHolding.Exit exit = RoomHolding.exit(player, room);
+        WorkbaySounds.travel(player, () -> player.teleportTo(exit.level(), exit.at().x,
+            exit.at().y, exit.at().z, Set.of(), player.getYRot(), player.getXRot()));
+        // Out into the parent room: the record has to say so before the standing rule looks.
+        if (exit.level().dimension().equals(WorkbayDimensions.BACKSHOP)) {
+            registry.roomAt(player.blockPosition()).ifPresent(parent ->
+                player.setData(WBAttachments.ROOM_RETURN.get(), new Inside(parent.id())));
+        }
+        // And the screen of the Workbay the player is now standing beside, the way a bay visit
+        // gives it back. OPEN_ISSUES #69.
+        exit.workbay().ifPresent(at -> BayVisit.oweTheScreen(player, at, exit.bay()));
         return true;
     }
 
@@ -265,11 +209,11 @@ public final class RoomVisit {
         // Removed from the room while they were offline: they must not wake up in it. Checked
         // before the shell is repaired, because repairing a room for somebody who is about to be
         // put out of it is work done for nobody.
-        if (!mayEnter(registry, player.getUUID(), room)) {
+        if (registry.holderOf(room).isPresent() && !mayEnter(registry, player.getUUID(), room)) {
             leave(player);
             return;
         }
-        RoomRecord fixed = RoomBuilder.ensure(backshop, room, room.builtTier());
+        RoomRecord fixed = RoomBuilder.ensure(backshop, room, room.tier());
         if (fixed != room) {
             registry.putRoom(fixed);
         }

@@ -271,17 +271,10 @@ public class WorkbayMenu extends AbstractContainerMenu {
             case ENTER_ROOM -> {
                 // Closing first, for the same reason a bay visit does: the player is about to be
                 // somewhere this menu's stillValid would refuse, and a screen left open over a
-                // teleport is how you get a ghost.
+                // teleport is how you get a ghost. The room is the one in bay `arg`.
                 serverPlayer.closeContainer();
-                com.neryos.workbay.world.RoomVisit.enter(serverPlayer, record, (int) arg,
-                    net.minecraft.core.GlobalPos.of(workbay.getLevel().dimension(),
-                        workbay.getBlockPos()),
-                    selectedBay);
+                com.neryos.workbay.world.RoomVisit.enter(serverPlayer, record, (int) arg);
             }
-            case TOGGLE_ROOM_ANCHOR -> toggleRoomAnchor(serverPlayer, record, (int) arg);
-            case REMOVE_ROOM -> removeRoom(serverPlayer, record, (int) arg);
-            case CYCLE_ROOM_BIOME -> cycleRoomBiome(serverPlayer, record, (int) arg);
-            case CYCLE_ROOM_COLOUR -> cycleRoomColour(serverPlayer, record, (int) arg, back);
             // The biome travels as its own id, never as a position in the list: the picker is
             // searchable, so the row a player clicked is a position in a *filtered* list and the
             // two ends would disagree the moment anybody typed. The colour below still packs an
@@ -598,6 +591,18 @@ public class WorkbayMenu extends AbstractContainerMenu {
             WorkbaySounds.refuse(serverPlayer, verdict.message());
             return;
         }
+        // A room has three refusals of its own -- a copy, a room already in a bay, a cycle --
+        // asked before the block goes down. SPEC.md §0.
+        if (com.neryos.workbay.world.RoomHolding.isRoom(held)) {
+            var why = com.neryos.workbay.world.RoomHolding.refusal(
+                RoomRegistry.get(serverPlayer.server), record,
+                Optional.of(GlobalPos.of(workbay.getLevel().dimension(), workbay.getBlockPos())),
+                held);
+            if (why.isPresent()) {
+                WorkbaySounds.refuse(serverPlayer, why.get());
+                return;
+            }
+        }
         ItemStack one = held.copyWithCount(1);
         // A block whose NBT only an operator may place would be racked *stripped*: SPEC.md §10's
         // step 2 is `BlockItem.updateCustomBlockEntityTag`, which returns false without loading
@@ -621,8 +626,14 @@ public class WorkbayMenu extends AbstractContainerMenu {
             return;
         }
         held.shrink(1);
-        RoomRegistry.get(serverPlayer.server).put(record.withBay(record.bay(selectedBay)
-            .withHosted(Optional.ofNullable(BuiltInRegistries.ITEM.getKey(one.getItem())))));
+        WorkbayRecord racked = record.withBay(record.bay(selectedBay)
+            .withHosted(Optional.ofNullable(BuiltInRegistries.ITEM.getKey(one.getItem()))));
+        RoomRegistry.get(serverPlayer.server).put(racked);
+        if (com.neryos.workbay.world.RoomHolding.isRoom(one)) {
+            // Binds the room to this bay, spends its ticket and brings its Connectors over.
+            com.neryos.workbay.world.RoomHolding.loaded(serverPlayer.server, racked, selectedBay,
+                one);
+        }
         workbay.setChanged();
         // In the machine's own voice, at the Workbay rather than in the Backshop where the block
         // actually landed: the bay is nine hundred chunks away and nobody is standing in it.
@@ -643,9 +654,16 @@ public class WorkbayMenu extends AbstractContainerMenu {
             return;
         }
         WorkbaySounds.ejected(workbay.getLevel(), workbay.getBlockPos(), was);
+        WorkbayRecord emptied = record.withBay(record.bay(selectedBay).withHosted(Optional.empty()));
+        if (record.bay(selectedBay).room().isPresent()) {
+            // Stamps the item with the room and a fresh ticket, and takes the room's Connectors
+            // and their channels with it. A player inside stays inside (SPEC.md §0).
+            emptied = com.neryos.workbay.world.RoomHolding.pulled(serverPlayer.server, emptied,
+                selectedBay, machine);
+        } else {
+            RoomRegistry.get(serverPlayer.server).put(emptied);
+        }
         serverPlayer.getInventory().placeItemBackInInventory(machine);
-        RoomRegistry.get(serverPlayer.server).put(record.withBay(
-            record.bay(selectedBay).withHosted(Optional.empty())));
         workbay.setChanged();
     }
 
@@ -779,14 +797,6 @@ public class WorkbayMenu extends AbstractContainerMenu {
         if (record.refusesNonOwner(serverPlayer)) {
             return;
         }
-        // An Annex Plate with no Room Frame fitted is the "installs and does nothing" failure
-        // SPEC.md §1 warns about: roomCapacity is zero without a Frame, so the plate would be
-        // eaten for a room slot that cannot exist.
-        if (upgrade == WorkbayUpgrade.ANNEX_PLATE && record.upgrades().roomTier() == 0) {
-            WorkbaySounds.refuse(serverPlayer,
-                com.neryos.workbay.WorkbayLang.message("annex_needs_frame"));
-            return;
-        }
         int installed = record.upgrades().installed(upgrade);
         if (installed >= upgrade.max()) {
             WorkbaySounds.refuse(serverPlayer,
@@ -802,97 +812,6 @@ public class WorkbayMenu extends AbstractContainerMenu {
         serverPlayer.getInventory().removeItem(slot, 1);
         RoomRegistry.get(serverPlayer.server).put(record.withUpgrades(record.upgrades().plus(upgrade)));
         WorkbaySounds.upgraded(workbay.getLevel(), workbay.getBlockPos());
-    }
-
-    /**
-     * Switches one room's Anchor. Refused when the network has no Anchor upgrade, when the host has
-     * force loading off, or when the network is already holding as many rooms as it may — the cap
-     * is the number a server owner is actually paying, so it is checked on the click and not read
-     * once at startup.
-     */
-    /**
-     * Gives a room back. OPEN_ISSUES #62: opening one was a one-way door, so a slot opened by a
-     * misplaced click was a slot owned for ever and a network was one room poorer.
-     *
-     * <p>Three refusals before anything is taken down, in the order a player is most likely to hit
-     * them: it is not yours, somebody is standing in it, and <b>there is something in it</b>. The
-     * last is the one that matters -- a room's contents are a build, and this mod does not delete a
-     * player's build to save them a click. Emptying it first is a thing they can do; undoing this
-     * is not.
-     */
-    private void removeRoom(ServerPlayer serverPlayer, WorkbayRecord record, int index) {
-        if (record.refusesNonOwner(serverPlayer)) {
-            return;
-        }
-        com.neryos.workbay.world.RoomRegistry registry =
-            com.neryos.workbay.world.RoomRegistry.get(serverPlayer.server);
-        List<com.neryos.workbay.world.RoomRecord> rooms = registry.roomsOf(record);
-        if (index < 0 || index >= rooms.size()) {
-            return;
-        }
-        com.neryos.workbay.world.RoomRecord room = rooms.get(index);
-        if (!room.built()) {
-            return;
-        }
-        net.minecraft.server.level.ServerLevel backshop =
-            serverPlayer.server.getLevel(com.neryos.workbay.world.WorkbayDimensions.BACKSHOP);
-        if (backshop == null) {
-            return;
-        }
-        // Anybody at all, not just the owner: a guest standing in a room being taken down would be
-        // ejected by the bounds check a tick later, which is a correct answer to the wrong question.
-        boolean occupied = serverPlayer.server.getPlayerList().getPlayers().stream()
-            .anyMatch(other -> com.neryos.workbay.world.RoomVisit.roomOf(other)
-                .map(id -> id.equals(room.id())).orElse(false));
-        if (occupied) {
-            WorkbaySounds.refuse(serverPlayer,
-                com.neryos.workbay.WorkbayLang.message("room_occupied"));
-            return;
-        }
-        var standing = com.neryos.workbay.world.RoomBuilder.firstThingInside(backshop, room);
-        if (standing.isPresent()) {
-            WorkbaySounds.refuse(serverPlayer, com.neryos.workbay.WorkbayLang.message(
-                "room_not_empty", standing.get()));
-            return;
-        }
-        // Its ticket first: a room that is no longer built must not be holding chunks, and
-        // RoomAnchors#apply reads `built` and returns early rather than releasing.
-        com.neryos.workbay.world.RoomRecord released = room.withAnchored(false);
-        registry.putRoom(released);
-        com.neryos.workbay.world.RoomAnchors.apply(backshop, released);
-        com.neryos.workbay.world.RoomBuilder.demolish(backshop, released);
-        registry.putRoom(released.withBuiltTier(0));
-        WorkbaySounds.confirm(serverPlayer,
-            com.neryos.workbay.WorkbayLang.message("room_removed", index + 1),
-            com.neryos.workbay.init.WBSounds.ROOM_RETURNED.get(), 1.0F);
-        refreshNow();
-    }
-
-    private void toggleRoomAnchor(ServerPlayer serverPlayer, WorkbayRecord record, int index) {
-        if (record.refusesNonOwner(serverPlayer)) {
-            return;
-        }
-        com.neryos.workbay.world.RoomRegistry registry =
-            com.neryos.workbay.world.RoomRegistry.get(serverPlayer.server);
-        List<com.neryos.workbay.world.RoomRecord> rooms = registry.roomsOf(record);
-        if (index < 0 || index >= rooms.size()) {
-            return;
-        }
-        com.neryos.workbay.world.RoomRecord room = rooms.get(index);
-        boolean turningOn = !room.anchored();
-        if (turningOn && !com.neryos.workbay.world.RoomAnchors.canAnchorAnother(registry, record, room)) {
-            WorkbaySounds.refuse(serverPlayer,
-                com.neryos.workbay.WorkbayLang.message("anchor_capped",
-                    com.neryos.workbay.config.WorkbayConfig.SERVER.maxAnchoredRoomsPerNetwork.get()));
-            return;
-        }
-        com.neryos.workbay.world.RoomRecord updated = room.withAnchored(turningOn);
-        registry.putRoom(updated);
-        ServerLevel backshop = serverPlayer.server.getLevel(WorkbayDimensions.BACKSHOP);
-        if (backshop != null) {
-            com.neryos.workbay.world.RoomAnchors.apply(backshop, updated);
-        }
-        WorkbaySounds.anchored(workbay.getLevel(), workbay.getBlockPos(), turningOn);
     }
 
     /**
@@ -919,8 +838,8 @@ public class WorkbayMenu extends AbstractContainerMenu {
         }
         com.neryos.workbay.world.RoomRegistry registry =
             com.neryos.workbay.world.RoomRegistry.get(serverPlayer.server);
-        List<com.neryos.workbay.world.RoomRecord> rooms = registry.roomsOf(record);
-        if (index < 0 || index >= rooms.size()) {
+        com.neryos.workbay.world.RoomRecord room = registry.roomInBay(record, index).orElse(null);
+        if (room == null) {
             return;
         }
         ServerPlayer online = serverPlayer.server.getPlayerList().getPlayerByName(name);
@@ -935,7 +854,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
                 com.neryos.workbay.WorkbayLang.message("guest_is_owner"));
             return;
         }
-        registry.putRoom(rooms.get(index).withGuest(profile.getId(), profile.getName(),
+        registry.putRoom(room.withGuest(profile.getId(), profile.getName(),
             com.neryos.workbay.world.RoomGuest.LOOK));
     }
 
@@ -951,68 +870,14 @@ public class WorkbayMenu extends AbstractContainerMenu {
         }
         com.neryos.workbay.world.RoomRegistry registry =
             com.neryos.workbay.world.RoomRegistry.get(serverPlayer.server);
-        List<com.neryos.workbay.world.RoomRecord> rooms = registry.roomsOf(record);
-        if (index < 0 || index >= rooms.size()) {
-            return;
-        }
-        com.neryos.workbay.world.RoomRecord room = rooms.get(index);
-        if (guest < 0 || guest >= room.guests().size()) {
+        com.neryos.workbay.world.RoomRecord room = registry.roomInBay(record, index).orElse(null);
+        if (room == null || guest < 0 || guest >= room.guests().size()) {
             return;
         }
         com.neryos.workbay.world.RoomRecord.Guest who = room.guests().get(guest);
         registry.putRoom(step
             ? room.withGuest(who.id(), who.name(), who.level().step())
             : room.withoutGuest(who.id()));
-    }
-
-    /**
-     * Steps one room's biome and writes it over the room's chunks. Only a built room has chunks to
-     * write, which is also why the button is only drawn on one — an unopened room has no record to
-     * remember the choice on (SPEC.md §8 spends the region on first entry).
-     */
-    private void cycleRoomBiome(ServerPlayer serverPlayer, WorkbayRecord record, int index) {
-        if (record.refusesNonOwner(serverPlayer)) {
-            return;
-        }
-        com.neryos.workbay.world.RoomRegistry registry =
-            com.neryos.workbay.world.RoomRegistry.get(serverPlayer.server);
-        List<com.neryos.workbay.world.RoomRecord> rooms = registry.roomsOf(record);
-        if (index < 0 || index >= rooms.size() || !rooms.get(index).built()) {
-            return;
-        }
-        com.neryos.workbay.world.RoomRecord updated = rooms.get(index).withBiome(
-            com.neryos.workbay.world.RoomBiomes.next(serverPlayer.server, rooms.get(index)));
-        registry.putRoom(updated);
-        ServerLevel backshop = serverPlayer.server.getLevel(WorkbayDimensions.BACKSHOP);
-        if (backshop != null) {
-            com.neryos.workbay.world.RoomBiomes.apply(backshop, updated);
-        }
-    }
-
-    /**
-     * Repaints one room. Only a built room has a shell to paint, which is also why the swatch is
-     * only drawn on one.
-     */
-    private void cycleRoomColour(ServerPlayer serverPlayer, WorkbayRecord record, int index,
-        boolean backwards) {
-        if (record.refusesNonOwner(serverPlayer)) {
-            return;
-        }
-        com.neryos.workbay.world.RoomRegistry registry =
-            com.neryos.workbay.world.RoomRegistry.get(serverPlayer.server);
-        List<com.neryos.workbay.world.RoomRecord> rooms = registry.roomsOf(record);
-        if (index < 0 || index >= rooms.size() || !rooms.get(index).built()) {
-            return;
-        }
-        com.neryos.workbay.world.RoomRecord painted =
-            rooms.get(index).withColour(rooms.get(index).colour().next(backwards));
-        registry.putRoom(painted);
-        ServerLevel backshop = serverPlayer.server.getLevel(WorkbayDimensions.BACKSHOP);
-        if (backshop != null) {
-            // The room's own tier, not the network's: repainting must never also grow it, or a
-            // colour click would rebuild a shell somebody is standing in.
-            com.neryos.workbay.world.RoomBuilder.ensure(backshop, painted, painted.builtTier());
-        }
     }
 
     /**
@@ -1080,8 +945,8 @@ public class WorkbayMenu extends AbstractContainerMenu {
     }
 
     /**
-     * The room at {@code index} if this player may change it, or null. Only a built room has a
-     * shell to paint or chunks to write a biome over.
+     * The room in bay {@code index} if this player may change it, or null. Built or not: a
+     * colour or a biome chosen before the first entry is painted by that entry.
      */
     @Nullable
     private com.neryos.workbay.world.RoomRecord editableRoom(ServerPlayer serverPlayer,
@@ -1089,12 +954,8 @@ public class WorkbayMenu extends AbstractContainerMenu {
         if (record.refusesNonOwner(serverPlayer)) {
             return null;
         }
-        List<com.neryos.workbay.world.RoomRecord> rooms =
-            com.neryos.workbay.world.RoomRegistry.get(serverPlayer.server).roomsOf(record);
-        if (index < 0 || index >= rooms.size() || !rooms.get(index).built()) {
-            return null;
-        }
-        return rooms.get(index);
+        return com.neryos.workbay.world.RoomRegistry.get(serverPlayer.server)
+            .roomInBay(record, index).orElse(null);
     }
 
     // -------------------------------------------------------------- snapshot
@@ -1128,6 +989,12 @@ public class WorkbayMenu extends AbstractContainerMenu {
         }
         if (workbay.workbayId().map(id -> id.equals(target.id())).orElse(false)) {
             return; // already here
+        }
+        // A network moved into a block standing in one of its own rooms is a cycle. SPEC.md §0.
+        if (com.neryos.workbay.world.RoomHolding.wouldCycle(registry, target,
+            GlobalPos.of(workbay.getLevel().dimension(), workbay.getBlockPos()))) {
+            WorkbaySounds.refuse(player, com.neryos.workbay.WorkbayLang.message("room_cycle"));
+            return;
         }
 
         // 1. The block the network is leaving, if it has one. Loaded or not: the record is the
@@ -1279,8 +1146,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
                 link.config().withPlaces(nowhere, nowhere), link.status(), link.targetBlock(),
                 link.targetBay(), link.targetRoom())).toList();
             rooms = rooms.stream().map(room -> new WorkbaySnapshot.Room(room.index(), "",
-                room.interior(), room.chunkCost(), room.built(), room.anchored(), room.biome(),
-                room.colour(), List.of())).toList();
+                room.interior(), room.built(), room.biome(), room.colour(), List.of())).toList();
             connectors = List.of();
         }
 
@@ -1316,32 +1182,17 @@ public class WorkbayMenu extends AbstractContainerMenu {
             .toList();
     }
 
-    /**
-     * One entry per room slot the upgrades entitle this network to, opened or not. An unopened slot
-     * has no record yet — SPEC.md §8 spends the region on first entry — so it reads as zero size
-     * and zero chunks, which is exactly what it costs.
-     */
+    /** One entry per bay holding a room, keyed by the bay. */
     private static List<WorkbaySnapshot.Room> readRooms(ServerPlayer player, WorkbayRecord record) {
         List<WorkbaySnapshot.Room> out = new ArrayList<>();
-        com.neryos.workbay.world.RoomRegistry registry =
-            com.neryos.workbay.world.RoomRegistry.get(player.server);
-        List<com.neryos.workbay.world.RoomRecord> known = registry.roomsOf(record);
-        for (int index = 0; index < record.roomCapacity(); index++) {
-            com.neryos.workbay.world.RoomRecord room = index < known.size() ? known.get(index) : null;
-            String name = room == null ? "" : room.name().orElse("");
-            out.add(new WorkbaySnapshot.Room(index, name,
-                room == null ? 0 : com.neryos.workbay.world.RoomGeometry.interior(room.builtTier()),
-                room == null ? 0 : room.chunkCost(),
-                room != null && room.built(),
-                room != null && room.anchored(),
-                room == null ? "" : room.effectiveBiome().location().toString(),
-                room == null ? com.neryos.workbay.content.room.RoomColour.DEFAULT : room.colour(),
+        com.neryos.workbay.world.RoomRegistry.get(player.server).roomsOf(record)
+            .forEach((bay, room) -> out.add(new WorkbaySnapshot.Room(bay, room.name().orElse(""),
+                room.interior(), room.built(), room.effectiveBiome().location().toString(),
+                room.colour(),
                 // The owner's alone. Anybody may open an unlocked Workbay, so sending every room's
                 // guest list on the snapshot would let one guest read who else was invited to
                 // every other room -- which is the thing the door screen already refuses to do.
-                room == null || !record.owner().equals(player.getUUID())
-                    ? List.of() : room.guests()));
-        }
+                record.owner().equals(player.getUUID()) ? room.guests() : List.of())));
         return out;
     }
 
@@ -1355,6 +1206,11 @@ public class WorkbayMenu extends AbstractContainerMenu {
         if (bay.hosted().isEmpty()) {
             return new WorkbaySnapshot.Bay(index, Optional.empty(), 0, 0,
                 WorkbaySnapshot.State.EMPTY, bay.faces(), bay.name(), bay.redstone());
+        }
+        // A room has no ports and that is not a fault: idle, never inert.
+        if (bay.room().isPresent()) {
+            return new WorkbaySnapshot.Bay(index, bay.hosted(), 0, 0,
+                WorkbaySnapshot.State.IDLE, bay.faces(), bay.name(), bay.redstone());
         }
         int energy = 0;
         int capacity = 0;
@@ -1423,17 +1279,12 @@ public class WorkbayMenu extends AbstractContainerMenu {
      */
     private static Optional<Integer> roomOf(ServerPlayer player, WorkbayRecord record,
         BusConfig link) {
-        if (record.rooms().isEmpty()
-            || !link.connector().dimension().equals(WorkbayDimensions.BACKSHOP)) {
+        if (!link.connector().dimension().equals(WorkbayDimensions.BACKSHOP)) {
             return Optional.empty();
         }
-        java.util.List<com.neryos.workbay.world.RoomRecord> rooms =
-            RoomRegistry.get(player.server).roomsOf(record);
-        for (int index = 0; index < rooms.size(); index++) {
-            com.neryos.workbay.world.RoomRecord room = rooms.get(index);
-            if (room.built() && com.neryos.workbay.world.RoomGeometry.inside(
-                link.connector().pos(), room.region(), room.builtTier())) {
-                return Optional.of(index);
+        for (var entry : RoomRegistry.get(player.server).roomsOf(record).entrySet()) {
+            if (entry.getValue().contains(link.connector().pos())) {
+                return Optional.of(entry.getKey());
             }
         }
         return Optional.empty();

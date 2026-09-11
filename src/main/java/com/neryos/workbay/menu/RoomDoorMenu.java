@@ -1,7 +1,6 @@
 package com.neryos.workbay.menu;
 
 import com.neryos.workbay.init.WBMenus;
-import com.neryos.workbay.world.RoomGeometry;
 import com.neryos.workbay.world.RoomRecord;
 import com.neryos.workbay.world.RoomRegistry;
 import com.neryos.workbay.world.RoomVisit;
@@ -19,7 +18,6 @@ import net.minecraft.world.item.ItemStack;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * The screen a room's wall opens: the way out, and the way to the network's other rooms.
@@ -34,7 +32,7 @@ import java.util.UUID;
  */
 public class RoomDoorMenu extends AbstractContainerMenu {
 
-    /** Every room slot the network owns, and which of them the player is standing in. */
+    /** The rooms in the holder's bays the player may step to, and which of them they are in. */
     public record View(List<WorkbaySnapshot.Room> rooms, int current) {
 
         public static final View EMPTY = new View(List.of(), -1);
@@ -90,9 +88,8 @@ public class RoomDoorMenu extends AbstractContainerMenu {
                     return;
                 }
                 player.closeContainer();
-                // Leaving first, so the return address is the overworld the player came from and
-                // never the room next door: two rooms deep would otherwise send them to a room.
-                RoomVisit.leave(player);
+                // Straight across: the room next door is held by the same Workbay, so Leave from
+                // there goes where Leave from here would have.
                 RoomVisit.enter(player, record, arg);
             }
             default -> { }
@@ -111,12 +108,12 @@ public class RoomDoorMenu extends AbstractContainerMenu {
     public static void open(ServerPlayer player, BlockPos clicked) {
         RoomRegistry registry = RoomRegistry.get(player.server);
         RoomRecord here = RoomVisit.roomOf(player).flatMap(registry::room).orElse(null);
-        WorkbayRecord record = networkOf(player).orElse(null);
-        if (record == null || here == null || !record.rooms().contains(here.id())
-            || !RoomVisit.mayEnter(registry, player.getUUID(), here)) {
+        if (here == null) {
             return;
         }
-        View view = view(player, record, here);
+        // A room in nobody's bay still opens its door: Leave is the whole point of it, and the
+        // list of other rooms is simply empty.
+        View view = view(player, networkOf(player).orElse(null), here);
         player.openMenu(new SimpleMenuProvider(
             (id, inventory, who) -> new RoomDoorMenu(id, view),
             com.neryos.workbay.WorkbayLang.gui("door.title")),
@@ -124,53 +121,38 @@ public class RoomDoorMenu extends AbstractContainerMenu {
     }
 
     /**
-     * The network whose room the player is in. Read from the room they are recorded as occupying
-     * rather than from the block, because that is the record the standing rule already trusts.
-     *
-     * <p><b>Whoever owns it, not whoever is standing in it.</b> It used to search only the records
-     * this player owns, which was fine while the only person who could be in a room was its owner
-     * and is a door that will not open for a guest the moment one exists -- and the way out is on
-     * this screen. Which of the network's rooms the guest may then step to is
-     * {@link RoomVisit#enter}'s question, and it asks it.
+     * The network holding the room the player is in, read from the room they are recorded as
+     * occupying rather than from the block, because that is the record the standing rule already
+     * trusts. Empty for a room that is an item right now.
      */
     private static Optional<WorkbayRecord> networkOf(ServerPlayer player) {
         RoomRegistry registry = RoomRegistry.get(player.server);
-        Optional<UUID> room = RoomVisit.roomOf(player);
-        if (room.isEmpty()) {
-            return Optional.empty();
-        }
-        return registry.all().stream()
-            .filter(record -> record.rooms().contains(room.get()))
-            .findFirst();
+        return RoomVisit.roomOf(player).flatMap(registry::holderOf)
+            .map(RoomRegistry.Holder::network);
     }
 
-    private static View view(ServerPlayer player, WorkbayRecord record, RoomRecord here) {
+    private static View view(ServerPlayer player, @org.jetbrains.annotations.Nullable
+        WorkbayRecord record, RoomRecord here) {
         RoomRegistry registry = RoomRegistry.get(player.server);
-        List<RoomRecord> known = registry.roomsOf(record);
         List<WorkbaySnapshot.Room> rooms = new java.util.ArrayList<>();
         int current = -1;
-        for (int index = 0; index < record.roomCapacity(); index++) {
-            RoomRecord room = index < known.size() ? known.get(index) : null;
+        if (record == null) {
+            return new View(rooms, current);
+        }
+        for (var entry : registry.roomsOf(record).entrySet()) {
+            RoomRecord room = entry.getValue();
             // Only the rooms this player may be in. A guest invited to one room is looking at a
             // list of doors, and every one of them he cannot open is the name of a room he was
-            // never told about -- the invitation was to a room, not to the network. An unopened
-            // slot is nobody's room yet, so it stays on the list for the owner and for nobody else.
-            if (room != null && !RoomVisit.mayEnter(registry, player.getUUID(), room)) {
+            // never told about -- the invitation was to a room, not to the network.
+            if (!RoomVisit.mayEnter(registry, player.getUUID(), room)) {
                 continue;
             }
-            if (room == null && !record.owner().equals(player.getUUID())) {
-                continue;
-            }
-            if (room != null && room.id().equals(here.id())) {
+            if (room.id().equals(here.id())) {
                 current = rooms.size();
             }
-            rooms.add(new WorkbaySnapshot.Room(index, room == null ? "" : room.name().orElse(""),
-                room == null ? 0 : RoomGeometry.interior(room.builtTier()),
-                room == null ? 0 : room.chunkCost(),
-                room != null && room.built(),
-                room != null && room.anchored(),
-                room == null ? "" : room.effectiveBiome().location().toString(),
-                room == null ? com.neryos.workbay.content.room.RoomColour.DEFAULT : room.colour(),
+            rooms.add(new WorkbaySnapshot.Room(entry.getKey(), room.name().orElse(""),
+                room.interior(), room.built(), room.effectiveBiome().location().toString(),
+                room.colour(),
                 // Never to the door screen. It is a list of doors, and a guest list on it would be
                 // this room telling one guest who else was invited.
                 List.of()));

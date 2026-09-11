@@ -279,7 +279,7 @@ public class ConnectorTests {
                 java.util.UUID.randomUUID(), "tester", false,
                 new net.minecraft.world.level.ChunkPos(0, 0),
                 com.neryos.workbay.world.WorkbayRecord.Upgrades.NONE,
-                java.util.Optional.empty(), java.util.List.of(), java.util.List.of(), saved, 1,
+                java.util.Optional.empty(), java.util.List.of(), saved, 1,
                 java.util.List.of());
 
             helper.assertValueEqual(record.buses().stream()

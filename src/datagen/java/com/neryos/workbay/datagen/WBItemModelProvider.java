@@ -17,16 +17,15 @@ public class WBItemModelProvider extends ItemModelProvider {
     @Override
     protected void registerModels() {
         blockItem(WBBlocks.WORKBAY.getId().getPath());
+        blockItem(WBBlocks.ROOM.getId().getPath());
+        blockItem(WBBlocks.WIDE_ROOM.getId().getPath());
+        blockItem(WBBlocks.VAST_ROOM.getId().getPath());
 
         // SPEC.md §7: Shopsteel reads as a material rather than a tool, Plates are flat and
         // stacked, Frames are open squares. tools/make-art.py draws all six.
         flatItem(WBItems.SHOPSTEEL.getId().getPath());
         flatItem(WBItems.HOUSING.getId().getPath());
         flatItem(WBItems.EXPANSION_PLATE.getId().getPath());
-        flatItem(WBItems.ROOM_FRAME.getId().getPath());
-        flatItem(WBItems.WIDE_ROOM_FRAME.getId().getPath());
-        flatItem(WBItems.VAST_ROOM_FRAME.getId().getPath());
-        flatItem(WBItems.ANNEX_PLATE.getId().getPath());
         flatItem(WBItems.ANCHOR.getId().getPath());
         flatItem(WBItems.RESONATOR.getId().getPath());
         flatItem(WBItems.IMPELLER.getId().getPath());

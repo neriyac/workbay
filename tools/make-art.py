@@ -1463,9 +1463,10 @@ ITEMS = {
                  "................",
                  "................"],
 
-    # Three room frames, and the whole of what tells them apart is how much room is inside. Same
-    # steel, same lit interior, three sizes -- which is the fact the row is reporting.
-    "room_frame": ["................",
+    # The three rooms, as the block a bay hosts (SPEC.md section 0): a steel frame around a lit
+    # interior, and the whole of what tells them apart is how much room is inside. Written to
+    # textures/block, cube_all, so the item is the cube.
+    "room": ["................",
                    "................",
                    "................",
                    "................",
@@ -1482,7 +1483,7 @@ ITEMS = {
                    "................",
                    "................"],
 
-    "wide_room_frame": ["................",
+    "wide_room": ["................",
                         "................",
                         "..SSSSSSSSSSSS..",
                         "..SCCCCCCCCCCS..",
@@ -1499,7 +1500,7 @@ ITEMS = {
                         "................",
                         "................"],
 
-    "vast_room_frame": [".SSSSSSSSSSSSSS.",
+    "vast_room": [".SSSSSSSSSSSSSS.",
                         ".SCCCCCCCCCCCCS.",
                         ".SCCCCCCCCCCCCS.",
                         ".SCCCCCCCCCCCCS.",
@@ -1516,24 +1517,6 @@ ITEMS = {
                         ".SSSSSSSSSSSSSS.",
                         "................"],
 
-    # The Annex Plate: the same plate as the Expansion, carrying a room instead of a plus, because
-    # what it buys is one more room and not one more bay.
-    "annex_plate": ["................",
-                    "................",
-                    "...SSSSSSSSSS...",
-                    "..SSSSSSSSSSSS..",
-                    "..SSCCCCCCCCSS..",
-                    "..SSCSSSSSSCSS..",
-                    "..SSCSSSSSSCSS..",
-                    "..SSCCCCCCCCSS..",
-                    "..SSSSSSSSSSSS..",
-                    "..ssssssssssss..",
-                    "..SSSSSSSSSSSS..",
-                    "..ssssssssssss..",
-                    "..SSSSSSSSSSSS..",
-                    "...SSSSSSSSSS...",
-                    "................",
-                    "................"],
 }
 ITEMS["anchor"] = None       # the screen icon, drawn once and used in both places
 
@@ -1555,13 +1538,18 @@ def _on_panel(img, ground=PANEL):
     return out
 
 
+ROOM_BLOCKS = ("room", "wide_room", "vast_room")
+
+
 def write_items(root):
-    """Every upgrade sprite into assets/workbay/textures/item."""
+    """Every upgrade sprite into assets/workbay/textures/item, and the room cubes into
+    textures/block beside it."""
     for name, rows in ITEMS.items():
         art = icon("ANCHOR") if rows is None else shade(rows)
         if art.size != (16, 16):
             raise SystemExit("%s is %dx%d; every sprite is 16x16" % ((name,) + art.size))
-        art.save(os.path.join(root, name + ".png"))
+        where = os.path.join(os.path.dirname(root), "block") if name in ROOM_BLOCKS else root
+        art.save(os.path.join(where, name + ".png"))
     return len(ITEMS)
 
 

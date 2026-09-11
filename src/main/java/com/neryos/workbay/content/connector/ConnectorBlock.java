@@ -18,6 +18,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.BaseEntityBlock;
@@ -112,9 +113,11 @@ public class ConnectorBlock extends BaseEntityBlock {
         BlockState state = defaultBlockState().setValue(FACING, context.getClickedFace().getOpposite());
         Player player = context.getPlayer();
         // The network's lock, on the server where the registry is: a Connector paired to somebody
-        // else's locked network is a way into it, and placing one registers it there.
+        // else's locked network is a way into it, and placing one registers it there. Inside a
+        // room the network is the room's holder, whatever the item says (SPEC.md §0).
         if (player instanceof net.minecraft.server.level.ServerPlayer who
-            && networkOf(who.server, context.getItemInHand().get(WBDataComponents.PAIRING.get()))
+            && networkFor(who.server, context.getLevel(), context.getClickedPos(),
+                context.getItemInHand().get(WBDataComponents.PAIRING.get()))
                 .map(record -> record.refuses(who)).orElse(false)) {
             return null;
         }
@@ -153,6 +156,24 @@ public class ConnectorBlock extends BaseEntityBlock {
         return pos.relative(state.getValue(FACING));
     }
 
+    /**
+     * The network a Connector placed at {@code pos} would belong to: the holder of the room it
+     * stands in, or else the network its pairing names.
+     */
+    private static java.util.Optional<WorkbayRecord> networkFor(
+        net.minecraft.server.MinecraftServer server, Level level, BlockPos pos,
+        @Nullable ConnectorPairing pairing) {
+        if (level.dimension().equals(com.neryos.workbay.world.WorkbayDimensions.BACKSHOP)) {
+            com.neryos.workbay.world.RoomRegistry registry =
+                com.neryos.workbay.world.RoomRegistry.get(server);
+            var holder = registry.roomAt(pos).flatMap(registry::holderOf);
+            if (holder.isPresent()) {
+                return holder.map(com.neryos.workbay.world.RoomRegistry.Holder::network);
+            }
+        }
+        return networkOf(server, pairing);
+    }
+
     /** The network a pairing names, through the registry so the Workbay's chunk need not load. */
     public static java.util.Optional<WorkbayRecord> networkOf(
         net.minecraft.server.MinecraftServer server, @Nullable ConnectorPairing pairing) {
@@ -178,6 +199,14 @@ public class ConnectorBlock extends BaseEntityBlock {
             return;
         }
         ConnectorPairing pairing = stack.get(WBDataComponents.PAIRING.get());
+        // In a room, no pairing gesture: the room's holder is the network (SPEC.md §0), and
+        // workbay() below reads it off the room. A room in nobody's bay keeps the Connector on
+        // its own list until it is racked somewhere.
+        if (connector.room().isPresent()) {
+            registerInRoom(level, pos, state, connector,
+                placer instanceof Player player ? player : null, nameOn(stack));
+            return;
+        }
         if (pairing == null) {
             if (placer instanceof Player player) {
                 WorkbaySounds.refuse(player, WorkbayLang.message("connector_unpaired"));
@@ -219,8 +248,12 @@ public class ConnectorBlock extends BaseEntityBlock {
         if (!(level.getBlockEntity(pos) instanceof ConnectorBlockEntity connector)) {
             return InteractionResult.PASS;
         }
+        // Refreshes the pairing off the room first, so a Connector in a room that moved names
+        // the network holding it now.
+        connector.workbay();
         if (connector.pairing().isEmpty()) {
-            WorkbaySounds.refuse(player, WorkbayLang.message("connector_unpaired"));
+            WorkbaySounds.refuse(player, WorkbayLang.message(
+                connector.room().isPresent() ? "connector_room_asleep" : "connector_unpaired"));
             return InteractionResult.CONSUME;
         }
         // The network's lock: its Connectors are its doors too, and this panel renames one.
@@ -243,6 +276,11 @@ public class ConnectorBlock extends BaseEntityBlock {
             && level.getBlockEntity(pos) instanceof ConnectorBlockEntity connector) {
             GlobalPos here = GlobalPos.of(level.dimension(), pos);
             connector.workbay().ifPresent(workbay -> workbay.removeConnectorAt(here));
+            // And off a pulled-out room's own list, where it sits while the room is an item.
+            connector.room().filter(room -> connector.roomHolder().isEmpty()).ifPresent(room ->
+                com.neryos.workbay.world.RoomRegistry.get(((ServerLevel) level).getServer())
+                    .putRoom(room.withConnectors(room.connectors().stream()
+                        .filter(c -> !c.pos().equals(here)).toList())));
         }
         super.onRemove(state, level, pos, newState, movedByPiston);
     }
@@ -252,6 +290,34 @@ public class ConnectorBlock extends BaseEntityBlock {
         Component custom = stack.get(net.minecraft.core.component.DataComponents.CUSTOM_NAME);
         return custom == null ? ""
             : com.neryos.workbay.network.ActionPacket.cleanName(custom.getString());
+    }
+
+    /**
+     * A Connector placed inside a room: onto the holder's list, or onto the room's own while it
+     * is an item, so it is there when the room is racked. SPEC.md §0.
+     */
+    private static void registerInRoom(Level level, BlockPos pos, BlockState state,
+        ConnectorBlockEntity connector, @Nullable Player player, String name) {
+        if (connector.roomHolder().isPresent()) {
+            register(level, pos, state, connector, player, name);
+            return;
+        }
+        BlockPos targetPos = target(state, pos);
+        com.neryos.workbay.world.RoomRecord room = connector.room().orElseThrow();
+        java.util.List<WorkbayRecord.Connector> list = new java.util.ArrayList<>(room.connectors());
+        list.add(new WorkbayRecord.Connector(UUID.randomUUID(),
+            GlobalPos.of(level.dimension(), pos), name,
+            GlobalPos.of(level.dimension(), targetPos),
+            java.util.Optional.ofNullable(
+                net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(
+                    level.getBlockState(targetPos).getBlock()))));
+        com.neryos.workbay.world.RoomRegistry.get(((ServerLevel) level).getServer())
+            .putRoom(room.withConnectors(list));
+        if (player != null) {
+            WorkbaySounds.confirm(player, WorkbayLang.message("connector_in_sleeping_room",
+                level.getBlockState(targetPos).getBlock().getName()),
+                com.neryos.workbay.init.WBSounds.LINKED.get(), 1.0F);
+        }
     }
 
     /** Hands this block to the network as a Connector it owns. No channel: SPEC.md §0. */
@@ -264,7 +330,7 @@ public class ConnectorBlock extends BaseEntityBlock {
             }
             return;
         }
-        ConnectorPairing pairing = connector.pairing().orElseThrow();
+        String network = workbay.record().map(WorkbayRecord::label).orElse("");
         BlockPos targetPos = target(state, pos);
         // Stamped here and nowhere else: this is the one moment the block at the far end is known
         // to be loaded, and from now on the screen can say "Chest" rather than two coordinates and
@@ -277,7 +343,7 @@ public class ConnectorBlock extends BaseEntityBlock {
                     level.getBlockState(targetPos).getBlock()))));
         if (player != null) {
             WorkbaySounds.confirm(player, WorkbayLang.message("connector_linked",
-                level.getBlockState(targetPos).getBlock().getName(), pairing.network()),
+                level.getBlockState(targetPos).getBlock().getName(), network),
                 com.neryos.workbay.init.WBSounds.LINKED.get(), 1.0F);
         }
     }

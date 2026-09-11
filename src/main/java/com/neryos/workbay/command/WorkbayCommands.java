@@ -200,11 +200,8 @@ public class WorkbayCommands {
     }
 
     /**
-     * Puts you in one of the looked-at Workbay's rooms, building it if this is its first visit.
-     *
-     * <p>Step 3 of SPEC.md §16's v2 order: a player can stand in a room before there is a Room
-     * Frame to craft or a ROOMS page to click, which is what "put something standable earliest"
-     * means. It goes when the page lands, and until then it is the only way in.
+     * Puts you in the room standing in bay {@code index} of the looked-at Workbay, building it if
+     * this is its first visit. The bay panel's Enter without the screen.
      */
     private static int room(CommandSourceStack source, int index) {
         if (!(source.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) {
@@ -228,17 +225,11 @@ public class WorkbayCommands {
         if (record.get().refuses(player)) {
             return 0;
         }
-        if (record.get().roomCapacity() == 0) {
-            source.sendFailure(Component.literal(
-                "This network has no rooms. Install a Room Frame on the ROOMS page."));
-            return 0;
-        }
         if (!com.neryos.workbay.world.RoomVisit.enter(player, record.get(), index)) {
             // Deliberately vague about which of the two it was: RoomVisit puts "that room isn't
             // yours" on the action bar itself when that is the reason, and a command that then
-            // adds "no room 2 on this network" is the mod contradicting itself in two places at
-            // once. This covers the other reason -- a slot the network does not have.
-            source.sendFailure(Component.literal("Could not enter room " + index + "."));
+            // adds "no room in bay 2" is the mod contradicting itself in two places at once.
+            source.sendFailure(Component.literal("Could not enter the room in bay " + index + "."));
             return 0;
         }
         return 1;

@@ -613,16 +613,7 @@ public class WorkbayBlockEntity extends BlockEntity {
      * that the machine is unreachable, and the mod does not work outside a test that force-loads
      * the chunk for itself.
      *
-     * <p><b>And a room with a Connector in it, on the same terms.</b> A room is a stage in a chain,
-     * not only a place to stand: a barrel in one feeds the next bay along, and a stage that stops
-     * when nobody is looking at it is not a stage. The same decision applied twice costs a server
-     * nothing it was not already paying — a hosted machine costs what it would cost on the floor,
-     * and so does a barrel in a room. Compact Machines does not do this, which is why their rooms
-     * need a chunkloader and this mod's do not; the Anchor is left with one clear job, which is
-     * running the room while <em>nobody is online at all</em>.
-     *
-     * <p>A room with no Connector in it is not mirrored. Nothing in it can do anything, so loading
-     * it would be a ticket spent on scenery.
+     * <p><b>And the rooms in its bays, when {@code roomsLoadWithWorkbay} says so.</b> SPEC.md §12.
      *
      * <p>On the tick rather than in {@code onLoad}: forcing sync-loads a chunk in another
      * dimension, which is not something to do from inside a chunk load.
@@ -667,20 +658,20 @@ public class WorkbayBlockEntity extends BlockEntity {
         if (backshop == null || record == null) {
             return;
         }
-        // The steady state of every Workbay there is: one ticket, already held, nothing to
-        // allocate. Without it this method builds a set per tick to answer a question that cannot
-        // have changed.
-        if (mirrored.size() == 1 && mirrored.contains(record.bayColumn())) {
-            return;
-        }
-        // <b>The bay column, and nothing else.</b> Mirroring used to reach into any room holding a
-        // Connector, on the argument that a room is a stage in a chain -- and it is, but the price
-        // was not what the argument assumed: one ticket is a five-by-five square, so a network with
-        // a barrel in a Vast room quietly held forty-nine Backshop chunks that the player never
-        // asked for and no upgrade gated. A machine is what this mod sells; a room is a place you
-        // walk to, and walking to it is what loads it. Neriya's call.
+        // <b>The bay column, and the rooms in its bays only if the server says so.</b> SPEC.md
+        // §0: `roomsLoadWithWorkbay` off is a room that runs while somebody stands in it and
+        // otherwise sleeps; on is every room in a bay held exactly while this block's chunk is,
+        // one chunk each, which is what makes a barrel in a room a stage in a chain. The old
+        // per-room anchor is gone (OPEN_ISSUES #59).
         java.util.Set<net.minecraft.world.level.ChunkPos> wanted =
-            java.util.Set.of(record.bayColumn());
+            new java.util.HashSet<>(java.util.Set.of(record.bayColumn()));
+        if (com.neryos.workbay.config.WorkbayConfig.SERVER.roomsLoadWithWorkbay.get()) {
+            for (com.neryos.workbay.world.RoomRecord room
+                : RoomRegistry.get(server.getServer()).roomsOf(record).values()) {
+                wanted.addAll(com.neryos.workbay.world.RoomGeometry.chunks(room.region(),
+                    room.builtTier()));
+            }
+        }
         if (wanted.equals(mirrored)) {
             return;
         }

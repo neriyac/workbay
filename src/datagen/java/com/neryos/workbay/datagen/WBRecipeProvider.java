@@ -79,16 +79,13 @@ public class WBRecipeProvider extends RecipeProvider {
         upgrade(output, WBItems.EXPANSION_PLATE.get(), Items.IRON_INGOT);
         upgrade(output, WBItems.RESONATOR.get(), Items.ENDER_EYE);
         upgrade(output, WBItems.IMPELLER.get(), Items.BREEZE_ROD);
-        // The room ladder's cores climb, and its first rung is not quartz. A private dimension
-        // gated behind the block you find in the first nether trip was the cheapest gate in the
-        // mod on the most expensive thing in it; the Wide Frame takes the Ancient City trip that
-        // used to be nowhere on this ladder, and the ordering stays monotone.
-        upgrade(output, WBItems.ROOM_FRAME.get(), Items.DIAMOND);
-        upgrade(output, WBItems.WIDE_ROOM_FRAME.get(), Items.ECHO_SHARD);
-        // SPEC.md §3: the Vast Frame carries the mod's rarest gate because it buys the rarest
-        // capability -- 46 blocks square is where a multiblock you built by hand goes.
-        upgrade(output, WBItems.VAST_ROOM_FRAME.get(), Items.NETHER_STAR);
-        upgrade(output, WBItems.ANNEX_PLATE.get(), Items.COPPER_INGOT);
+        // The three rooms, SPEC.md §3: bigger costs more, and all three are survival finds.
+        // A diamond for the small one, an echo shard (an Ancient City trip) for the wide one,
+        // and a Nether Star for the vast one -- the mod's rarest gate on its rarest capability,
+        // a thirteen-block hall for a multiblock built by hand.
+        upgrade(output, WBBlocks.ROOM.get().asItem(), Items.DIAMOND);
+        upgrade(output, WBBlocks.WIDE_ROOM.get().asItem(), Items.ECHO_SHARD);
+        upgrade(output, WBBlocks.VAST_ROOM.get().asItem(), Items.NETHER_STAR);
         // SPEC.md §3: force loading carries the hardest gate in the mod, and a Heart of the Sea is
         // the vanilla one-time find that a Broken Spawner stands in for in a modded pack.
         upgrade(output, WBItems.ANCHOR.get(), Items.HEART_OF_THE_SEA);

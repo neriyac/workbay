@@ -13,7 +13,7 @@
     },
     "has_the_recipe": {
       "conditions": {
-        "recipe": "workbay:annex_plate"
+        "recipe": "workbay:wide_room"
       },
       "trigger": "minecraft:recipe_unlocked"
     }
@@ -26,7 +26,7 @@
   ],
   "rewards": {
     "recipes": [
-      "workbay:annex_plate"
+      "workbay:wide_room"
     ]
   }
 }

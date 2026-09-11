@@ -2,6 +2,7 @@ package com.neryos.workbay.init;
 
 import com.neryos.workbay.Workbay;
 import com.neryos.workbay.content.connector.ConnectorPairing;
+import com.neryos.workbay.content.room.RoomStamp;
 import com.neryos.workbay.content.workbay.WorkbayBinding;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.registries.Registries;
@@ -25,6 +26,13 @@ public class WBDataComponents {
         COMPONENTS.register("pairing", () -> DataComponentType.<ConnectorPairing>builder()
             .persistent(ConnectorPairing.CODEC)
             .networkSynchronized(ConnectorPairing.STREAM_CODEC)
+            .build());
+
+    /** Which room a room item is, and whether it is the real one. {@link RoomStamp}. */
+    public static final DeferredHolder<DataComponentType<?>, DataComponentType<RoomStamp>> ROOM =
+        COMPONENTS.register("room", () -> DataComponentType.<RoomStamp>builder()
+            .persistent(RoomStamp.CODEC)
+            .networkSynchronized(RoomStamp.STREAM_CODEC)
             .build());
 
     public static void register(IEventBus bus) {

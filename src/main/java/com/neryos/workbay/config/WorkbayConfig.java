@@ -41,13 +41,12 @@ import org.apache.commons.lang3.tuple.Pair;
  *       transfer wheel; a free number does not.</li>
  *   <li><b>How many rows one Connector may carry.</b> As many as the player pulls in: each row is
  *       its own channel, and a cap on that is a cap on the product (SPEC.md §0).</li>
- *   <li><b>Room sizes, room biomes, and what may be hosted.</b> Datapack, all three: the Frames are
+ *   <li><b>Room sizes, room biomes, and what may be hosted.</b> Datapack, all three: the rooms are
  *       recipes ({@code data/workbay/recipe/}), biomes are {@code #workbay:room_biomes}, hostability
- *       is §11's tags. A pack drops the Vast Room Frame recipe to cap room size.</li>
- *   <li><b>Rooms as a feature.</b> {@code maxRoomsPerNetwork} stops at 1 rather than 0. A host who
- *       is worried about the <em>chunk</em> cost of rooms sets {@code maxAnchoredRoomsPerNetwork}
- *       to 0, which is the whole bill; a host who wants no private dimensions at all drops the Room
- *       Frame recipe, which is the datapack side of the same line.</li>
+ *       is §11's tags. A pack drops the Vast Room recipe to cap room size.</li>
+ *   <li><b>Rooms as a feature.</b> {@code roomsLoadWithWorkbay} is the whole chunk bill, and it
+ *       ships off; a host who wants no private dimensions at all drops the three room
+ *       recipes, which is the datapack side of the same line.</li>
  *   <li><b>Bay and room geometry</b> — the 8-block bay pitch, the 8-chunk column spacing, the
  *       512-block room region spacing. Baked into every saved world: changing one moves bays and
  *       rooms that already exist.</li>
@@ -77,11 +76,10 @@ public class WorkbayConfig {
     public static class Server {
         public final ModConfigSpec.BooleanValue allowAnchors;
         public final ModConfigSpec.IntValue maxAnchoredWorkbaysPerPlayer;
-        public final ModConfigSpec.IntValue maxAnchoredRoomsPerNetwork;
         public final ModConfigSpec.IntValue anchorGraceMinutes;
         public final ModConfigSpec.IntValue chunkTicketRadius;
         public final ModConfigSpec.IntValue maxBaysPerWorkbay;
-        public final ModConfigSpec.IntValue maxRoomsPerNetwork;
+        public final ModConfigSpec.BooleanValue roomsLoadWithWorkbay;
         public final ModConfigSpec.BooleanValue allowCrossDimensionLinks;
         public final ModConfigSpec.BooleanValue blockSounds;
         public final ModConfigSpec.IntValue maxNetworksPerPlayer;
@@ -116,8 +114,7 @@ public class WorkbayConfig {
             allowAnchors = builder
                 .comment("Controls whether the Anchor upgrade does anything. With this disabled the",
                     "Anchor can still be crafted and installed, but nothing is ever kept loaded",
-                    "while nobody is there: no anchored room, and no Workbay running while its",
-                    "owner is away. The bay column is still mirrored, which costs no chunk a",
+                    "while nobody is there: no Workbay running while its owner is away. The bay column is still mirrored, which costs no chunk a",
                     "player is not already loading by standing at the Workbay.")
                 .define("allowAnchors", true);
 
@@ -126,21 +123,12 @@ public class WorkbayConfig {
                     "install but stay inactive.")
                 .defineInRange("maxAnchoredWorkbaysPerPlayer", 4, 0, 1024);
 
-            maxAnchoredRoomsPerNetwork = builder
-                .comment("How many of a network's rooms may be anchored at once.",
-                    "This is the number a host actually pays: an occupied room costs no ticket at",
-                    "all, and an anchored one has a footprint of 1, 4 or 9 chunks depending on its",
-                    "Room Frame - each of which reaches chunkTicketRadius further, so at the",
-                    "shipped radius of 1 an anchored room holds 9, 16 or 25 chunks. The room",
-                    "screen prints the real number beside each room.")
-                .defineInRange("maxAnchoredRoomsPerNetwork", 1, 0, 64);
-
             // The ceiling is thirty days rather than one, because "offline chunk loading" is a
             // knob every chunkloader mod in the genre has and a small friends' server wants it
             // long: FTB-Chunks measures the same thing in days. Zero is the strictest setting
             // there is -- tickets drop on the logout tick -- and five is the shipped middle.
             anchorGraceMinutes = builder
-                .comment("How long a player's anchored Workbays and rooms keep running after they",
+                .comment("How long a player's anchored Workbays keep running after they",
                     "log out. This is the offline chunk-loading knob: 0 drops every ticket the",
                     "moment they disconnect, and a large number is how a small server lets a",
                     "friend's base keep running. Nothing is ever lost either way - a released",
@@ -184,19 +172,17 @@ public class WorkbayConfig {
                 .defineInRange("maxBaysPerWorkbay", 8, com.neryos.workbay.world.WorkbayRecord.BASE_BAYS,
                     com.neryos.workbay.world.BayGeometry.MAX_BAYS);
 
-            // The same shape as maxBaysPerWorkbay one line up, and for the same reason: the
-            // Annex Plate ladder is this minus the one room a Room Frame already grants, so the
-            // ceiling and the ladder cannot disagree about where the top is. Here rather than only
-            // in the recipes because a room is a chunk bill: four rooms at the Vast Frame is
-            // 4 x 9 chunks of footprint, and every one of them anchorable.
-            maxRoomsPerNetwork = builder
-                .comment("How many rooms one network may own. A Room Frame grants the first, so",
-                    "this also sets how many Annex Plates can be installed: this minus one.",
-                    "Lowering it never destroys a Plate somebody already spent - the cap is",
-                    "applied where the rooms are counted, not where one is installed.")
-                .defineInRange("maxRoomsPerNetwork",
-                    com.neryos.workbay.world.RoomGeometry.MAX_ROOMS, 1,
-                    com.neryos.workbay.world.RoomGeometry.MAX_ROOMS);
+            // SPEC.md §0 and §12: the one room knob. Off is the cheap setting -- a room runs
+            // while a player stands in it, because standing there loads its chunk, and otherwise
+            // sleeps. On mirrors every room in a bay the way the bay column is mirrored: held
+            // exactly while the Workbay's own chunk is, one chunk per room, no ticket a player is
+            // not already paying for at the block. What is gone is the per-room anchor (#59).
+            roomsLoadWithWorkbay = builder
+                .comment("Whether the rooms in a Workbay's bays stay loaded while the Workbay's own",
+                    "chunk is. Off (default): a room runs only while somebody is standing in it.",
+                    "On: each room in a bay is one more loaded chunk for as long as the Workbay",
+                    "is, so machines inside rooms keep running while the player is at the block.")
+                .define("roomsLoadWithWorkbay", false);
 
             // The Resonator's switch, the same shape as allowAnchors: always register the item and
             // gate its behaviour, never the registry (SPEC.md §13). A host who does not want a

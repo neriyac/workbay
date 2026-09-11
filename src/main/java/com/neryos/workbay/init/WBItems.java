@@ -29,28 +29,11 @@ public class WBItems {
         ITEMS.registerSimpleItem("impeller", new Item.Properties());
 
     /**
-     * The room line. Three Frames rather than one that levels up, because "highest wins" is a
-     * cheaper thing to explain than an item that behaves differently depending on what you already
-     * own — and each is its own recipe, which is where the material ladder lives.
-     */
-    public static final DeferredItem<Item> ROOM_FRAME =
-        ITEMS.registerSimpleItem("room_frame", new Item.Properties());
-
-    public static final DeferredItem<Item> WIDE_ROOM_FRAME =
-        ITEMS.registerSimpleItem("wide_room_frame", new Item.Properties());
-
-    public static final DeferredItem<Item> VAST_ROOM_FRAME =
-        ITEMS.registerSimpleItem("vast_room_frame", new Item.Properties());
-
-    /**
      * Force loading, which is the thing server owners actually care about — so SPEC.md §3 gives it
      * the hardest gate in the mod and §12 makes it a switch a host can turn off entirely.
      */
     public static final DeferredItem<Item> ANCHOR =
         ITEMS.registerSimpleItem("anchor", new Item.Properties());
-
-    public static final DeferredItem<Item> ANNEX_PLATE =
-        ITEMS.registerSimpleItem("annex_plate", new Item.Properties());
 
     public static void register(IEventBus bus) {
         ITEMS.register(bus);

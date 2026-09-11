@@ -8,6 +8,7 @@ import com.neryos.workbay.init.WBBlockEntities;
 import com.neryos.workbay.init.WBBlocks;
 import com.neryos.workbay.init.WBDataComponents;
 import com.neryos.workbay.config.WorkbayConfig;
+import com.neryos.workbay.world.RoomHolding;
 import com.neryos.workbay.world.RoomRegistry;
 import com.neryos.workbay.world.WorkbayRecord;
 import net.minecraft.ChatFormatting;
@@ -142,6 +143,16 @@ public class WorkbayBlock extends BaseEntityBlock {
             && registry.ownedBy(ownerId).size() < WorkbayConfig.SERVER.maxNetworksPerPlayer.get()) {
             record = registry.create(ownerId, ownerName, server.getRandom());
             minted = true;
+        }
+
+        // A network standing inside one of its own rooms is a room inside itself, and Leave would
+        // have no way out (SPEC.md §0). The block stands holding nothing, and says why.
+        if (record != null && RoomHolding.wouldCycle(registry, record,
+            GlobalPos.of(server.dimension(), pos))) {
+            if (placer instanceof Player player) {
+                WorkbaySounds.refuse(player, WorkbayLang.message("room_cycle"));
+            }
+            return;
         }
 
         // 4. Otherwise nothing at all, and the block says so when it is opened.

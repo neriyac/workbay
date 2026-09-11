@@ -67,9 +67,8 @@ public record WorkbaySnapshot(
      */
     boolean remoteScreens,
     /**
-     * This network's rooms, in slot order, one entry per slot the upgrades entitle it to —
-     * including the ones nobody has opened yet, which is what {@code built} is false for. On the
-     * snapshot because the page has to price a room before it exists.
+     * The rooms standing in this network's bays, one entry per bay that holds one, keyed by the
+     * bay. {@code built} is false for a room nobody has entered yet.
      */
     List<Room> rooms,
     /**
@@ -150,18 +149,14 @@ public record WorkbaySnapshot(
     ).apply(i, WorkbaySnapshot::new));
 
     /**
-     * One room slot, as the ROOMS page needs it. {@code interior} and {@code chunkCost} are what
-     * the room <b>is</b>, not what the network's Frame entitles it to: an unopened slot is 0 and 0
-     * and says {@code Empty}, and a room built before an upgrade still reads its own size until
-     * somebody walks back into it and it grows.
-     */
-    /**
-     * {@code biome} is the biome's id, not its name: the client turns it into
+     * One room, as the bay panel draws it; {@code index} is the bay it stands in.
+     *
+     * <p>{@code biome} is the biome's id, not its name: the client turns it into
      * {@code biome.<namespace>.<path>}, which is the key every biome in every mod already has, so
      * the row names a modded biome correctly without this mod shipping a string for it.
      */
-    public record Room(int index, String name, int interior, int chunkCost, boolean built,
-        boolean anchored, String biome, com.neryos.workbay.content.room.RoomColour colour,
+    public record Room(int index, String name, int interior, boolean built,
+        String biome, com.neryos.workbay.content.room.RoomColour colour,
         /**
          * Who has been invited into this room, in the order the room lists them, so the screen can
          * name each one and step its level. Only ever this network's own rooms travel on a
@@ -172,9 +167,7 @@ public record WorkbaySnapshot(
             Codec.INT.fieldOf("Index").forGetter(Room::index),
             Codec.STRING.fieldOf("Name").forGetter(Room::name),
             Codec.INT.fieldOf("Interior").forGetter(Room::interior),
-            Codec.INT.fieldOf("ChunkCost").forGetter(Room::chunkCost),
             Codec.BOOL.fieldOf("Built").forGetter(Room::built),
-            Codec.BOOL.fieldOf("Anchored").forGetter(Room::anchored),
             Codec.STRING.optionalFieldOf("Biome", "").forGetter(Room::biome),
             com.neryos.workbay.content.room.RoomColour.CODEC.optionalFieldOf("Colour",
                 com.neryos.workbay.content.room.RoomColour.DEFAULT).forGetter(Room::colour),
@@ -194,9 +187,9 @@ public record WorkbaySnapshot(
     /**
      * What a room is called wherever it is named: the name the player gave it, or its slot.
      *
-     * <p>Here rather than on ROOMS because three screens say it now — the ROOMS row, a LINKS row
-     * into that room, and the flow map's node for it — and a room called "Ore Room" on one page
-     * and "Room 2" on another is two rooms as far as the player can tell.
+     * <p>Here because three screens say it — the bay panel, a LINKS row into that room, and the
+     * flow map's node for it — and a room called "Ore Room" on one page and "Room 2" on another
+     * is two rooms as far as the player can tell.
      */
     public net.minecraft.network.chat.Component roomLabel(int index) {
         String named = rooms.stream().filter(room -> room.index() == index)

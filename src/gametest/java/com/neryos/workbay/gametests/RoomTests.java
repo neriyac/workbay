@@ -39,15 +39,16 @@ import net.neoforged.testframework.gametest.StructureTemplateBuilder;
 @ForEachTest(groups = "room")
 public class RoomTests {
 
-    /** A Workbay bound to a mock player, with a Room Frame of the given tier granted. */
+    /** A Workbay bound to a mock player, with a room of the given size racked in bay 0. */
     private record Site(GameTestPlayer player, ServerLevel backshop, WorkbayRecord record,
         Vec3 from, float yRot, float xRot, BlockPos workbayPos) {}
 
     private static Site site(ExtendedGameTestHelper helper, int tier) {
-        return site(helper, tier, 0, 0);
+        return site(helper, tier, 0);
     }
 
-    private static Site site(ExtendedGameTestHelper helper, int tier, int annexPlates, int anchors) {
+    /** {@code extraBays} Expansion Plates on top of the two base bays. */
+    private static Site site(ExtendedGameTestHelper helper, int tier, int extraBays) {
         GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
         BlockPos pos = helper.absolutePos(new BlockPos(0, 1, 0));
         ServerLevel level = helper.getLevel();
@@ -65,134 +66,46 @@ public class RoomTests {
             net.minecraft.nbt.IntTag.valueOf(WorkbayBlockEntity.BUFFER_FE));
         WorkbayRecord record = workbay.record().orElseThrow();
         WorkbayRecord.Upgrades up = record.upgrades();
-        record = record.withUpgrades(new WorkbayRecord.Upgrades(up.expansionPlates(), up.resonators(),
-            anchors, annexPlates, tier, up.impellers()));
+        record = record.withUpgrades(new WorkbayRecord.Upgrades(up.expansionPlates() + extraBays,
+            up.resonators(), up.anchors(), up.impellers()));
         RoomRegistry.get(level.getServer()).put(record);
+        ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+        record = loadRoom(helper, record, 0, roomItem(tier), player);
 
-        return new Site(player, level.getServer().getLevel(WorkbayDimensions.BACKSHOP), record,
-            player.position(), player.getYRot(), player.getXRot(), pos);
+        return new Site(player, backshop, record, player.position(), player.getYRot(),
+            player.getXRot(), pos);
+    }
+
+    /** A fresh room item of one size, the way crafting hands it out. */
+    static ItemStack roomItem(int tier) {
+        return new ItemStack(switch (tier) {
+            case 1 -> WBBlocks.ROOM.get();
+            case 2 -> WBBlocks.WIDE_ROOM.get();
+            default -> WBBlocks.VAST_ROOM.get();
+        });
+    }
+
+    /**
+     * Racks a room item into a bay the way the RACK action does, minus the hand: the same two
+     * calls, in the same order. Returns the record as it now is.
+     */
+    static WorkbayRecord loadRoom(ExtendedGameTestHelper helper, WorkbayRecord record, int bay,
+        ItemStack room, GameTestPlayer player) {
+        ServerLevel backshop = helper.getLevel().getServer().getLevel(WorkbayDimensions.BACKSHOP);
+        helper.assertTrue(com.neryos.workbay.world.BayHosting.rack(backshop, record.bayColumn(),
+            bay, room, player, Direction.NORTH), "racking the room block into bay " + bay);
+        WorkbayRecord racked = record.withBay(record.bay(bay).withHosted(java.util.Optional.of(
+            net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(room.getItem()))));
+        RoomRegistry.get(helper.getLevel().getServer()).put(racked);
+        return com.neryos.workbay.world.RoomHolding.loaded(helper.getLevel().getServer(), racked,
+            bay, room);
     }
 
     private static RoomRecord room(ExtendedGameTestHelper helper, Site site) {
-        RoomRegistry registry = RoomRegistry.get(helper.getLevel().getServer());
-        return registry.roomsOf(registry.byId(site.record().id()).orElseThrow()).getFirst();
+        return rooms(helper, site).get(0);
     }
 
     // ------------------------------------------------------------------ tests
-
-    /**
-     * The whole of step 3: a player is in a room, standing on its floor, and is <b>still there</b>
-     * several ticks later.
-     *
-     * <p>The waiting is the test. SPEC.md §5's standing rule — nobody is in the Backshop without an
-     * open screen — sends a player home on the next tick, and a room's occupant has no screen by
-     * design. Deleting the room case from {@code BayVisit#tick} puts this straight back in the red.
-     */
-    /**
-     * OPEN_ISSUES #62. Opening a room was a one-way door: a slot spent on a misplaced click was a
-     * slot owned for ever, and a network with four rooms and one mistake had three.
-     *
-     * <p>Both halves, because the refusal is the whole design: a room with something in it is
-     * <b>not</b> handed back, because what is in a room is a build and SPEC.md §8 does not delete
-     * one to save a player a click. Empty it and the same click works.
-     */
-    @GameTest
-    @TestHolder(description = "A room is handed back only once it is empty, and the slot comes back with it.")
-    public static void aRoomIsHandedBackOnlyWhenEmpty(final DynamicTest test) {
-        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
-
-        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
-            Site site = site(helper, 1);
-            ServerLevel backshop = site.backshop();
-            helper.assertTrue(RoomVisit.enter(site.player(), site.record(), 0),
-                "opening the room failed");
-            RoomVisit.leave(site.player());
-            RoomRegistry registry = RoomRegistry.get(helper.getLevel().getServer());
-            RoomRecord room = room(helper, site);
-            helper.assertTrue(room.built(), "the room was not built by entering it");
-
-            // Something of the player's, one block inside the door.
-            BlockPos inside = RoomGeometry.origin(room.region()).offset(2, 2, 2);
-            backshop.setBlock(inside, Blocks.CHEST.defaultBlockState(), 3);
-
-            WorkbayBlockEntity workbay =
-                (WorkbayBlockEntity) helper.getLevel().getBlockEntity(site.workbayPos());
-            com.neryos.workbay.menu.WorkbayMenu menu = new com.neryos.workbay.menu.WorkbayMenu(1, site.player().getInventory(), workbay,
-                com.neryos.workbay.menu.WorkbayMenu.build(workbay, site.player(), 0));
-            menu.act(com.neryos.workbay.menu.WorkbayAction.REMOVE_ROOM, 0, java.util.Optional.empty());
-            helper.assertTrue(room(helper, site).built(),
-                "a room with a chest in it was handed back anyway, which throws away a build");
-            helper.assertTrue(backshop.getBlockState(inside).is(Blocks.CHEST),
-                "the chest inside the room");
-
-            backshop.setBlock(inside, Blocks.AIR.defaultBlockState(), 3);
-            menu.act(com.neryos.workbay.menu.WorkbayAction.REMOVE_ROOM, 0, java.util.Optional.empty());
-            helper.assertFalse(room(helper, site).built(),
-                "an empty room was still not handed back, so the slot is spent for ever");
-            helper.assertTrue(
-                backshop.getBlockState(RoomGeometry.origin(room.region())).isAir(),
-                "the shell is still standing after the room was handed back");
-            helper.succeed();
-        });
-    }
-
-    /**
-     * Night 2026-09-11, 1B #10a. The emptiness check scanned blocks; an item on the floor, an item
-     * frame, a chest minecart are not blocks, so the room was handed back with them in it and
-     * {@code demolish} took the floor out from under them -- the Backshop's floor is the bottom
-     * of the world. Same fixture as above with an item entity in place of the chest.
-     */
-    @GameTest
-    @TestHolder(description = "A room with an item lying on its floor is not handed back, so the item is not dropped into the void.")
-    public static void aRoomWithALooseItemInItIsNotHandedBack(final DynamicTest test) {
-        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
-
-        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
-            Site site = site(helper, 1);
-            ServerLevel backshop = site.backshop();
-            helper.assertTrue(RoomVisit.enter(site.player(), site.record(), 0),
-                "opening the room failed");
-            RoomVisit.leave(site.player());
-            RoomRecord room = room(helper, site);
-            helper.assertTrue(room.built(), "the room was not built by entering it");
-
-            BlockPos inside = RoomGeometry.origin(room.region()).offset(2, 1, 2);
-            // Nobody is in the room, so its chunk would unload and an entity in an unloaded chunk
-            // is invisible to getEntities -- the assertion's and the mod's alike.
-            net.minecraft.world.level.ChunkPos chunk = new net.minecraft.world.level.ChunkPos(inside);
-            backshop.setChunkForced(chunk.x, chunk.z, true);
-            net.minecraft.world.entity.item.ItemEntity dropped =
-                new net.minecraft.world.entity.item.ItemEntity(backshop, inside.getX() + 0.5,
-                    inside.getY() + 0.1, inside.getZ() + 0.5, new ItemStack(Items.IRON_INGOT, 64));
-            backshop.addFreshEntity(dropped);
-
-            WorkbayBlockEntity workbay =
-                (WorkbayBlockEntity) helper.getLevel().getBlockEntity(site.workbayPos());
-            com.neryos.workbay.menu.WorkbayMenu menu = new com.neryos.workbay.menu.WorkbayMenu(1,
-                site.player().getInventory(), workbay,
-                com.neryos.workbay.menu.WorkbayMenu.build(workbay, site.player(), 0));
-            menu.act(com.neryos.workbay.menu.WorkbayAction.REMOVE_ROOM, 0, java.util.Optional.empty());
-
-            helper.startSequence()
-                .thenIdle(60)
-                .thenExecute(() -> {
-                    int ingots = 0;
-                    for (net.minecraft.world.entity.item.ItemEntity entity : backshop.getEntitiesOfClass(
-                        net.minecraft.world.entity.item.ItemEntity.class,
-                        RoomGeometry.interiorBox(room.region(), 1).inflate(1, 64, 1))) {
-                        if (entity.getItem().is(Items.IRON_INGOT)) {
-                            ingots += entity.getItem().getCount();
-                        }
-                    }
-                    helper.assertValueEqual(ingots, 64,
-                        "iron ingots still lying in the room after Remove Room was pressed");
-                    helper.assertTrue(room(helper, site).built(),
-                        "a room with an item on its floor was handed back");
-                    backshop.setChunkForced(chunk.x, chunk.z, false);
-                })
-                .thenSucceed();
-        });
-    }
 
     @GameTest
     @TestHolder(description = "A player enters a room, stands on its floor, and is still in it ticks later.")
@@ -259,7 +172,7 @@ public class RoomTests {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
 
         test.onGameTest(ExtendedGameTestHelper.class, helper -> {
-            Site site = site(helper, 1);
+            Site site = site(helper, 2);
             helper.assertTrue(RoomVisit.enter(site.player(), site.record(), 0), "entering was refused");
             RoomRecord room = room(helper, site);
             BlockPos origin = RoomGeometry.origin(room.region());
@@ -296,10 +209,10 @@ public class RoomTests {
 
             helper.assertTrue(site.player().level().dimension().equals(helper.getLevel().dimension()),
                 "the player is in " + site.player().level().dimension().location() + ", not back home");
-            helper.assertTrue(site.player().position().distanceTo(site.from()) < 0.001,
-                "the player came back to " + site.player().position() + " instead of " + site.from());
-            helper.assertTrue(site.player().getYRot() == site.yRot()
-                && site.player().getXRot() == site.xRot(), "the player came back facing the wrong way");
+            // Beside the Workbay holding the room (SPEC.md §0), not where they came in from.
+            helper.assertTrue(site.player().blockPosition().distManhattan(site.workbayPos()) <= 4,
+                "the player came out at " + site.player().position() + ", not beside the Workbay at "
+                    + site.workbayPos());
             helper.assertFalse(RoomVisit.isInside(site.player()),
                 "the player is still recorded as being in a room after leaving");
             helper.succeed();
@@ -309,70 +222,43 @@ public class RoomTests {
     // ------------------------------------------------- a room is a stage
 
     /**
-     * <b>A room with a Connector in it is loaded exactly while its Workbay's chunk is.</b>
-     * <b>A room is never force-loaded off its Workbay, whatever is standing in it.</b>
+     * <b>Whether a room stays loaded is the server's, one knob, and it ships off.</b> SPEC.md §0.
      *
-     * <p>Mirroring used to reach into any room holding a Connector, on the argument that a barrel
-     * in a room is as cheap as a barrel on the floor. It is not: one ticket is a five-by-five
-     * square of loaded chunks, so a Connector in a Vast room quietly bought forty-nine of them
-     * with no upgrade and no way for a host to see it. A machine is what this mod sells and a room
-     * is a place you walk to — walking to it is what loads it.
+     * <p>Off: a room in a bay is not loaded by the Workbay, whatever stands in it -- a Connector, a
+     * chain, anything. On: it is mirrored exactly like the bay column, one chunk. The knob is
+     * read every tick, so both halves run against one room in one test, and the value is put back
+     * to what it was rather than to a literal (OPEN_ISSUES' facts).
      *
-     * <p><b>Neither room is ever built by this test.</b> {@code RoomBuilder} would load the chunk
-     * to lay the shell in it and the positive half would then pass whatever the mod did — so both
-     * rooms are stamped as built in the registry and the shells are never poured. The only thing
-     * in this test that can load a Backshop chunk is the mirroring under test, and the second room
-     * is the proof of that: same tier, same registry, no Connector in it, still cold.
+     * <p>The room is stamped built and never poured: {@code RoomBuilder} would load the chunk to
+     * lay the shell and the positive half would then pass whatever mirroring did.
      */
     @GameTest
-    @TestHolder(description = "Neither a room holding a Connector nor an empty one is force-loaded off the Workbay.")
-    public static void aRoomIsNeverForceLoadedOffTheWorkbay(final DynamicTest test) {
+    @TestHolder(description = "A room in a bay is loaded by the Workbay only when roomsLoadWithWorkbay says so.")
+    public static void aRoomIsLoadedOffTheWorkbayOnlyByConfig(final DynamicTest test) {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
 
         test.onGameTest(ExtendedGameTestHelper.class, helper -> {
-            Site site = site(helper, 1, 1, 0);
+            Site site = site(helper, 1);
             ServerLevel backshop = site.backshop();
             RoomRegistry registry = RoomRegistry.get(helper.getLevel().getServer());
-
-            // Two rooms, both "built" as far as the registry is concerned and neither poured.
-            RoomRecord staged = registry.createRoom().withBuiltTier(1);
-            RoomRecord idle = registry.createRoom().withBuiltTier(1);
+            RoomRecord staged = room(helper, site).withBuiltTier(1);
             registry.putRoom(staged);
-            registry.putRoom(idle);
-            registry.put(registry.byId(site.record().id()).orElseThrow()
-                .withRooms(java.util.List.of(staged.id(), idle.id())));
-
-            net.minecraft.world.level.ChunkPos hot =
-                RoomGeometry.chunks(staged.region(), 1).getFirst();
-            net.minecraft.world.level.ChunkPos cold =
-                RoomGeometry.chunks(idle.region(), 1).getFirst();
+            net.minecraft.world.level.ChunkPos hot = RoomGeometry.chunks(staged.region(), 1).getFirst();
             helper.assertFalse(backshop.getChunkSource().hasChunk(hot.x, hot.z),
-                "the staged room's chunk was already loaded before anything asked for it, so this "
-                    + "test could not tell mirroring from a chunk somebody else pulled in");
-            helper.assertFalse(backshop.getChunkSource().hasChunk(cold.x, cold.z),
-                "the idle room's chunk was already loaded, so the control proves nothing");
-
-            // A Connector standing in the staged room, pointed at whatever is next to it. Nothing
-            // has to be there: the link's existence is what puts the room on the list.
-            BlockPos inside = RoomGeometry.origin(staged.region()).offset(4, 1, 4);
-            WorkbayBlockEntity workbay =
-                (WorkbayBlockEntity) helper.getLevel().getBlockEntity(site.workbayPos());
-            workbay.addBus(com.neryos.workbay.bus.BusConfig.create(java.util.UUID.randomUUID(), 0,
-                com.neryos.workbay.bus.BusConfig.Resource.ITEM,
-                com.neryos.workbay.bus.BusConfig.Mode.INSERT,
-                net.minecraft.core.GlobalPos.of(WorkbayDimensions.BACKSHOP, inside),
-                net.minecraft.core.GlobalPos.of(WorkbayDimensions.BACKSHOP, inside.east())));
+                "the room's chunk was already loaded before anything asked for it");
+            var knob = com.neryos.workbay.config.WorkbayConfig.SERVER.roomsLoadWithWorkbay;
+            boolean was = knob.get();
+            knob.set(false);
 
             helper.startSequence()
                 .thenIdle(4)
-                .thenExecute(() -> {
-                    helper.assertFalse(backshop.getChunkSource().hasChunk(hot.x, hot.z),
-                        "the room holding a Connector was force-loaded off the Workbay, which is "
-                            + "twenty-five chunks nobody asked for and no upgrade gates");
-                    helper.assertFalse(backshop.getChunkSource().hasChunk(cold.x, cold.z),
-                        "a room with nothing in it was loaded, which is a ticket spent on "
-                            + "scenery");
-                })
+                .thenExecute(() -> helper.assertFalse(backshop.getChunkSource().hasChunk(hot.x, hot.z),
+                    "the room was loaded off the Workbay with roomsLoadWithWorkbay off"))
+                .thenExecute(() -> knob.set(true))
+                .thenIdle(4)
+                .thenExecute(() -> helper.assertTrue(backshop.getChunkSource().hasChunk(hot.x, hot.z),
+                    "the room was not loaded off the Workbay with roomsLoadWithWorkbay on"))
+                .thenExecute(() -> knob.set(was))
                 .thenSucceed();
         });
     }
@@ -387,23 +273,21 @@ public class RoomTests {
      * into a room, which is why it rides the snapshot.
      */
     @GameTest
-    @TestHolder(description = "A link whose Connector stands in a room carries that room's slot on the snapshot.")
+    @TestHolder(description = "A link whose Connector stands in a room carries that room's bay on the snapshot.")
     public static void aLinkIntoARoomIsNamedByTheRoom(final DynamicTest test) {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
 
         test.onGameTest(ExtendedGameTestHelper.class, helper -> {
-            Site site = site(helper, 1, 1, 0);
+            Site site = site(helper, 1);
             RoomRegistry registry = RoomRegistry.get(helper.getLevel().getServer());
-            RoomRecord first = registry.createRoom().withBuiltTier(1);
-            RoomRecord second = registry.createRoom().withBuiltTier(1);
-            registry.putRoom(first);
+            loadRoom(helper, registry.byId(site.record().id()).orElseThrow(), 1, roomItem(1),
+                site.player());
+            RoomRecord second = rooms(helper, site).get(1).withBuiltTier(1);
             registry.putRoom(second);
-            registry.put(registry.byId(site.record().id()).orElseThrow()
-                .withRooms(java.util.List.of(first.id(), second.id())));
 
             WorkbayBlockEntity workbay =
                 (WorkbayBlockEntity) helper.getLevel().getBlockEntity(site.workbayPos());
-            BlockPos inSecond = RoomGeometry.origin(second.region()).offset(4, 1, 4);
+            BlockPos inSecond = RoomGeometry.origin(second.region()).offset(2, 1, 2);
             BlockPos outside = helper.absolutePos(new BlockPos(2, 1, 2));
             workbay.addBus(com.neryos.workbay.bus.BusConfig.create(java.util.UUID.randomUUID(), 0,
                 com.neryos.workbay.bus.BusConfig.Resource.ITEM,
@@ -424,8 +308,8 @@ public class RoomTests {
                 .filter(link -> link.config().connector().pos().equals(inSecond))
                 .findFirst().orElseThrow().targetRoom();
             helper.assertTrue(inRoom.isPresent() && inRoom.get() == 1,
-                "the link into room 2 says " + inRoom + " instead of slot 1, so the row and the "
-                    + "flow map fall back to a Backshop coordinate");
+                "the link into the room in bay 2 says " + inRoom + " instead of bay 1, so the row "
+                    + "and the flow map fall back to a Backshop coordinate");
             helper.assertFalse(snapshot.links().stream()
                 .filter(link -> link.config().connector().pos().equals(outside))
                 .findFirst().orElseThrow().targetRoom().isPresent(),
@@ -470,16 +354,15 @@ public class RoomTests {
         test.onGameTest(ExtendedGameTestHelper.class, helper -> {
             ServerLevel level = helper.getLevel();
             GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
-            Site site = site(helper, 1);
+            Site site = site(helper, 1, 2);
             ServerLevel backshop = site.backshop();
             RoomRegistry registry = RoomRegistry.get(level.getServer());
 
-            // Three bays, and a container racked in each. Racked directly, the way BusTests racks:
-            // an Expansion Plate item is not what this test is about.
+            // Three bays with a container racked in each, and the room in the fourth. Racked
+            // directly, the way BusTests racks: an Expansion Plate item is not what this test is
+            // about.
             WorkbayRecord record = registry.byId(site.record().id()).orElseThrow();
-            registry.put(record.withUpgrades(new WorkbayRecord.Upgrades(2, 0, 0, 0, 1, 0)));
-            record = registry.byId(site.record().id()).orElseThrow();
-            for (int bay = 0; bay < 3; bay++) {
+            for (int bay = 1; bay < 4; bay++) {
                 com.neryos.workbay.world.BayHosting.rack(backshop, record.bayColumn(), bay,
                     new ItemStack(Blocks.BARREL), player, Direction.NORTH);
             }
@@ -492,11 +375,12 @@ public class RoomTests {
             ((net.minecraft.world.Container) level.getBlockEntity(source))
                 .setItem(0, new ItemStack(Items.IRON_INGOT, 16));
 
-            // Stage 4: a barrel standing in the room, exactly where a player would put one.
+            // Stage 4: a barrel standing in the room, exactly where a player would put one. The
+            // owner stays inside: with roomsLoadWithWorkbay off (the shipped default) that is what
+            // keeps the room's chunk loaded, and it is the product's own path.
             helper.assertTrue(RoomVisit.enter(site.player(), record, 0), "opening the room failed");
-            RoomVisit.leave(site.player());
             RoomRecord room = room(helper, site);
-            BlockPos barrel = RoomGeometry.origin(room.region()).offset(6, 1, 6);
+            BlockPos barrel = RoomGeometry.origin(room.region()).offset(3, 1, 3);
             backshop.setBlock(barrel, Blocks.BARREL.defaultBlockState(), Block.UPDATE_ALL);
             helper.assertTrue(backshop.getBlockState(barrel).is(Blocks.BARREL),
                 "the barrel is not in the room, so there is no fourth stage");
@@ -504,47 +388,41 @@ public class RoomTests {
             WorkbayBlockEntity workbay =
                 (WorkbayBlockEntity) level.getBlockEntity(site.workbayPos());
 
-            // 1 -> 2. A Connector on the source chest, pulling into bay 1.
-            workbay.addBus(connector(helper, workbay, level, source.above(), Direction.DOWN, 0,
+            // 1 -> 2. A Connector on the source chest, pulling into bay 2.
+            workbay.addBus(connector(helper, workbay, level, source.above(), Direction.DOWN, 1,
                 player).withMode(com.neryos.workbay.bus.BusConfig.Mode.EXTRACT)
                 .withRate(8).withSpeed(10));
 
-            // 2 -> 3. Bay to bay, no Connector anywhere.
-            player.moveTo(site.workbayPos().getX() + 0.5, site.workbayPos().getY(),
-                site.workbayPos().getZ() + 0.5);
-            // The owner's menu: a fresh Workbay is locked, and this test's own player is a stranger.
-            com.neryos.workbay.menu.WorkbayMenu menu = new com.neryos.workbay.menu.WorkbayMenu(1,
-                site.player().getInventory(), workbay,
-                com.neryos.workbay.menu.WorkbayMenu.build(workbay, site.player(), 0));
-            menu.act(com.neryos.workbay.menu.WorkbayAction.SELECT_BAY, 0, java.util.Optional.empty());
-            menu.act(com.neryos.workbay.menu.WorkbayAction.CREATE_INTERNAL_LINK, 1,
-                java.util.Optional.empty());
-            com.neryos.workbay.bus.BusConfig internal = workbay.buses().stream()
-                .filter(com.neryos.workbay.bus.BusConfig::internal).findFirst().orElseThrow();
-            helper.assertValueEqual(internal.target().pos(),
-                com.neryos.workbay.world.BayGeometry.machinePos(record.bayColumn(), 1),
-                "the internal link's target bay");
+            // 2 -> 3. Bay to bay, no Connector anywhere -- made directly, the way the menu's
+            // CREATE_INTERNAL_LINK makes one, because the owner is standing in the room and a
+            // menu's stillValid is eight blocks.
+            com.neryos.workbay.bus.BusConfig internal = com.neryos.workbay.bus.BusConfig
+                .createInternal(java.util.UUID.randomUUID(), 1,
+                    net.minecraft.core.GlobalPos.of(level.dimension(), site.workbayPos()),
+                    net.minecraft.core.GlobalPos.of(WorkbayDimensions.BACKSHOP,
+                        com.neryos.workbay.world.BayGeometry.machinePos(record.bayColumn(), 2)));
             workbay.addBus(internal.withEnabled(true).withRate(8).withSpeed(10));
 
             // 3 -> 4 and 4 -> 5. Two Connectors on the barrel in the room, on two of its faces:
-            // one paired to bay 2 pushing in, one paired to bay 3 pulling out. This is the pair of
-            // links a room-as-a-stage is made of, and both live in another dimension entirely.
-            workbay.addBus(connector(helper, workbay, backshop, barrel.above(), Direction.DOWN, 1,
+            // one added on bay 3 pushing in, one on bay 4 pulling out. This is the pair of links
+            // a room-as-a-stage is made of, and both live in another dimension entirely. In a
+            // room they need no pairing: the room's holder is the network (SPEC.md §0).
+            workbay.addBus(connector(helper, workbay, backshop, barrel.above(), Direction.DOWN, 2,
                 player).withMode(com.neryos.workbay.bus.BusConfig.Mode.INSERT)
                 .withRate(8).withSpeed(10));
-            workbay.addBus(connector(helper, workbay, backshop, barrel.north(), Direction.SOUTH, 2,
+            workbay.addBus(connector(helper, workbay, backshop, barrel.north(), Direction.SOUTH, 3,
                 player).withMode(com.neryos.workbay.bus.BusConfig.Mode.EXTRACT)
                 .withRate(8).withSpeed(10));
 
             // 5 -> 6. Back out to a chest on the floor.
-            workbay.addBus(connector(helper, workbay, level, sink.above(), Direction.DOWN, 2,
+            workbay.addBus(connector(helper, workbay, level, sink.above(), Direction.DOWN, 3,
                 player).withMode(com.neryos.workbay.bus.BusConfig.Mode.INSERT)
                 .withRate(8).withSpeed(10));
 
             helper.assertValueEqual(workbay.buses().size(), 5, "links on the chain");
-            BlockPos bay1 = com.neryos.workbay.world.BayGeometry.machinePos(record.bayColumn(), 0);
-            BlockPos bay2 = com.neryos.workbay.world.BayGeometry.machinePos(record.bayColumn(), 1);
-            BlockPos bay3 = com.neryos.workbay.world.BayGeometry.machinePos(record.bayColumn(), 2);
+            BlockPos bay1 = com.neryos.workbay.world.BayGeometry.machinePos(record.bayColumn(), 1);
+            BlockPos bay2 = com.neryos.workbay.world.BayGeometry.machinePos(record.bayColumn(), 2);
+            BlockPos bay3 = com.neryos.workbay.world.BayGeometry.machinePos(record.bayColumn(), 3);
 
             helper.startSequence()
                 .thenWaitUntil(() -> {
@@ -680,7 +558,7 @@ public class RoomTests {
             registry.putRoom(room.withGuest(guest.getUUID(), guest.getGameProfile().getName(),
                 com.neryos.workbay.world.RoomGuest.USE));
 
-            BlockPos chest = RoomGeometry.origin(room.region()).offset(5, 1, 5);
+            BlockPos chest = RoomGeometry.origin(room.region()).offset(2, 1, 2);
             site.backshop().setBlock(chest, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
             RoomVisit.enter(guest, registry.byId(site.record().id()).orElseThrow(), 0);
             helper.assertTrue(guest.level().dimension().equals(WorkbayDimensions.BACKSHOP),
@@ -731,7 +609,7 @@ public class RoomTests {
             registry.putRoom(room.withGuest(guest.getUUID(), guest.getGameProfile().getName(),
                 com.neryos.workbay.world.RoomGuest.LOOK));
 
-            BlockPos chest = RoomGeometry.origin(room.region()).offset(5, 1, 5);
+            BlockPos chest = RoomGeometry.origin(room.region()).offset(2, 1, 2);
             site.backshop().setBlock(chest, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
             helper.assertTrue(site.backshop().getBlockState(chest).is(Blocks.CHEST),
                 "the chest was not placed, so neither half of this test means anything");
@@ -822,8 +700,8 @@ public class RoomTests {
             Site site = site(helper, 1);
             helper.assertTrue(RoomVisit.enter(site.player(), site.record(), 0), "entering was refused");
             RoomRecord room = room(helper, site);
-            // Straight up, well past a tier-1 room's 14-block ceiling, and still in the Backshop.
-            BlockPos over = RoomGeometry.origin(room.region()).offset(8, 60, 8);
+            // Straight up, well past the room's ceiling, and still in the Backshop.
+            BlockPos over = RoomGeometry.origin(room.region()).offset(2, 60, 2);
             site.player().teleportTo(site.backshop(), over.getX() + 0.5, over.getY(),
                 over.getZ() + 0.5, java.util.Set.of(), 0.0F, 0.0F);
             helper.assertFalse(
@@ -894,94 +772,6 @@ public class RoomTests {
     }
 
     /**
-     * A larger Room Frame grows the room outward and never relocates it. The chest is the point:
-     * SPEC.md §0 says a player must never lose a built room to an upgrade.
-     */
-    @GameTest
-    @TestHolder(description = "A bigger Room Frame grows the room outward, keeping what was built in it.")
-    public static void aRoomGrowsOutwardWithoutLosingWhatIsInIt(final DynamicTest test) {
-        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
-
-        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
-            Site site = site(helper, 1);
-            helper.assertTrue(RoomVisit.enter(site.player(), site.record(), 0), "entering was refused");
-            RoomRecord room = room(helper, site);
-            int region = room.region();
-            BlockPos origin = RoomGeometry.origin(region);
-
-            // A chest against the far wall of the small room, which is where growth would sweep.
-            BlockPos chest = origin.offset(RoomGeometry.interior(1), 1, RoomGeometry.interior(1));
-            site.backshop().setBlock(chest, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
-            BlockPos oldWall = origin.offset(RoomGeometry.footprint(1) - 1, 1, 1);
-            helper.assertTrue(site.backshop().getBlockState(oldWall).is(WBBlocks.ROOM_WALL.get()),
-                "the tier 1 wall is not shell before the upgrade");
-
-            RoomVisit.leave(site.player());
-            RoomBuilder.ensure(site.backshop(), room, 2);
-
-            helper.assertTrue(site.backshop().getBlockState(chest).is(Blocks.CHEST),
-                "the chest was destroyed when the room grew");
-            helper.assertTrue(site.backshop().getBlockState(oldWall).isAir(),
-                "the old wall is still standing inside the bigger room");
-            BlockPos newWall = origin.offset(RoomGeometry.footprint(2) - 1, 1, 1);
-            helper.assertTrue(site.backshop().getBlockState(newWall).is(WBBlocks.ROOM_WALL.get()),
-                "the tier 2 room has no wall at its own footprint");
-            RoomGeometry.doors(region, 2).forEach((at, part) ->
-                helper.assertTrue(site.backshop().getBlockState(at)
-                        .getValue(com.neryos.workbay.content.room.RoomWallBlock.PART) == part,
-                    "the grown room has no door panel at " + at));
-            helper.succeed();
-        });
-    }
-
-    /**
-     * Anchoring is per room and capped, which is the whole answer to "what does a room cost a
-     * server". An Anchor that lit every room the network owns would buy up to thirty-six ticking
-     * chunks with one upgrade and no second thought.
-     */
-    @GameTest
-    @TestHolder(description = "Anchoring is switched on per room and refused past the network's cap.")
-    public static void anchoringIsPerRoomAndCapped(final DynamicTest test) {
-        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
-
-        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
-            Site site = site(helper, 1, 2, 1);
-            // Two rooms, both opened, so both have a shell and a size to charge for.
-            helper.assertTrue(RoomVisit.enter(site.player(), site.record(), 0), "room 1 refused");
-            RoomVisit.leave(site.player());
-            RoomRegistry registry = RoomRegistry.get(helper.getLevel().getServer());
-            WorkbayRecord current = registry.byId(site.record().id()).orElseThrow();
-            helper.assertTrue(RoomVisit.enter(site.player(), current, 1), "room 2 refused");
-            RoomVisit.leave(site.player());
-
-            com.neryos.workbay.menu.WorkbayMenu menu = menu(helper, site);
-            menu.act(com.neryos.workbay.menu.WorkbayAction.TOGGLE_ROOM_ANCHOR, 0,
-                java.util.Optional.empty());
-            helper.assertTrue(rooms(helper, site).get(0).anchored(),
-                "switching room 1's anchor on did nothing");
-
-            // maxAnchoredRoomsPerNetwork defaults to 1: the second must be refused, not silently
-            // taken, because the number is what a host is paying.
-            menu.act(com.neryos.workbay.menu.WorkbayAction.TOGGLE_ROOM_ANCHOR, 1,
-                java.util.Optional.empty());
-            helper.assertFalse(rooms(helper, site).get(1).anchored(),
-                "a second room anchored past the cap of "
-                    + com.neryos.workbay.config.WorkbayConfig.SERVER.maxAnchoredRoomsPerNetwork.get());
-
-            // And the cap is a cap, not a lock: switching the first off frees the slot.
-            menu.act(com.neryos.workbay.menu.WorkbayAction.TOGGLE_ROOM_ANCHOR, 0,
-                java.util.Optional.empty());
-            menu.act(com.neryos.workbay.menu.WorkbayAction.TOGGLE_ROOM_ANCHOR, 1,
-                java.util.Optional.empty());
-            helper.assertFalse(rooms(helper, site).get(0).anchored(),
-                "room 1 is still anchored after being switched off");
-            helper.assertTrue(rooms(helper, site).get(1).anchored(),
-                "room 2 could not be anchored after room 1 was switched off");
-            helper.succeed();
-        });
-    }
-
-    /**
      * The half of the room design a player actually asked for: grass or snow when a machine needs
      * it. What a machine asks is the <b>biome</b>, so the assertion below is not "the record says
      * snowy_plains" but "the level answers cold enough to snow at a block inside the room" -- and
@@ -992,8 +782,8 @@ public class RoomTests {
      * wrote, and they would otherwise carry whatever the Backshop generates.
      */
     @GameTest
-    @TestHolder(description = "A room's biome is written over every one of its chunks, and survives growth.")
-    public static void aRoomsBiomeReachesEveryChunkAndSurvivesGrowth(final DynamicTest test) {
+    @TestHolder(description = "A room's biome is written over its chunk.")
+    public static void aRoomsBiomeReachesItsChunk(final DynamicTest test) {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
 
         test.onGameTest(ExtendedGameTestHelper.class, helper -> {
@@ -1009,8 +799,8 @@ public class RoomTests {
                 "a fresh room is already cold enough to snow, so the test below proves nothing");
 
             com.neryos.workbay.menu.WorkbayMenu menu = menu(helper, site);
-            menu.act(com.neryos.workbay.menu.WorkbayAction.CYCLE_ROOM_BIOME, 0,
-                java.util.Optional.empty());
+            menu.act(com.neryos.workbay.menu.WorkbayAction.SET_ROOM_BIOME, 0,
+                java.util.Optional.empty(), java.util.Optional.of("minecraft:snowy_plains"), false);
             RoomRecord cold = room(helper, site);
             helper.assertTrue(!cold.effectiveBiome().equals(net.minecraft.world.level.biome.Biomes.PLAINS),
                 "cycling the biome left the room on plains");
@@ -1022,13 +812,6 @@ public class RoomTests {
                 BlockPos middle = new BlockPos(pos.getMiddleBlockX(), 2, pos.getMiddleBlockZ());
                 helper.assertTrue(site.backshop().getBiome(middle).value().coldEnoughToSnow(middle),
                     "chunk " + pos + " of the room kept its old biome");
-            }
-
-            RoomBuilder.ensure(site.backshop(), cold, 2);
-            for (net.minecraft.world.level.ChunkPos pos : RoomGeometry.chunks(cold.region(), 2)) {
-                BlockPos middle = new BlockPos(pos.getMiddleBlockX(), 2, pos.getMiddleBlockZ());
-                helper.assertTrue(site.backshop().getBiome(middle).value().coldEnoughToSnow(middle),
-                    "chunk " + pos + " was added by growth and never got the room's biome");
             }
             helper.succeed();
         });
@@ -1214,7 +997,9 @@ public class RoomTests {
         });
     }
 
-    private static java.util.List<RoomRecord> rooms(ExtendedGameTestHelper helper, Site site) {
+    /** The rooms in the site's bays, by bay. */
+    private static java.util.Map<Integer, RoomRecord> rooms(ExtendedGameTestHelper helper,
+        Site site) {
         RoomRegistry registry = RoomRegistry.get(helper.getLevel().getServer());
         return registry.roomsOf(registry.byId(site.record().id()).orElseThrow());
     }
@@ -1226,175 +1011,24 @@ public class RoomTests {
             com.neryos.workbay.menu.WorkbayMenu.build(workbay, site.player(), 0));
     }
 
-    /**
-     * The number on the room screen has to be the number of tickets, so the footprint has to be a
-     * whole number of chunks from a chunk-aligned corner. That is the entire reason the tiers are
-     * 14/30/46 and not 9/17/33.
-     */
-    /**
-     * The room screen prints what anchoring costs, and it was printing the wrong number.
-     *
-     * <p>"Holding 1 chunk loaded" is the count of <b>tickets</b>. A forced chunk drags its
-     * neighbours up to loaded as far as the ticket reaches, so one ticket is a square: the
-     * footprint is still on the line above, and this is the line that says what a server owner is
-     * paying.
-     *
-     * <p><b>And it is now nine and not twenty-five</b>, because {@code chunkTicketRadius} ships at
-     * 1 rather than the 2 NeoForge's controller always asked for (OPEN_ISSUES #60). The shipped
-     * radius is asserted first, so a change back to 2 fails here rather than quietly tripling
-     * every host's bill, and the formula is checked against the one number nobody can argue with.
-     *
-     * <p>Counted in the world rather than computed, so the assertion is over what the chunk source
-     * answers and not over the formula restated.
-     */
-    @GameTest(timeoutTicks = 400)
-    @TestHolder(description = "An anchored room holds exactly the chunks its tooltip prints.")
-    public static void anAnchoredRoomHoldsTheChunksItsTooltipPrints(final DynamicTest test) {
-        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
-
-        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
-            helper.assertValueEqual(com.neryos.workbay.world.WorkbayTickets.radius(), 1,
-                "the shipped chunkTicketRadius");
-            helper.assertValueEqual(RoomGeometry.anchorChunks(1), 9,
-                "chunks one ticket at the shipped radius holds around a one-chunk room");
-
-            Site site = site(helper, 1, 0, 1);
-            helper.assertTrue(RoomVisit.enter(site.player(), site.record(), 0), "room refused");
-            RoomVisit.leave(site.player());
-
-            RoomRegistry registry = RoomRegistry.get(helper.getLevel().getServer());
-            menu(helper, site).act(com.neryos.workbay.menu.WorkbayAction.TOGGLE_ROOM_ANCHOR, 0,
-                java.util.Optional.empty());
-            RoomRecord room = rooms(helper, site).get(0);
-            helper.assertTrue(room.anchored(), "the anchor did not switch on");
-
-            helper.startSequence().thenIdle(20).thenExecute(() ->
-                helper.assertValueEqual(held(site, room), RoomGeometry.anchorChunks(room.chunkCost()),
-                    "chunks the Backshop really holds for an anchored " + room.chunkCost()
-                        + "-chunk room")).thenExecute(() -> registry.putRoom(rooms(helper, site).get(0).withAnchored(false)))
-                .thenExecute(() -> com.neryos.workbay.world.RoomAnchors.apply(site.backshop(),
-                    rooms(helper, site).get(0)))
-                .thenSucceed();
-        });
-    }
-
-    /**
-     * SPEC.md §12's last line, and the bill a server owner is actually afraid of: <b>an Anchor
-     * holds nothing while its owner is offline.</b>
-     *
-     * <p>Counted in the world on both sides of the boundary rather than asserted off the flag,
-     * because "anchored" and "loaded now" are two different words on purpose — the room stays
-     * anchored the whole way through this test and the chunks do not.
-     *
-     * <p>The logout is the real one: {@code disconnectGameTest} goes through
-     * {@code PlayerList#remove}, which is what fires {@code PlayerLoggedOutEvent} for a real
-     * player. The return cannot be, because a disconnected mock player cannot log in again — so the
-     * network is handed to a second player who <em>is</em> online and {@code resume} is called by
-     * hand, which is the one line {@code onLogin} consists of.
-     *
-     * <p>{@code anchorGraceMinutes} is set to zero for the test. At the shipped five it would have
-     * to idle six thousand ticks to see anything, and the grace itself is arithmetic on a game
-     * time, not behaviour.
-     */
-    @GameTest(timeoutTicks = 600)
-    @TestHolder(description = "An anchored room holds no chunks while its owner is offline.")
-    public static void anAnchoredRoomHoldsNothingWhileItsOwnerIsOffline(final DynamicTest test) {
-        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
-
-        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
-            var config = com.neryos.workbay.config.WorkbayConfig.SERVER;
-            int wasGrace = config.anchorGraceMinutes.get();
-            // The shipped default first, so "it released" cannot mean "the grace was always zero".
-            helper.assertValueEqual(wasGrace, 5, "the shipped anchor grace");
-            config.anchorGraceMinutes.set(0);
-
-            Site site = site(helper, 1, 0, 1);
-            helper.assertTrue(RoomVisit.enter(site.player(), site.record(), 0), "room refused");
-            RoomVisit.leave(site.player());
-
-            RoomRegistry registry = RoomRegistry.get(helper.getLevel().getServer());
-            menu(helper, site).act(com.neryos.workbay.menu.WorkbayAction.TOGGLE_ROOM_ANCHOR, 0,
-                java.util.Optional.empty());
-            RoomRecord room = rooms(helper, site).get(0);
-            helper.assertTrue(room.anchored(), "the anchor did not switch on");
-            int cost = RoomGeometry.anchorChunks(room.chunkCost());
-
-            helper.startSequence()
-                .thenIdle(20)
-                .thenExecute(() -> helper.assertValueEqual(held(site, room), cost,
-                    "chunks an anchored room holds while its owner is online"))
-                // The logout, and then long enough for the release to propagate and the chunks to
-                // actually leave the map -- a dropped ticket is not an unloaded chunk on the same
-                // tick.
-                .thenExecute(() -> site.player().disconnectGameTest())
-                .thenIdle(80)
-                .thenExecute(() -> {
-                    helper.assertTrue(rooms(helper, site).get(0).anchored(),
-                        "the room stopped being anchored, which is not what going offline means");
-                    helper.assertValueEqual(held(site, room), 0,
-                        "chunks an anchored room still holds after its owner logged out");
-                })
-                // And back. A second player, handed the network, standing in for the first walking
-                // in through the door -- nothing else touched.
-                .thenExecute(() -> {
-                    GameTestPlayer back =
-                        helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
-                    WorkbayRecord was = registry.byId(site.record().id()).orElseThrow();
-                    registry.put(new WorkbayRecord(was.id(), was.code(), was.name(), back.getUUID(),
-                        back.getGameProfile().getName(), was.locked(), was.bayColumn(),
-                        was.upgrades(), was.lastKnownPos(), was.bays(), was.rooms(), was.buses(),
-                        was.deployedCount(), was.connectors()));
-                    com.neryos.workbay.world.AnchorPresence.resume(
-                        helper.getLevel().getServer(), back.getUUID());
-                })
-                .thenIdle(20)
-                .thenExecute(() -> helper.assertValueEqual(held(site, room), cost,
-                    "chunks an anchored room holds again once its owner is back"))
-                .thenExecute(() -> {
-                    registry.putRoom(rooms(helper, site).get(0).withAnchored(false));
-                    com.neryos.workbay.world.RoomAnchors.apply(site.backshop(),
-                        rooms(helper, site).get(0));
-                    config.anchorGraceMinutes.set(wasGrace);
-                })
-                .thenSucceed();
-        });
-    }
-
-    /**
-     * Chunks the Backshop really holds around a room. Two chunks of slack past the halo on every
-     * side, so a wider hold would be seen rather than cropped out by the window this counts in.
-     */
-    private static int held(Site site, RoomRecord room) {
-        net.minecraft.world.level.ChunkPos first =
-            new net.minecraft.world.level.ChunkPos(RoomGeometry.origin(room.region()));
-        int side = (int) Math.round(Math.sqrt(room.chunkCost()));
-        int loaded = 0;
-        for (int dx = -4; dx < side + 4; dx++) {
-            for (int dz = -4; dz < side + 4; dz++) {
-                if (site.backshop().getChunkSource().hasChunk(first.x + dx, first.z + dz)) {
-                    loaded++;
-                }
-            }
-        }
-        return loaded;
-    }
 
     @GameTest
-    @TestHolder(description = "Every room tier is an exact square of chunks, and no two regions overlap.")
-    public static void everyRoomTierIsAWholeNumberOfChunks(final DynamicTest test) {
+    @TestHolder(description = "Every room size fits inside one chunk, and no two regions overlap.")
+    public static void everyRoomSizeFitsOneChunk(final DynamicTest test) {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
 
         test.onGameTest(ExtendedGameTestHelper.class, helper -> {
-            int[] expected = {1, 4, 9};
+            int[] expected = {3, 9, 13};
             for (int tier = 1; tier <= RoomGeometry.MAX_TIER; tier++) {
                 int footprint = RoomGeometry.footprint(tier);
-                helper.assertTrue(footprint % 16 == 0,
-                    "tier " + tier + "'s footprint is " + footprint + ", not a whole number of chunks");
-                helper.assertTrue(RoomGeometry.chunkCost(tier) == expected[tier - 1],
-                    "tier " + tier + " costs " + RoomGeometry.chunkCost(tier) + " chunks, not "
+                helper.assertTrue(RoomGeometry.interior(tier) == expected[tier - 1],
+                    "tier " + tier + " is " + RoomGeometry.interior(tier) + " inside, not "
                         + expected[tier - 1]);
-                helper.assertTrue(RoomGeometry.chunks(0, tier).size() == expected[tier - 1],
-                    "tier " + tier + " lists the wrong number of chunks to force");
+                helper.assertTrue(footprint <= 16,
+                    "tier " + tier + "'s footprint is " + footprint + ", which crosses a chunk");
+                helper.assertTrue(RoomGeometry.chunkCost(tier) == 1
+                    && RoomGeometry.chunks(0, tier).size() == 1,
+                    "tier " + tier + " costs " + RoomGeometry.chunkCost(tier) + " chunks, not one");
             }
             BlockPos first = RoomGeometry.origin(0);
             BlockPos second = RoomGeometry.origin(1);
@@ -1425,14 +1059,14 @@ public class RoomTests {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
 
         test.onGameTest(ExtendedGameTestHelper.class, helper -> {
-            Site site = site(helper, 1);
+            Site site = site(helper, 3);
             helper.assertTrue(RoomVisit.enter(site.player(), site.record(), 0), "entering was refused");
             RoomRecord room = room(helper, site);
             BlockPos origin = RoomGeometry.origin(room.region());
-            int ceiling = RoomGeometry.ceilingY(1);
-            int[] axis = RoomGeometry.lightAxis(1);
+            int ceiling = RoomGeometry.ceilingY(3);
+            int[] axis = RoomGeometry.lightAxis(3);
             helper.assertTrue(axis.length >= 2,
-                "a 14-block room got " + axis.length + " fixtures on an axis, not two");
+                "a 13-block room got " + axis.length + " fixtures on an axis, not two");
 
             for (int x : axis) {
                 for (int z : axis) {
@@ -1462,7 +1096,7 @@ public class RoomTests {
             // A room built before the ceiling had fixtures: right size, right colour, no lamp.
             site.backshop().setBlock(lamp, site.backshop().getBlockState(between),
                 Block.UPDATE_CLIENTS);
-            RoomBuilder.ensure(site.backshop(), room, 1);
+            RoomBuilder.ensure(site.backshop(), room, 3);
             helper.assertTrue(site.backshop().getBlockState(lamp)
                     .getValue(com.neryos.workbay.content.room.RoomWallBlock.PART)
                     == com.neryos.workbay.content.room.RoomPart.LIGHT,
@@ -1488,18 +1122,17 @@ public class RoomTests {
 
             menu.act(com.neryos.workbay.menu.WorkbayAction.SET_ROOM_NAME, 0,
                 java.util.Optional.empty(), java.util.Optional.of("  Smeltery  "), false);
-            helper.assertTrue(rooms(helper, site).getFirst().name()
+            helper.assertTrue(rooms(helper, site).get(0).name()
                     .equals(java.util.Optional.of("Smeltery")),
-                "the room is called " + rooms(helper, site).getFirst().name() + ", not Smeltery");
+                "the room is called " + rooms(helper, site).get(0).name() + ", not Smeltery");
 
             menu.act(com.neryos.workbay.menu.WorkbayAction.SET_ROOM_NAME, 0,
                 java.util.Optional.empty(), java.util.Optional.of("   "), false);
-            helper.assertTrue(rooms(helper, site).getFirst().name().isEmpty(),
+            helper.assertTrue(rooms(helper, site).get(0).name().isEmpty(),
                 "an empty name was stored as a name instead of clearing it");
             helper.succeed();
         });
     }
-
 
     /**
      * Night audit 1A finding 3. An invite for a name nobody online carried went to the profile
@@ -1548,35 +1181,4 @@ public class RoomTests {
         });
     }
 
-    /**
-     * Night audit 1A finding 11. {@code enter} minted the room record before asking whether the
-     * player could enter it, so a stranger's refused ENTER_ROOM still consumed a room region and
-     * wrote a record. A room that does not exist yet is the owner's to mint.
-     */
-    @GameTest
-    @TestHolder(description = "A stranger's refused room entry mints no room record; the owner's mints one.")
-    public static void aStrangerMintsNoRoomRecord(final DynamicTest test) {
-        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
-
-        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
-            Site site = site(helper, 1);
-            GameTestPlayer stranger = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
-            RoomRegistry registry = RoomRegistry.get(helper.getLevel().getServer());
-            // The record is a value; the rooms it lists are read fresh from the registry each time.
-            java.util.function.Supplier<WorkbayRecord> record =
-                () -> registry.byId(site.record().id()).orElseThrow();
-            helper.assertTrue(registry.roomsOf(record.get()).isEmpty(), "rooms before anybody enters");
-
-            helper.assertFalse(RoomVisit.enter(stranger, record.get(), 0),
-                "a stranger was let into a room that did not exist yet");
-            helper.assertTrue(registry.roomsOf(record.get()).isEmpty(),
-                "a stranger's refused entry minted a room record");
-
-            helper.assertTrue(RoomVisit.enter(site.player(), record.get(), 0),
-                "the owner was refused their own room");
-            helper.assertValueEqual(registry.roomsOf(record.get()).size(), 1, "rooms after the owner enters");
-            RoomVisit.leave(site.player());
-            helper.succeed();
-        });
-    }
 }

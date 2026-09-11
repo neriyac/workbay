@@ -57,7 +57,12 @@ public class RoomDoorScreen extends AbstractContainerScreen<RoomDoorMenu> {
     public RoomDoorScreen(RoomDoorMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
         imageWidth = WIDTH;
-        imageHeight = FIRST_ROOM + menu.view().rooms().size() * ROOM_PITCH + MARGIN - 2;
+        // A door with nowhere else to go is the title and Leave, and no room kept for a list
+        // it does not draw -- a room in nobody's bay, or a Workbay holding one room, showed a
+        // panel two thirds empty under the one button on it.
+        int others = menu.view().rooms().size();
+        imageHeight = others <= 1 ? LEAVE_Y + LEAVE_H + MARGIN
+            : FIRST_ROOM + others * ROOM_PITCH + MARGIN - 2;
     }
 
     /** Drawn in {@link #renderBg}, with the width it has. Vanilla's two labels name nothing here. */

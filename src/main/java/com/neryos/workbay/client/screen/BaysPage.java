@@ -193,8 +193,15 @@ class BaysPage extends WorkbayPage {
     @org.jetbrains.annotations.Nullable
     private static UUID editingFilter;
 
+    /**
+     * A room's settings, drawn over this page from the swatch on a room bay's panel. The window
+     * takes every input first while it is up, so its scrim is what closes it.
+     */
+    private final RoomWindow window;
+
     BaysPage(WorkbayScreen screen) {
         super(screen);
+        window = new RoomWindow(screen);
         height = screen.panelHeight();
         // Eight bay slots always fit, however short the window is; they lose pitch, not slots.
         rackPitch = Math.clamp((height - RACK_Y - 12) / BayGeometry.MAX_BAYS, 20, 26);
@@ -249,6 +256,32 @@ class BaysPage extends WorkbayPage {
             g.disableScissor();
         }
         links(g, mouseX, mouseY);
+        // Last, so its hit boxes win: the screen dispatches clicks in reverse registration order,
+        // which is exactly "whatever is drawn on top".
+        window.render(g, mouseX, mouseY);
+    }
+
+    /** The room in the selected bay, or null for a machine or nothing. */
+    @org.jetbrains.annotations.Nullable
+    private WorkbaySnapshot.Room roomHere() {
+        return snapshot().rooms().stream()
+            .filter(room -> room.index() == screen.selectedBay()).findFirst().orElse(null);
+    }
+
+    /** What a room is called on this panel: its name, or its bay. */
+    private String roomName(WorkbaySnapshot.Room room) {
+        return room.name().isEmpty()
+            ? WorkbayScreen.gui("rooms.name", room.index() + 1).getString() : room.name();
+    }
+
+    @Override
+    boolean escaped() {
+        return window.escaped();
+    }
+
+    @Override
+    boolean entered() {
+        return window.entered();
     }
 
     /** The open filter panel's top edge in screen pixels, or MAX_VALUE while none is open. */
@@ -550,6 +583,11 @@ class BaysPage extends WorkbayPage {
         // whatever another mod called it, and an unclamped one runs across the cube and off the
         // panel entirely.
         int room = MACHINE_RIGHT - 98;
+        WorkbaySnapshot.Room held = roomHere();
+        if (held != null) {
+            roomPanel(g, mouseX, mouseY, bay, held, room);
+            return;
+        }
         String shown = nameOf(bay, screen.selectedBay());
         if (!screen.renaming(bayRename(bay.index()))) {
             text(g, shown, x(98), y(56), room, Draw.TEXT);
@@ -659,6 +697,50 @@ class BaysPage extends WorkbayPage {
 
 
     /**
+     * The panel of a bay holding a room: the room's name, size and biome, and its four controls
+     * -- pull it out, rename it, its settings, and the door. SPEC.md §0: no faces, no redstone,
+     * nothing to copy; a room's machines are reached through Connectors placed inside it.
+     */
+    private void roomPanel(GuiGraphics g, int mouseX, int mouseY, WorkbaySnapshot.Bay bay,
+        WorkbaySnapshot.Room held, int room) {
+        boolean owned = snapshot().owned();
+        java.util.UUID me = net.minecraft.client.Minecraft.getInstance().player == null ? null
+            : net.minecraft.client.Minecraft.getInstance().player.getUUID();
+        boolean mayEnter = owned || held.guests().stream().anyMatch(guest -> guest.id().equals(me));
+        if (!screen.renaming(bayRename(bay.index()))) {
+            text(g, roomName(held), x(98), y(56), room, Draw.TEXT);
+        }
+        text(g, WorkbayScreen.gui("room.size", held.interior()), x(98), y(69), room, Draw.TEXT_DIM);
+        text(g, held.built() ? RoomWindow.biomeName(held.biome())
+            : WorkbayScreen.gui("room.unentered"), x(98), y(82), room,
+            held.built() ? Draw.TEXT_DIM : Draw.TEXT_FAINT);
+
+        actionButton(g, mouseX, mouseY, x(50), WBIcons.EJECT, true, false,
+            () -> screen.send(WorkbayAction.EJECT),
+            WorkbayScreen.gui("button.pull"), WorkbayScreen.gui("button.pull.tip"));
+        int index = held.index();
+        actionButton(g, mouseX, mouseY, x(74), WBIcons.RENAME, owned, false,
+            () -> screen.beginRename(bayRename(bay.index()), x(98), y(53), room, 14, held.name(),
+                typed -> screen.sendText(WorkbayAction.SET_ROOM_NAME, index, typed)),
+            WorkbayScreen.gui("button.rename"), WorkbayScreen.gui("rooms.rename.tip"));
+        // The swatch: the room's colour, drawn as the colour itself, and the way into its settings.
+        int swatchX = x(98);
+        boolean hover = owned && screen.hovered(swatchX, y(98), 20, 20, mouseX, mouseY);
+        Draw.button(g, swatchX, y(98), 20, 20, hover, window.bay() == index, owned);
+        g.fill(swatchX + 5, y(103), swatchX + 15, y(113), 0xFF000000 | held.colour().tint());
+        screen.hit(swatchX, y(98), 20, 20, owned ? () -> window.setOpen(index) : () -> { },
+            WorkbayScreen.gui("rooms.settings"),
+            owned ? WorkbayScreen.gui("rooms.colour",
+                WorkbayScreen.gui("colour." + held.colour().getSerializedName()))
+                : com.neryos.workbay.WorkbayLang.message("owner_only"));
+        actionButton(g, mouseX, mouseY, x(194), WBIcons.ENTER, mayEnter, false,
+            () -> screen.send(WorkbayAction.ENTER_ROOM, index),
+            WorkbayScreen.gui("rooms.enter"),
+            mayEnter ? WorkbayScreen.gui("rooms.enter.tip")
+                : com.neryos.workbay.WorkbayLang.message("room_not_yours"));
+    }
+
+    /**
      * Three real sprites, shrunk and stacked, and nothing about them is tinted or redrawn.
      *
      * <p><b>Energy, fluid and chemical stay drawn glyphs</b> for the reason they always did: a
@@ -757,6 +839,14 @@ class BaysPage extends WorkbayPage {
     private void faces(GuiGraphics g, int mouseX, int mouseY) {
         WorkbaySnapshot snap = snapshot();
         WorkbaySnapshot.Bay bay = snap.bay(screen.selectedBay());
+        if (roomHere() != null) {
+            // A room has no faces. The column says so rather than drawing a cube of a block that
+            // answers on none of them.
+            Draw.well(g, x(WELL_X), y(52), WELL_W, WELL_H + WELL_Y - 52);
+            wrapped(g, WorkbayScreen.gui("faces.room"), x(WELL_X + 6), y(60), WELL_W - 12,
+                Draw.TEXT_FAINT);
+            return;
+        }
 
         // One button per resource this install actually has. The block shows one type at a time,
         // which is why a face can take items in and send energy out without the picture
@@ -841,6 +931,9 @@ class BaysPage extends WorkbayPage {
 
     @Override
     boolean mousePressed(double mouseX, double mouseY, int button) {
+        if (window.isOpen()) {
+            return window.mousePressed(mouseX, mouseY, button);
+        }
         if ((button != 0 && button != 1) || !inWell(mouseX, mouseY)) {
             return false;
         }
@@ -858,6 +951,9 @@ class BaysPage extends WorkbayPage {
 
     @Override
     boolean mouseDragged(double dragX, double dragY) {
+        if (window.isOpen()) {
+            return window.mouseDragged(dragX, dragY);
+        }
         PREVIEW.drag(dragX, dragY);
         return false;
     }
@@ -865,6 +961,9 @@ class BaysPage extends WorkbayPage {
     /** A press that never turned into a turn is a click on whichever face it landed on. */
     @Override
     boolean mouseReleased(double mouseX, double mouseY) {
+        if (window.isOpen()) {
+            return window.mouseReleased(mouseX, mouseY);
+        }
         if (!PREVIEW.release() || !inWell(mouseX, mouseY)) {
             return false;
         }
@@ -989,15 +1088,19 @@ class BaysPage extends WorkbayPage {
         screen.hit(pairX, y(linksY), 46, 18, () -> screen.send(WorkbayAction.PAIR),
             WorkbayScreen.gui("links.pair"), WorkbayScreen.gui("links.pair.tip"));
 
-        boolean addHover = screen.hovered(addX, y(linksY), 36, 18, mouseX, mouseY);
-        Draw.button(g, addX, y(linksY), 36, 18, addHover, false);
-        WBIcons.draw(g, WBIcons.PLUS, addX + 3, y(linksY + 3), Draw.TEXT);
-        text(g, "Add", addX + 15, y(linksY + 5), 18, Draw.TEXT);
-        screen.hit(addX, y(linksY), 36, 18, () -> {
+        // A bay holding a room has no channels of its own (SPEC.md §0), so there is nothing for
+        // Add to add: the button is drawn disabled and says why.
+        boolean roomBay = roomHere() != null;
+        boolean addHover = !roomBay && screen.hovered(addX, y(linksY), 36, 18, mouseX, mouseY);
+        Draw.button(g, addX, y(linksY), 36, 18, addHover, false, !roomBay);
+        WBIcons.draw(g, WBIcons.PLUS, addX + 3, y(linksY + 3), roomBay ? Draw.TEXT_FAINT : Draw.TEXT);
+        text(g, "Add", addX + 15, y(linksY + 5), 18, roomBay ? Draw.TEXT_FAINT : Draw.TEXT);
+        screen.hit(addX, y(linksY), 36, 18, roomBay ? () -> { } : () -> {
             adding = true;
             editingFilter = null;
             scroll = 0;
-        }, WorkbayScreen.gui("links.add"), WorkbayScreen.gui("links.add.tip"));
+        }, WorkbayScreen.gui("links.add"),
+            WorkbayScreen.gui(roomBay ? "links.add.room" : "links.add.tip"));
 
         List<WorkbaySnapshot.Link> visible = visibleLinks(snap);
         int listH = rows * ROW_PITCH + 8;
@@ -1007,7 +1110,9 @@ class BaysPage extends WorkbayPage {
             // "No links yet. Pair a Connector" is a lie the moment the list is scoped to one bay
             // and the links are all on another. Say which case this is.
             int elsewhere = snap.links().size();
-            Component empty = filter == Filter.THIS_BAY && elsewhere > 0
+            Component empty = filter == Filter.THIS_BAY && roomBay
+                ? WorkbayScreen.gui("links.none.room")
+                : filter == Filter.THIS_BAY && elsewhere > 0
                 ? WorkbayScreen.gui("links.none.here", elsewhere)
                 : WorkbayScreen.gui("links.none");
             // <b>And no bands under it.</b> The rules were drawn for every row whether the list
@@ -1995,6 +2100,9 @@ class BaysPage extends WorkbayPage {
 
     @Override
     boolean scrolled(double mouseX, double mouseY, double delta) {
+        if (window.isOpen()) {
+            return window.scrolled(mouseX, mouseY, delta);
+        }
         if (mouseY < y(rowY - 4) || mouseY > y(rowY + rows * ROW_PITCH + 4)) {
             return false;
         }

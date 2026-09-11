@@ -55,6 +55,11 @@ public class WBBlockTagProvider extends BlockTagsProvider {
         // The Assay is gone; a pack author adds their own block here. It must never carry the
         // Workbay: HOST_ALLOWED beats every check, and that includes the recursion one, which
         // `heuristicsProduceTheRightReasons` caught within a minute of it being written by hand.
-        tag(HostChecks.HOST_ALLOWED);
+        // The three rooms: no block entity, so the no_machine heuristic would refuse them, and
+        // a bay is the one place a room block goes (SPEC.md §0).
+        tag(HostChecks.HOST_ALLOWED)
+            .add(WBBlocks.ROOM.get())
+            .add(WBBlocks.WIDE_ROOM.get())
+            .add(WBBlocks.VAST_ROOM.get());
     }
 }

@@ -1,3 +1,7 @@
 {
-  "values": []
+  "values": [
+    "workbay:room",
+    "workbay:wide_room",
+    "workbay:vast_room"
+  ]
 }

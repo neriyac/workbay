@@ -1,6 +1,7 @@
 package com.neryos.workbay.content.connector;
 
 import com.neryos.workbay.content.workbay.WorkbayBlockEntity;
+import com.neryos.workbay.world.WorkbayRecord;
 import com.neryos.workbay.init.WBBlockEntities;
 import com.neryos.workbay.init.WBDataComponents;
 import net.minecraft.core.BlockPos;
@@ -56,10 +57,52 @@ public class ConnectorBlockEntity extends BlockEntity {
      * ordinary placement. One chunk, once, on a click a player made.
      */
     public Optional<WorkbayBlockEntity> workbay() {
-        if (pairing == null || !(level instanceof ServerLevel server)) {
+        if (!(level instanceof ServerLevel server)) {
             return Optional.empty();
         }
-        GlobalPos at = pairing.workbayPos();
+        // <b>A Connector in a room belongs to whoever holds the room today</b> (SPEC.md §0), so
+        // the pairing on the item is beside the point in here: the room is the pairing, and it
+        // is re-read every time because the room may have moved since the block was placed. The
+        // block's own record is refreshed to match, so the panel names the right network.
+        Optional<com.neryos.workbay.world.RoomRegistry.Holder> holder = roomHolder();
+        if (holder.isPresent()) {
+            WorkbayRecord network = holder.get().network();
+            Optional<WorkbayBlockEntity> block = network.live() ? network.lastKnownPos()
+                .flatMap(at -> blockAt(server, at, network.id())) : Optional.empty();
+            block.ifPresent(workbay -> {
+                ConnectorPairing now = new ConnectorPairing(network.id(),
+                    GlobalPos.of(workbay.getLevel().dimension(), workbay.getBlockPos()),
+                    network.label());
+                if (!now.equals(pairing)) {
+                    pairTo(now);
+                }
+            });
+            return block;
+        }
+        if (pairing == null) {
+            return Optional.empty();
+        }
+        return blockAt(server, pairing.workbayPos(), pairing.workbayId());
+    }
+
+    /** The room this Connector stands in and who holds it, when it stands in one that is held. */
+    public Optional<com.neryos.workbay.world.RoomRegistry.Holder> roomHolder() {
+        return room().flatMap(room ->
+            com.neryos.workbay.world.RoomRegistry.get(((ServerLevel) level).getServer())
+                .holderOf(room));
+    }
+
+    /** The room this Connector stands in, if it stands in one at all. Server side only. */
+    public Optional<com.neryos.workbay.world.RoomRecord> room() {
+        if (!(level instanceof ServerLevel server)
+            || !server.dimension().equals(com.neryos.workbay.world.WorkbayDimensions.BACKSHOP)) {
+            return Optional.empty();
+        }
+        return com.neryos.workbay.world.RoomRegistry.get(server.getServer()).roomAt(worldPosition);
+    }
+
+    private static Optional<WorkbayBlockEntity> blockAt(ServerLevel server, GlobalPos at,
+        java.util.UUID network) {
         ServerLevel workbayLevel = server.getServer().getLevel(at.dimension());
         if (workbayLevel == null) {
             return Optional.empty();
@@ -67,7 +110,7 @@ public class ConnectorBlockEntity extends BlockEntity {
         if (!(workbayLevel.getBlockEntity(at.pos()) instanceof WorkbayBlockEntity workbay)) {
             return Optional.empty();
         }
-        return workbay.workbayId().filter(id -> id.equals(pairing.workbayId())).map(id -> workbay);
+        return workbay.workbayId().filter(id -> id.equals(network)).map(id -> workbay);
     }
 
     @Override

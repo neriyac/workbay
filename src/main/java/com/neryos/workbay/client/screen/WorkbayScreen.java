@@ -32,7 +32,7 @@ import java.util.UUID;
 public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
 
     /** Which screen is showing. They share one menu; there is nothing to re-bind between them. */
-    public enum Page { BAYS, FLOW, UPGRADES, ROOMS, NETWORKS }
+    public enum Page { BAYS, FLOW, UPGRADES, NETWORKS }
 
     /** Whether the snapshot the current page was built for had a network. See containerTick. */
     private boolean builtBound = true;
@@ -114,7 +114,6 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
             case BAYS -> new BaysPage(this);
             case FLOW -> new FlowPage(this);
             case UPGRADES -> new UpgradesPage(this);
-            case ROOMS -> new RoomsPage(this);
             case NETWORKS -> new NetworksPage(this);
         };
         imageWidth = current.width();
@@ -127,9 +126,8 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
     }
 
     /**
-     * The ROOMS page grows a row when a room slot is bought, and {@code imageHeight} is only read
-     * in {@link #init()} -- so installing an Annex Plate with the page open drew the new rows
-     * outside the panel. Re-running init is the same resize {@link #goTo} does.
+     * A page whose height changed under an open screen is re-laid out: {@code imageHeight} is
+     * only read in {@link #init()}, and re-running init is the same resize {@link #goTo} does.
      */
     @Override
     protected void containerTick() {

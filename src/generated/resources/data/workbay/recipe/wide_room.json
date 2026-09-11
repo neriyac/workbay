@@ -3,7 +3,7 @@
   "category": "misc",
   "key": {
     "C": {
-      "item": "minecraft:copper_ingot"
+      "item": "minecraft:echo_shard"
     },
     "H": {
       "item": "workbay:housing"
@@ -19,6 +19,6 @@
   ],
   "result": {
     "count": 1,
-    "id": "workbay:annex_plate"
+    "id": "workbay:wide_room"
   }
 }

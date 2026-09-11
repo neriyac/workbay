@@ -4,6 +4,7 @@ import com.neryos.workbay.Workbay;
 import com.neryos.workbay.content.connector.ConnectorBlock;
 import com.neryos.workbay.content.connector.ConnectorItem;
 import com.neryos.workbay.content.port.PortBlock;
+import com.neryos.workbay.content.room.RoomBlock;
 import com.neryos.workbay.content.room.RoomWallBlock;
 import com.neryos.workbay.content.workbay.WorkbayBlock;
 import net.minecraft.world.level.block.Block;
@@ -67,6 +68,27 @@ public class WBBlocks {
             .noLootTable()
             .pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK)
             .isValidSpawn((state, level, pos, type) -> false)));
+
+    /**
+     * The three rooms, one block each so a bay's {@code hosted} id says the size. SPEC.md §0. A
+     * room block only ever stands in a bay; its item is what the player holds, and
+     * {@link com.neryos.workbay.content.room.RoomItem} refuses to place it anywhere else.
+     */
+    public static final DeferredBlock<RoomBlock> ROOM = registerRoom("room", 1);
+    public static final DeferredBlock<RoomBlock> WIDE_ROOM = registerRoom("wide_room", 2);
+    public static final DeferredBlock<RoomBlock> VAST_ROOM = registerRoom("vast_room", 3);
+
+    private static DeferredBlock<RoomBlock> registerRoom(String name, int tier) {
+        var holder = BLOCKS.registerBlock(name, props -> new RoomBlock(tier, props),
+            BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK)
+                .mapColor(MapColor.COLOR_BLACK)
+                .sound(SoundType.METAL)
+                .strength(3.5F)
+                .noLootTable());
+        ITEMS.register(name, () -> new com.neryos.workbay.content.room.RoomItem(holder.get(),
+            new net.minecraft.world.item.Item.Properties()));
+        return holder;
+    }
 
     /**
      * <b>A plain BlockItem, because placing a Workbay is never refused.</b> It used to be a

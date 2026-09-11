@@ -50,10 +50,13 @@ public class WBLanguageProvider extends LanguageProvider {
         addItem(WBItems.HOUSING, "Housing");
         addBlock(WBBlocks.CONNECTOR, "Connector");
         addItem(WBItems.EXPANSION_PLATE, "Expansion Plate");
-        addItem(WBItems.ROOM_FRAME, "Room Frame");
-        addItem(WBItems.WIDE_ROOM_FRAME, "Wide Room Frame");
-        addItem(WBItems.VAST_ROOM_FRAME, "Vast Room Frame");
-        addItem(WBItems.ANNEX_PLATE, "Annex Plate");
+        addBlock(WBBlocks.ROOM, "Room");
+        addBlock(WBBlocks.WIDE_ROOM, "Wide Room");
+        addBlock(WBBlocks.VAST_ROOM, "Vast Room");
+        add("entity.workbay.room_item", "Room");
+        // The NETWORKS page names the dimension a Workbay stands in by this key, and a Workbay
+        // can stand in a room now.
+        add("dimension.workbay.backshop", "Backshop");
         addItem(WBItems.ANCHOR, "Anchor");
         addItem(WBItems.RESONATOR, "Resonator");
         addItem(WBItems.IMPELLER, "Impeller");
@@ -340,16 +343,19 @@ public class WBLanguageProvider extends LanguageProvider {
 
         add(WorkbayLang.messageKey("workbay_stamped"), "This Workbay will join network %s.");
         add(WorkbayLang.messageKey("network_reused_named"), "Joined network %s.");
-        add(WorkbayLang.messageKey("room_occupied"), "Somebody is in that room.");
-        add(WorkbayLang.messageKey("room_not_empty"), "There is a %s in that room. A room is only "
-            + "given back once it is empty - nothing you built is thrown away here.");
-        add(WorkbayLang.messageKey("room_removed"), "Room %s handed back.");
-        add(WorkbayLang.guiKey("rooms.remove"), "Hand this room back");
-        add(WorkbayLang.guiKey("rooms.remove.tip"), "Takes the shell down and frees the slot. Only "
-            + "an empty room, and it asks again before it does it.");
-        add(WorkbayLang.guiKey("rooms.remove.sure"), "Hand it back?");
-        add(WorkbayLang.guiKey("rooms.remove.sure.tip"), "Click again to take the room down. "
-            + "Anything else on this screen calls it off.");
+        // A room in the hand. SPEC.md §0: one holder, no cycle, and the item goes in a bay.
+        add(WorkbayLang.messageKey("room_goes_in_a_bay"), "A room goes in a bay. Open a Workbay "
+            + "and click an empty bay's slot with it.");
+        add(WorkbayLang.messageKey("room_held"), "That room is already in a bay of %s. Pull it "
+            + "out there first.");
+        add(WorkbayLang.messageKey("room_copy"), "This is a copy of a room, not the room. Only "
+            + "the item that came out of the bay opens it.");
+        add(WorkbayLang.messageKey("room_unknown"), "This world has no record of that room.");
+        add(WorkbayLang.messageKey("room_cycle"), "That would put a room inside itself.");
+        add(WorkbayLang.messageKey("connector_in_sleeping_room"), "Connector placed on %s. This "
+            + "room is in no bay; it joins a network the moment the room is loaded into one.");
+        add(WorkbayLang.messageKey("connector_room_asleep"), "This room is in no bay right now, so "
+            + "its Connectors belong to nobody. Load the room into a bay first.");
         add(WorkbayLang.guiKey("status.no_power"), "No power");
         add(WorkbayLang.guiKey("status.short.no_power"), "No power");
         add(WorkbayLang.guiKey("status.no_power.tip"), "The Workbay's buffer is empty. Running "
@@ -544,43 +550,16 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("upgrade.expansion_plate.long"),
             "One more bay on this rack. A machine lives in a bay, so this is how many "
             + "machines one Workbay can hold at once.");
-        add(WorkbayLang.guiKey("upgrade.room_frame"), "Room Frame");
-        add(WorkbayLang.guiKey("upgrade.room_frame.desc"), "14x14");
-        add(WorkbayLang.guiKey("upgrade.room_frame.long"),
-            "Buys your first room, and sets the size of every room this network owns. "
-            + "Installing a bigger Frame later grows the room you already have where it "
-            + "stands: nothing is moved and nothing inside it is lost.");
-        add(WorkbayLang.guiKey("upgrade.wide_room_frame"), "Wide Room Frame");
-        add(WorkbayLang.guiKey("upgrade.wide_room_frame.desc"), "30x30");
-        add(WorkbayLang.guiKey("upgrade.wide_room_frame.long"),
-            "Grows every room this network owns to 30 blocks across, in place. What is "
-            + "built inside stays exactly where it is; the walls move outwards around it.");
-        add(WorkbayLang.guiKey("upgrade.vast_room_frame"), "Vast Room Frame");
-        add(WorkbayLang.guiKey("upgrade.vast_room_frame.desc"), "46x46");
-        add(WorkbayLang.guiKey("upgrade.vast_room_frame.long"),
-            "Grows every room this network owns to 46 blocks across, in place. What is "
-            + "built inside stays exactly where it is; the walls move outwards around it.");
-        add(WorkbayLang.guiKey("upgrade.annex_plate"), "Annex Plate");
-        add(WorkbayLang.guiKey("upgrade.annex_plate.desc"), "+1 room");
-        add(WorkbayLang.guiKey("upgrade.annex_plate.long"),
-            "One more room, at whatever size your Room Frame sets. It does not change the "
-            + "size of the rooms you have.");
         add(WorkbayLang.guiKey("upgrade.anchor"), "Anchor");
         add(WorkbayLang.guiKey("upgrade.anchor.desc"), "While away");
         add(WorkbayLang.guiKey("upgrade.anchor.long"),
             "Keeps the Backshop running with nobody there. It holds this Workbay's own "
             + "chunk and its bay column, which is what lets its links keep moving goods after "
-            + "you log out, and it lets a room be switched on below to hold its own chunks "
-            + "too.");
+            + "you log out.");
 
-        add(WorkbayLang.guiKey("button.rooms"), "Rooms");
-        add(WorkbayLang.guiKey("button.rooms.tip"), "Somewhere to build, out the back. A Connector works in a room, so one can be a "
-            + "stage in a chain rather than only a place to stand.");
-        add(WorkbayLang.guiKey("rooms.none"), "Install a Room Frame above for your first room.");
         add(WorkbayLang.guiKey("rooms.name"), "Room %s");
         add(WorkbayLang.guiKey("rooms.rename.tip"),
-            "Right-click to name this room. Empty goes back to Room 1, Room 2.");
-        add(WorkbayLang.guiKey("rooms.rename.unbuilt"), "Open the room first.");
+            "Names this room. Empty goes back to Room 1, Room 2; the item is named after it too.");
 
         // The room window's two tabs, and everything on the guests one.
         add(WorkbayLang.guiKey("rooms.tab.room"), "Room");
@@ -606,20 +585,23 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("rooms.guest.build"), "May build");
         add(WorkbayLang.guiKey("rooms.guest.build.tip"), "May do anything in this room that you "
             + "can. Click to drop back to Look only.");
-        add(WorkbayLang.guiKey("rooms.size"), "%sx%s, %s chunks");
-        add(WorkbayLang.guiKey("rooms.size.one"), "%sx%s, %s chunk");
-        add(WorkbayLang.guiKey("rooms.empty"), "Not opened yet");
+        // The bay panel of a bay holding a room. SPEC.md §0.
+        add(WorkbayLang.guiKey("room.size"), "%1$sx%1$sx%1$s inside");
+        add(WorkbayLang.guiKey("room.unentered"), "Not entered yet");
         add(WorkbayLang.guiKey("rooms.enter"), "Enter");
-        add(WorkbayLang.guiKey("rooms.open"), "Open");
-        // The Exit block is gone; the way out is the door in the middle of each of the four walls.
-        // This string still said to find an Exit block, which a player would have hunted a
-        // 46-block room for.
-        add(WorkbayLang.guiKey("rooms.enter.tip"), "Go and stand in it. A door in the middle of each wall brings you back \u2014 and "
-            + "a Connector works in here, so a barrel in a room is a stage in a chain.");
-        add(WorkbayLang.guiKey("rooms.anchored"), "Anchored");
-        add(WorkbayLang.guiKey("rooms.anchored.tip"), "Keeps what is inside this room running with nobody in it, holding %s "
-            + "chunks loaded. Click to switch off.");
-        add(WorkbayLang.guiKey("rooms.unanchored"), "Not anchored");
+        add(WorkbayLang.guiKey("rooms.enter.tip"), "Go and stand in it. A door in the middle of "
+            + "each wall brings you back out beside this Workbay \u2014 and a Connector placed "
+            + "inside joins this network, so a barrel in a room is a stage in a chain.");
+        add(WorkbayLang.guiKey("button.pull"), "Pull the room out");
+        add(WorkbayLang.guiKey("button.pull.tip"), "Takes the room out as an item, with "
+            + "everything built inside it. Load it into any Workbay's empty bay to open it again; "
+            + "anybody inside stays inside and Leave still brings them out.");
+        add(WorkbayLang.guiKey("faces.room"), "A room has no faces. Machines inside it are "
+            + "reached through Connectors placed inside.");
+        add(WorkbayLang.guiKey("links.add.room"), "A bay holding a room has no channels of its "
+            + "own. Place Connectors inside the room; they join this list like any other.");
+        add(WorkbayLang.guiKey("links.none.room"), "A room has no channels. Place a Connector "
+            + "inside it against a chest or machine, then Add it on any bay.");
         // The Connector's rename panel. One field, and a line saying what it is called when the
         // field is left empty -- which is the block's own coordinates, not a stored default.
         add(WorkbayLang.guiKey("connector.title"), "Name this Connector");
@@ -666,10 +648,6 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("rooms.biome"), "Biome: %s");
         add(WorkbayLang.guiKey("rooms.biome.tip"), "What a machine in here reads for temperature and rainfall. Nothing falls "
             + "from the sky: a cold room is cold, it does not snow.");
-        add(WorkbayLang.guiKey("rooms.unanchored.tip"), "What is inside runs only while somebody is in here. Anchoring holds %s "
-            + "chunks loaded.");
-        add(WorkbayLang.messageKey("anchor_capped"), "This network may anchor %s room(s) at a time. "
-            + "Switch another one off first.");
         add(WorkbayLang.guiKey("upgrade.resonator"), "Resonator");
         add(WorkbayLang.guiKey("upgrade.resonator.desc"), "Any dimension");
         add(WorkbayLang.guiKey("upgrade.resonator.long"),
@@ -708,15 +686,17 @@ public class WBLanguageProvider extends LanguageProvider {
         // The number alone. The row has about thirty pixels for this and the sentence is sixty.
 
         add(WorkbayLang.messageKey("pair_needs_connector"), "Hold a Connector \u2014 main hand or off "
-            + "hand \u2014 to pair one to this bay.");
+            + "hand \u2014 to pair it to this Workbay.");
         add(WorkbayLang.messageKey("upgrade_maxed"), "This Workbay already has as many of those as "
             + "it takes.");
-        add(WorkbayLang.messageKey("annex_needs_frame"), "An Annex Plate adds a room to a network "
-            + "that already has one. Install a Room Frame first.");
         add(WorkbayLang.messageKey("upgrade_missing"), "You don't have one of those to install.");
 
         // Tooltips. SPEC.md §6: at most four lines unshifted.
         add(WorkbayLang.tooltipKey("hosting"), "Hosting: %s / %s machines");
+        add(WorkbayLang.tooltipKey("room_size"), "%1$s x %1$s x %1$s inside. Goes in a bay.");
+        add(WorkbayLang.tooltipKey("room_new"), "Nobody has been inside yet.");
+        add(WorkbayLang.tooltipKey("room_built"), "Carries everything built in it.");
+        add(WorkbayLang.tooltipKey("room_copy"), "A copy. It will not open the room.");
         add(WorkbayLang.tooltipKey("buses"), "Buses: %s configured");
         add(WorkbayLang.tooltipKey("code"), "Code %s");
         add(WorkbayLang.tooltipKey("connector_unpaired"), "Not paired. Right-click a Workbay with "
@@ -742,7 +722,8 @@ public class WBLanguageProvider extends LanguageProvider {
             + "Insert pushes into the block the Connector is stuck to; Extract pulls out of it. "
             + "The Workbay glows while goods are moving and goes amber when a link needs you.");
         add(WorkbayLang.infoKey("workbay.6"), "Everything past that is an upgrade you craft and "
-            + "fit on the Upgrades tab — more bays, faster links, and rooms out the back. "
+            + "fit on the Upgrades tab — more bays, faster links, longer reach. A room is a "
+            + "block that goes in a bay, and you build inside it. "
             + "Each one is consumed when it goes in, and there is no taking it out again.");
 
         add(WorkbayLang.infoKey("connector.1"), "One end of a link, as a block you can point at. "
@@ -763,23 +744,24 @@ public class WBLanguageProvider extends LanguageProvider {
 
         add(WorkbayLang.infoKey("expansion_plate.1"), "One more bay, consumed on install. Each one "
             + "One more bay, up to the eight the rack holds.");
-        add(WorkbayLang.infoKey("annex_plate.1"), "One more room, consumed on install. It needs a "
-            + "Room Frame first \u2014 with no rooms to add to it would install and do nothing, so "
-            + "it refuses instead.");
-
-        add(WorkbayLang.infoKey("room_frame.1"), "A room: a private, sealed cube out the back of "
-            + "the Backshop that you walk into and build in. Consumed on install.");
-        add(WorkbayLang.infoKey("room_frame.2"), "The Frame you install sets the size of every room "
-            + "you own \u2014 14 blocks on a side, 30 for a Wide Frame, 46 for a Vast one. A larger "
-            + "Frame expands the room you already have rather than giving you a second; the Annex "
-            + "Plate is what gives you a second.");
-        add(WorkbayLang.infoKey("room_frame.3"), "Pick a room's biome and its colour on the Rooms "
-            + "tab, and invite other players in there while you are at it. The four doors in the "
-            + "walls are the way out, and they cannot be broken.");
+        add(WorkbayLang.infoKey("room.1"), "A room: a private, sealed cube you walk into and "
+            + "build in. It goes in a bay like a machine does \u2014 open a Workbay and click an "
+            + "empty bay's slot while holding it \u2014 and Enter on that bay's panel takes you "
+            + "inside. Three sizes: 3, 9 or 13 blocks on a side.");
+        add(WorkbayLang.infoKey("room.2"), "Pull it back out of the bay and it is an item again, "
+            + "carrying everything built inside it, ready for any other Workbay's bay. It cannot "
+            + "be destroyed \u2014 not by lava, fire or the void \u2014 and a copy of it opens "
+            + "nothing: only the item that came out of the bay is the room.");
+        add(WorkbayLang.infoKey("room.3"), "Its name, its colour, its biome and its guests are "
+            + "on the bay that holds it. The four doors in the walls are the way out, always "
+            + "beside the Workbay holding the room, and they cannot be broken.");
+        add(WorkbayLang.infoKey("room.4"), "A Connector placed inside a room joins the network "
+            + "holding the room, and moves with the room when it moves. A room can hold a Workbay "
+            + "or another room; it only cannot end up inside itself.");
 
         add(WorkbayLang.infoKey("anchor.1"), "Keeps the Backshop running with nobody standing at "
             + "the Workbay, so a chain of machines out the back carries on while you are away "
-            + "doing something else. Switch it on per room, on the Rooms tab.");
+            + "doing something else.");
         add(WorkbayLang.infoKey("anchor.2"), "It holds nothing while its owner is offline. Log out "
             + "and the chunks are let go; log back in and they are taken again, with the chain "
             + "carrying on from where it stopped. Nothing is lost in the gap, because nothing this "

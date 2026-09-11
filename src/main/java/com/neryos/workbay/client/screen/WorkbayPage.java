@@ -102,16 +102,13 @@ abstract class WorkbayPage {
             return;
         }
 
-        // Six 18x18 buttons, top right. The lock is the only one that changes what it draws.
-        // ROOMS is always here, never hidden until a Frame is installed: the Frames are bought on
-        // that page, so hiding it until you own one is a door locked from the inside.
+        // Five 18x18 buttons, top right. The lock is the only one that changes what it draws.
         //
         // <b>BAYS has a tab like everything else.</b> It did not, on the argument that pressing the
         // lit tab drops you back there -- which it does, and which is in that tab's tooltip, and
         // which nobody found. A page you can reach from every other page but cannot see is a page
         // with no way back. Found by Neriya, looking for an X.
-        tab(g, mouseX, mouseY, width() - 132, WBIcons.BAYS, WorkbayScreen.Page.BAYS, "bays");
-        tab(g, mouseX, mouseY, width() - 110, WBIcons.DOOR, WorkbayScreen.Page.ROOMS, "rooms");
+        tab(g, mouseX, mouseY, width() - 110, WBIcons.BAYS, WorkbayScreen.Page.BAYS, "bays");
         tab(g, mouseX, mouseY, width() - 88, WBIcons.UPGRADE, WorkbayScreen.Page.UPGRADES,
             "upgrades");
         tab(g, mouseX, mouseY, width() - 66, WBIcons.MAP, WorkbayScreen.Page.FLOW, "flow");

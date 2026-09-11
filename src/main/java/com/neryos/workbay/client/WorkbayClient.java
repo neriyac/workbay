@@ -21,6 +21,9 @@ public final class WorkbayClient {
     static void renderers(EntityRenderersEvent.RegisterRenderers event) {
         event.registerBlockEntityRenderer(
             com.neryos.workbay.init.WBBlockEntities.WORKBAY.get(), WorkbayPips::new);
+        // A room on the ground draws as any item does; only its dying is different.
+        event.registerEntityRenderer(com.neryos.workbay.init.WBEntities.ROOM_ITEM.get(),
+            net.minecraft.client.renderer.entity.ItemEntityRenderer::new);
     }
 
     /**

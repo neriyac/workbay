@@ -10,7 +10,8 @@ A tech base ends up as a floor of machines you never look at, joined by cables y
 constantly. Workbay takes the machines off the floor: up to eight of them inside one block — real
 machines, from any mod, still ticking, still running their own recipes — linked out to the chests,
 tanks and machines you left standing in the world. No cables, no sorting corridor: one block where
-a room used to be.
+a room used to be. And a room, when you want one: a 3, 9 or 13-block cube racked in a bay like a
+machine, built inside, moved between Workbays as an item that cannot be destroyed.
 
 ## What it does **not** do
 
@@ -96,7 +97,6 @@ worlds and the record format may still move.
 - **Filters match an item or a fluid by identity — no tags.** "All ores" means listing them.
 - **Links carry items, fluids and energy, but not Mekanism chemicals.** A hosted gas tank keeps
   working; no link can move what is in it yet.
-- **Rooms are not built.** One machine per bay; hand-built multiblocks are a later version.
 
 ## Licence
 

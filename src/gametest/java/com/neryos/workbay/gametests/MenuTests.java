@@ -452,7 +452,7 @@ public class MenuTests {
             WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
             WorkbayRecord record = workbay.record().orElseThrow();
             com.neryos.workbay.world.RoomRegistry.get(level.getServer())
-                .put(record.withUpgrades(new WorkbayRecord.Upgrades(2, 0, 0, 0, 0, 0)));
+                .put(record.withUpgrades(new WorkbayRecord.Upgrades(2, 0, 0, 0)));
 
             ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
             com.neryos.workbay.world.WorkbayTickets.force(backshop,
@@ -974,7 +974,7 @@ public class MenuTests {
             // Three bays, so the target-bay ring has a value on both sides of the hole. One plate,
             // because the base Workbay already grants two (WorkbayRecord.BASE_BAYS).
             registry.put(workbay.record().orElseThrow()
-                .withUpgrades(new WorkbayRecord.Upgrades(1, 0, 0, 0, 0, 0)));
+                .withUpgrades(new WorkbayRecord.Upgrades(1, 0, 0, 0)));
             WorkbayMenu menu = menuFor(workbay, player);
 
             // The redstone ring: forward one step off ALWAYS, then back past it to the far end.

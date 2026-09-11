@@ -22,8 +22,8 @@ import java.util.UUID;
  * unknown block and the Backshop is then simply empty. That record is the only thing left that can
  * say what used to be in the bay.
  *
- * <p>{@link #rooms()} is empty in v1 and must stay present: SPEC.md §16 reserves it so rooms are
- * additive in v2 rather than a persistence rewrite.
+ * <p>A room is a thing a bay holds ({@link Bay#room}); the network keeps no list of rooms of its
+ * own. The {@code Rooms} key older files carry is ignored on read.
  */
 public record WorkbayRecord(
     UUID id,
@@ -47,7 +47,6 @@ public record WorkbayRecord(
     Upgrades upgrades,
     Optional<GlobalPos> lastKnownPos,
     List<Bay> bays,
-    List<UUID> rooms,
     List<com.neryos.workbay.bus.BusConfig> buses,
     int deployedCount,
     /**
@@ -73,7 +72,6 @@ public record WorkbayRecord(
         Upgrades.CODEC.fieldOf("Upgrades").forGetter(WorkbayRecord::upgrades),
         GlobalPos.CODEC.optionalFieldOf("LastKnownPos").forGetter(WorkbayRecord::lastKnownPos),
         Bay.CODEC.listOf().fieldOf("Bays").forGetter(WorkbayRecord::bays),
-        UUIDUtil.CODEC.listOf().fieldOf("Rooms").forGetter(WorkbayRecord::rooms),
         // Optional and empty by default: a record written before links moved into the registry
         // reads back with none, which is exactly what it had.
         com.neryos.workbay.bus.BusConfig.CODEC.listOf().optionalFieldOf("Buses", List.of())
@@ -128,43 +126,38 @@ public record WorkbayRecord(
 
     public WorkbayRecord withConnectors(List<Connector> newConnectors) {
         return new WorkbayRecord(id, code, name, owner, ownerName, locked, bayColumn, upgrades,
-            lastKnownPos, bays, rooms, buses, deployedCount, List.copyOf(newConnectors));
+            lastKnownPos, bays, buses, deployedCount, List.copyOf(newConnectors));
     }
 
     public WorkbayRecord withUpgrades(Upgrades newUpgrades) {
         return new WorkbayRecord(id, code, name, owner, ownerName, locked, bayColumn, newUpgrades,
-            lastKnownPos, bays, rooms, buses, deployedCount, connectors);
+            lastKnownPos, bays, buses, deployedCount, connectors);
     }
 
     public WorkbayRecord withLastKnownPos(GlobalPos pos) {
         return new WorkbayRecord(id, code, name, owner, ownerName, locked, bayColumn, upgrades,
-            Optional.of(pos), bays, rooms, buses, deployedCount, connectors);
+            Optional.of(pos), bays, buses, deployedCount, connectors);
     }
 
     public WorkbayRecord withLocked(boolean nowLocked) {
         return new WorkbayRecord(id, code, name, owner, ownerName, nowLocked, bayColumn, upgrades,
-            lastKnownPos, bays, rooms, buses, deployedCount, connectors);
+            lastKnownPos, bays, buses, deployedCount, connectors);
     }
 
     public WorkbayRecord withBays(List<Bay> newBays) {
         return new WorkbayRecord(id, code, name, owner, ownerName, locked, bayColumn, upgrades,
-            lastKnownPos, List.copyOf(newBays), rooms, buses, deployedCount, connectors);
-    }
-
-    public WorkbayRecord withRooms(List<UUID> newRooms) {
-        return new WorkbayRecord(id, code, name, owner, ownerName, locked, bayColumn, upgrades,
-            lastKnownPos, bays, List.copyOf(newRooms), buses, deployedCount, connectors);
+            lastKnownPos, List.copyOf(newBays), buses, deployedCount, connectors);
     }
 
     public WorkbayRecord withBuses(List<com.neryos.workbay.bus.BusConfig> newBuses) {
         return new WorkbayRecord(id, code, name, owner, ownerName, locked, bayColumn, upgrades,
-            lastKnownPos, bays, rooms, List.copyOf(newBuses), deployedCount, connectors);
+            lastKnownPos, bays, List.copyOf(newBuses), deployedCount, connectors);
     }
 
     /** This network's own name, and never the code. */
     public WorkbayRecord withName(String nowName) {
         return new WorkbayRecord(id, code, nowName, owner, ownerName, locked, bayColumn, upgrades,
-            lastKnownPos, bays, rooms, buses, deployedCount, connectors);
+            lastKnownPos, bays, buses, deployedCount, connectors);
     }
 
     /**
@@ -233,7 +226,7 @@ public record WorkbayRecord(
      */
     public WorkbayRecord withDeployedCount(int nowDeployedCount) {
         return new WorkbayRecord(id, code, name, owner, ownerName, locked, bayColumn, upgrades,
-            lastKnownPos, bays, rooms, buses, Math.max(0, nowDeployedCount), connectors);
+            lastKnownPos, bays, buses, Math.max(0, nowDeployedCount), connectors);
     }
 
 
@@ -253,23 +246,6 @@ public record WorkbayRecord(
      * by the server's {@code maxBaysPerWorkbay}. The cap is applied here rather than at install
      * time so lowering it never destroys an Expansion Plate somebody already spent.
      */
-    /**
-     * Rooms this network is entitled to: the Room Frame grants the first, each Annex Plate one
-     * more. Zero without a Frame, so the ROOMS page is not there to be found before it means
-     * anything. SPEC.md §1.
-     */
-    public int roomCapacity() {
-        if (upgrades.roomTier() <= 0) {
-            return 0;
-        }
-        // Capped here rather than at install time, the way bayCapacity is, so lowering
-        // maxRoomsPerNetwork never destroys an Annex Plate somebody already spent. MAX_ROOMS is
-        // still the hard ceiling: the region allocator reserves a footprint per slot.
-        return Math.min(Math.min(1 + upgrades.annexPlates(),
-            com.neryos.workbay.config.WorkbayConfig.SERVER.maxRoomsPerNetwork.get()),
-            RoomGeometry.MAX_ROOMS);
-    }
-
     public int bayCapacity() {
         return Math.min(BASE_BAYS + upgrades.expansionPlates(),
             com.neryos.workbay.config.WorkbayConfig.SERVER.maxBaysPerWorkbay.get());
@@ -281,7 +257,13 @@ public record WorkbayRecord(
      * SPEC.md §14 requires, and what {@code /workbay orphans} reports.
      */
     public record Bay(int index, Optional<ResourceLocation> hosted, FaceConfig faces,
-        String name, RedstoneMode redstone) {
+        String name, RedstoneMode redstone,
+        /**
+         * The room standing in this bay, when what is racked is a room rather than a machine.
+         * <b>This is the one place a room's holder is written</b>: {@code hosted} says a room
+         * block is here, this says which room, and {@link RoomRegistry#holderOf} reads it back.
+         */
+        Optional<UUID> room) {
 
         // Both new fields are optional in the codec, so a Workbay written before they existed
         // reads back as an unnamed bay that always runs -- which is what it was.
@@ -291,28 +273,39 @@ public record WorkbayRecord(
             FaceConfig.CODEC.optionalFieldOf("Faces", FaceConfig.NONE).forGetter(Bay::faces),
             Codec.STRING.optionalFieldOf("Name", "").forGetter(Bay::name),
             StringRepresentable.fromEnum(RedstoneMode::values)
-                .optionalFieldOf("Redstone", RedstoneMode.ALWAYS).forGetter(Bay::redstone)
+                .optionalFieldOf("Redstone", RedstoneMode.ALWAYS).forGetter(Bay::redstone),
+            UUIDUtil.CODEC.optionalFieldOf("Room").forGetter(Bay::room)
         ).apply(i, Bay::new));
 
         public static Bay empty(int index) {
-            return new Bay(index, Optional.empty(), FaceConfig.NONE, "", RedstoneMode.ALWAYS);
+            return new Bay(index, Optional.empty(), FaceConfig.NONE, "", RedstoneMode.ALWAYS,
+                Optional.empty());
         }
 
         public Bay withHosted(Optional<ResourceLocation> nowHosted) {
-            return new Bay(index, nowHosted, faces, name, redstone);
+            return new Bay(index, nowHosted, faces, name, redstone, room);
         }
 
         public Bay withFaces(FaceConfig nowFaces) {
-            return new Bay(index, hosted, nowFaces, name, redstone);
+            return new Bay(index, hosted, nowFaces, name, redstone, room);
         }
 
         public Bay withName(String nowName) {
-            return new Bay(index, hosted, faces, nowName, redstone);
+            return new Bay(index, hosted, faces, nowName, redstone, room);
         }
 
         public Bay withRedstone(RedstoneMode nowRedstone) {
-            return new Bay(index, hosted, faces, name, nowRedstone);
+            return new Bay(index, hosted, faces, name, nowRedstone, room);
         }
+
+        public Bay withRoom(Optional<UUID> nowRoom) {
+            return new Bay(index, hosted, faces, name, redstone, nowRoom);
+        }
+    }
+
+    /** The bay holding one room, if any of this network's do. */
+    public Optional<Bay> bayHolding(UUID room) {
+        return bays.stream().filter(b -> b.room().map(room::equals).orElse(false)).findFirst();
     }
 
     /** The bay at an index, minting an empty one rather than returning nothing for a bay in range. */
@@ -331,12 +324,11 @@ public record WorkbayRecord(
 
     /**
      * Upgrades are consumed on install and recorded as counters — there is no upgrade inventory and
-     * no removal path (SPEC.md §1). {@code roomTier} and {@code annexPlates} are v2's, written and
-     * carried in v1 so that v2 adds behaviour rather than a migration.
+     * no removal path (SPEC.md §1). The {@code AnnexPlates} and {@code RoomTier} keys older files
+     * carry belonged to the frames and are ignored on read: a room is an item now.
      */
-    public record Upgrades(int expansionPlates, int resonators, int anchors, int annexPlates,
-        int roomTier, int impellers) {
-        public static final Upgrades NONE = new Upgrades(0, 0, 0, 0, 0, 0);
+    public record Upgrades(int expansionPlates, int resonators, int anchors, int impellers) {
+        public static final Upgrades NONE = new Upgrades(0, 0, 0, 0);
 
         /**
          * What one Impeller is worth, on both halves of what a link does.
@@ -359,8 +351,6 @@ public record WorkbayRecord(
             Codec.INT.optionalFieldOf("ExpansionPlates", 0).forGetter(Upgrades::expansionPlates),
             Codec.INT.optionalFieldOf("Resonators", 0).forGetter(Upgrades::resonators),
             Codec.INT.optionalFieldOf("Anchors", 0).forGetter(Upgrades::anchors),
-            Codec.INT.optionalFieldOf("AnnexPlates", 0).forGetter(Upgrades::annexPlates),
-            Codec.INT.optionalFieldOf("RoomTier", 0).forGetter(Upgrades::roomTier),
             Codec.INT.optionalFieldOf("Impellers", 0).forGetter(Upgrades::impellers)
         ).apply(i, Upgrades::new));
 
@@ -368,21 +358,10 @@ public record WorkbayRecord(
         public Upgrades plus(com.neryos.workbay.content.workbay.WorkbayUpgrade upgrade) {
             return switch (upgrade) {
                 case EXPANSION_PLATE -> new Upgrades(expansionPlates + 1, resonators, anchors,
-                    annexPlates, roomTier, impellers);
-                case RESONATOR -> new Upgrades(expansionPlates, resonators + 1, anchors,
-                    annexPlates, roomTier, impellers);
-                case IMPELLER -> new Upgrades(expansionPlates, resonators, anchors,
-                    annexPlates, roomTier, impellers + 1);
-                case ANNEX_PLATE -> new Upgrades(expansionPlates, resonators, anchors,
-                    annexPlates + 1, roomTier, impellers);
-                case ANCHOR -> new Upgrades(expansionPlates, resonators, anchors + 1,
-                    annexPlates, roomTier, impellers);
-                // Highest wins, and never down: a smaller Frame fitted over a bigger room would
-                // put bedrock through a factory somebody built. install() refuses it first; this
-                // is the second half of the same rule, where the number actually changes.
-                case ROOM_FRAME, WIDE_ROOM_FRAME, VAST_ROOM_FRAME ->
-                    new Upgrades(expansionPlates, resonators, anchors, annexPlates,
-                        Math.max(roomTier, upgrade.roomTier()), impellers);
+                    impellers);
+                case RESONATOR -> new Upgrades(expansionPlates, resonators + 1, anchors, impellers);
+                case IMPELLER -> new Upgrades(expansionPlates, resonators, anchors, impellers + 1);
+                case ANCHOR -> new Upgrades(expansionPlates, resonators, anchors + 1, impellers);
             };
         }
 
@@ -391,12 +370,7 @@ public record WorkbayRecord(
                 case EXPANSION_PLATE -> expansionPlates;
                 case RESONATOR -> resonators;
                 case IMPELLER -> impellers;
-                case ANNEX_PLATE -> annexPlates;
                 case ANCHOR -> anchors;
-                // 1 once the room is already at least this big, so the install path refuses it as
-                // maxed rather than needing a rule of its own.
-                case ROOM_FRAME, WIDE_ROOM_FRAME, VAST_ROOM_FRAME ->
-                    roomTier >= upgrade.roomTier() ? 1 : 0;
             };
         }
 

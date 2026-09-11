@@ -46,6 +46,11 @@ public class WBBlockStateProvider extends BlockStateProvider {
             .rotationY(((int) state.getValue(HorizontalDirectionalBlock.FACING).toYRot() + 180) % 360)
             .build());
 
+        // The three rooms: a cube of the same picture on every face, the item being the cube.
+        for (var room : java.util.List.of(WBBlocks.ROOM, WBBlocks.WIDE_ROOM, WBBlocks.VAST_ROOM)) {
+            simpleBlock(room.get(), cubeAll(room.get()));
+        }
+
         // A thin plate drawn on the NORTH side, then rotated onto whichever face it is stuck to.
         // Same +180 as above; here getting it wrong put the plate on the far side of the block it
         // was stuck to, inside it, where nobody could see it at all.

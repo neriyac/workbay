@@ -121,7 +121,7 @@ public class RoomRegistryTests {
             before.create(BOB, "Bob", random);
 
             alice = alice
-                .withUpgrades(new WorkbayRecord.Upgrades(3, 1, 1, 2, 17, 0))
+                .withUpgrades(new WorkbayRecord.Upgrades(3, 1, 1, 0))
                 .withLocked(true)
                 .withLastKnownPos(GlobalPos.of(WorkbayDimensions.BACKSHOP, new BlockPos(12, 34, -56)))
                 .withBays(List.of(
@@ -133,7 +133,7 @@ public class RoomRegistryTests {
                         // Both new bay fields ride the same round trip, so a codec that drops one
                         // is caught here rather than the first time a player names a bay.
                         "Ore line",
-                        com.neryos.workbay.world.RedstoneMode.WITHOUT_SIGNAL),
+                        com.neryos.workbay.world.RedstoneMode.WITHOUT_SIGNAL, Optional.empty()),
                     WorkbayRecord.Bay.empty(1)))
                 // Links moved into the registry so they survive breaking the Workbay; this is the
                 // exact bug that move fixed, pinned down so nobody moves them back by accident.
@@ -150,12 +150,17 @@ public class RoomRegistryTests {
 ;
 
             // A room is a place somebody built in, so it has to come back byte for byte: its
-            // region (where their chests are), the tier standing in the world, the biome and the
-            // anchor toggle that decides whether it costs the server anything.
-            com.neryos.workbay.world.RoomRecord room = before.createRoom()
+            // region (where their chests are), its size, the tier standing in the world, the
+            // biome, and the ticket, last holder and Connector list that travel with it.
+            com.neryos.workbay.world.RoomRecord room = before.createRoom(2)
                 .withBuiltTier(2)
                 .withName(Optional.of("Greenhouse"))
-                .withAnchored(true)
+                .withTicket(Optional.of(java.util.UUID.randomUUID()))
+                .withLastHolder(alice.id())
+                .withConnectors(List.of(new WorkbayRecord.Connector(java.util.UUID.randomUUID(),
+                    GlobalPos.of(WorkbayDimensions.BACKSHOP, new BlockPos(-1_048_500, 3, 4)),
+                    "Barrel", GlobalPos.of(WorkbayDimensions.BACKSHOP, new BlockPos(-1_048_500, 3, 5)),
+                    Optional.of(net.minecraft.resources.ResourceLocation.parse("minecraft:barrel")))))
                 // Colour and the guest list ride the same trip for the same reason: both are
                 // optional fields with a default, and an optional field nobody sets is a field
                 // nobody tests.
@@ -163,17 +168,20 @@ public class RoomRegistryTests {
                 .withGuest(BOB, "Bob", com.neryos.workbay.world.RoomGuest.BUILD)
                 .withBiome(net.minecraft.world.level.biome.Biomes.SNOWY_PLAINS);
             before.putRoom(room);
-            alice = alice.withRooms(List.of(room.id()));
+            // And which bay holds it, which is the only place a holder is written.
+            alice = alice.withBay(alice.bay(1).withRoom(Optional.of(room.id())));
             before.put(alice);
 
             RoomRegistry after = RoomRegistry.roundTrip(before, registries);
 
             helper.assertValueEqual(after.room(room.id()).orElse(null), room, "the room after reload");
             helper.assertValueEqual(after.roomsOf(after.byId(alice.id()).orElseThrow()).size(), 1,
-                "rooms listed on Alice's Workbay after reload");
+                "rooms in Alice's bays after reload");
+            helper.assertValueEqual(after.holderOf(room).map(RoomRegistry.Holder::bay).orElse(-1), 1,
+                "the bay holding the room after reload");
             // The region allocator is monotonic and never reused, so a fresh room after a reload
             // must not be handed the region somebody is already standing in.
-            helper.assertFalse(after.createRoom().region() == room.region(),
+            helper.assertFalse(after.createRoom(1).region() == room.region(),
                 "the room region allocator restarted from zero after a reload");
 
             helper.assertValueEqual(after.size(), 2, "records after reload");
@@ -386,7 +394,7 @@ public class RoomRegistryTests {
                 RoomRegistry registry = RoomRegistry.read(
                     helper.getLevel().getServer().overworld().getDataStorage(), file.getParent(), name);
                 WorkbayRecord minted = registry.create(ALICE, "Alice", RandomSource.create(7L));
-                registry.createRoom();
+                registry.createRoom(1);
                 // No storage.save(), no save-all: only what the mint itself wrote.
                 net.neoforged.neoforge.common.IOUtilities.waitUntilIOWorkerComplete();
                 if (!Files.exists(file)) {

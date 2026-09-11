@@ -32,6 +32,7 @@ public class Workbay {
 
         WBBlocks.register(modEventBus);
         WBBlockEntities.register(modEventBus);
+        com.neryos.workbay.init.WBEntities.register(modEventBus);
         WBItems.register(modEventBus);
         WBDataComponents.register(modEventBus);
         WBCreativeTabs.register(modEventBus);

@@ -142,11 +142,6 @@ class UpgradesPage extends WorkbayPage {
 
         int row = -1;
         for (WorkbayUpgrade upgrade : WorkbayUpgrade.values()) {
-            // The room line is on the ROOMS page, beside the rooms whose chunk cost it sets. This
-            // page keeps the four rungs it was drawn for, and its rows stay two lines deep.
-            if (upgrade.aboutRooms()) {
-                continue;
-            }
             row++;
             int index = upgrade.ordinal();
             int px = x(ROW_X);

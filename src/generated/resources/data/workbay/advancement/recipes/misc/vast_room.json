@@ -13,7 +13,7 @@
     },
     "has_the_recipe": {
       "conditions": {
-        "recipe": "workbay:vast_room_frame"
+        "recipe": "workbay:vast_room"
       },
       "trigger": "minecraft:recipe_unlocked"
     }
@@ -26,7 +26,7 @@
   ],
   "rewards": {
     "recipes": [
-      "workbay:vast_room_frame"
+      "workbay:vast_room"
     ]
   }
 }

@@ -64,9 +64,9 @@ public class RoomRegistry extends SavedData {
     private final Map<String, UUID> byCode = new HashMap<>();
 
     /**
-     * Every room in the world, by its own UUID. Kept here and not on the Workbay record because a
-     * room outlives the block that made it: SPEC.md §14 orphans a room and never deletes it, and
-     * {@code /workbay recover} has to find one with nothing standing in the world.
+     * Every room in the world, by its own UUID. Kept here and not on a Workbay record because a
+     * room is not a network's: it is an item that sits in a bay of whichever Workbay holds it
+     * today (SPEC.md §0), and it exists whether or not any bay does.
      */
     private final Map<UUID, RoomRecord> rooms = new HashMap<>();
 
@@ -233,9 +233,39 @@ public class RoomRegistry extends SavedData {
         return Optional.ofNullable(rooms.get(id));
     }
 
-    /** The rooms of one Workbay, in the order its record lists them. Skips any that went missing. */
-    public List<RoomRecord> roomsOf(WorkbayRecord record) {
-        return record.rooms().stream().map(rooms::get).filter(java.util.Objects::nonNull).toList();
+    /** The room standing in one bay of a network, if that bay holds one. */
+    public Optional<RoomRecord> roomInBay(WorkbayRecord record, int bay) {
+        return record.bay(bay).room().flatMap(this::room);
+    }
+
+    /** Every room a network's bays hold, by bay index, in bay order. */
+    public java.util.SortedMap<Integer, RoomRecord> roomsOf(WorkbayRecord record) {
+        java.util.SortedMap<Integer, RoomRecord> out = new java.util.TreeMap<>();
+        for (WorkbayRecord.Bay bay : record.bays()) {
+            bay.room().map(rooms::get).ifPresent(room -> out.put(bay.index(), room));
+        }
+        return out;
+    }
+
+    /** A room and the bay it stands in. */
+    public record Holder(WorkbayRecord network, int bay) {}
+
+    /**
+     * Which network holds a room, and in which bay -- read off the bays, never stored on the
+     * room, so the two cannot disagree. Empty while the room is an item.
+     */
+    public Optional<Holder> holderOf(RoomRecord room) {
+        return holderOf(room.id());
+    }
+
+    public Optional<Holder> holderOf(UUID room) {
+        for (WorkbayRecord record : byId.values()) {
+            Optional<WorkbayRecord.Bay> bay = record.bayHolding(room);
+            if (bay.isPresent()) {
+                return Optional.of(new Holder(record, bay.get().index()));
+            }
+        }
+        return Optional.empty();
     }
 
     /** Which room a Backshop position falls inside, or empty. How a shell block finds its room. */
@@ -246,24 +276,13 @@ public class RoomRegistry extends SavedData {
     }
 
     /**
-     * Whose room this is: the owner of the network whose record lists it.
-     *
-     * <p>Derived rather than stored on the room. A room is created by
-     * {@link RoomVisit} out of a Workbay's own record and can only ever be reached through one, so
-     * a second copy of the owner here could only ever be a copy that had gone wrong — and the one
-     * case where it would differ is the one this must get right: an <b>orphaned</b> room, listed by
-     * nobody, which correctly has no owner and therefore nobody who may stand in it.
-     *
-     * <p>Iterates {@code byId} directly and not {@link #all()}, which copies: this is asked once
-     * per tick for every player in the Backshop.
+     * Whose room this is: the owner of the network holding it, or of the one that held it last
+     * while it is an item -- so the owner standing in a pulled-out room may still build in it.
+     * Entering needs a holder ({@link RoomVisit#enter}); staying does not.
      */
     public Optional<UUID> ownerOf(RoomRecord room) {
-        for (WorkbayRecord record : byId.values()) {
-            if (record.rooms().contains(room.id())) {
-                return Optional.of(record.owner());
-            }
-        }
-        return Optional.empty();
+        return holderOf(room).map(holder -> holder.network().owner())
+            .or(() -> room.lastHolder().flatMap(this::byId).map(WorkbayRecord::owner));
     }
 
     // ---------------------------------------------------------------- writing
@@ -283,7 +302,7 @@ public class RoomRegistry extends SavedData {
             // Locked at mint: an unlocked Workbay lets any passer-by eject the owner's machines
             // into their own hand, so sharing is what the owner opts into with the Lock button.
             defaultName(ownerName, ownedBy(owner).size() + 1), owner, ownerName, true,
-            column, WorkbayRecord.Upgrades.NONE, Optional.empty(), List.of(), List.of(), List.of(),
+            column, WorkbayRecord.Upgrades.NONE, Optional.empty(), List.of(), List.of(),
             0, List.of());
         byId.put(id, record);
         byCode.put(normalise(record.code()), id);
@@ -299,12 +318,11 @@ public class RoomRegistry extends SavedData {
     }
 
     /**
-     * Mints a room and hands it a region nobody else has. The shell is <b>not</b> built here:
-     * SPEC.md §8 spends that on first entry, so a Room Frame installed and never used costs
-     * nothing but a counter.
+     * Mints a room of one size and hands it a region nobody else has. The shell is <b>not</b>
+     * built here: SPEC.md §8 spends that on first entry.
      */
-    public RoomRecord createRoom() {
-        RoomRecord room = RoomRecord.fresh(UUID.randomUUID(), nextRoomRegion++);
+    public RoomRecord createRoom(int tier) {
+        RoomRecord room = RoomRecord.fresh(UUID.randomUUID(), nextRoomRegion++, tier);
         rooms.put(room.id(), room);
         setDirty();
         return room;

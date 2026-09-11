@@ -87,13 +87,7 @@ public final class AnchorPresence {
      */
     private static void apply(MinecraftServer server, UUID owner) {
         RoomRegistry registry = RoomRegistry.get(server);
-        ServerLevel backshop = server.getLevel(WorkbayDimensions.BACKSHOP);
         for (WorkbayRecord record : registry.ownedBy(owner)) {
-            if (backshop != null) {
-                for (RoomRecord room : registry.roomsOf(record)) {
-                    RoomAnchors.apply(backshop, room);
-                }
-            }
             RoomAnchors.applyOwnChunk(server, record);
         }
     }

@@ -3,7 +3,7 @@
   "category": "misc",
   "key": {
     "C": {
-      "item": "minecraft:echo_shard"
+      "item": "minecraft:diamond"
     },
     "H": {
       "item": "workbay:housing"
@@ -19,6 +19,6 @@
   ],
   "result": {
     "count": 1,
-    "id": "workbay:wide_room_frame"
+    "id": "workbay:room"
   }
 }
