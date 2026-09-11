@@ -448,6 +448,16 @@ public class WorkbayBlockEntity extends BlockEntity {
         if (!(level instanceof ServerLevel server)) {
             return;
         }
+        // A network has one block, and the record says which: every bind stamps
+        // `rememberPosition`. A block the record does not point at is one a Transfer could not
+        // reach (its chunk was unloaded) or a duplicated item -- either way it lets go, or two
+        // front doors edit one record and breaking either puts the network to sleep under the
+        // other. Night 2026-09-11, 1B #3c / 1A #10.
+        if (workbay.record().flatMap(WorkbayRecord::lastKnownPos)
+            .filter(at -> !at.equals(GlobalPos.of(server.dimension(), pos))).isPresent()) {
+            workbay.unbind();
+            return;
+        }
         // The game's own profiler, so `/perf start` breaks this tick down by name instead of
         // reporting one lump called workbay:workbay. Free when nothing is recording -- the
         // inactive filler's push/pop are empty methods, the same bet vanilla makes everywhere.

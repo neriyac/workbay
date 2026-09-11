@@ -24,6 +24,8 @@ import net.neoforged.testframework.gametest.ExtendedGameTestHelper;
 import net.neoforged.testframework.gametest.GameTestPlayer;
 import net.neoforged.testframework.gametest.StructureTemplateBuilder;
 
+import java.util.UUID;
+
 /**
  * SPEC.md §0 and §14's network model. <b>One Workbay block is one network</b>: its own bays,
  * machines, Connectors and energy, sharing nothing with any other. A Workbay belongs to the player
@@ -457,6 +459,48 @@ public class NetworkTests {
             helper.assertValueEqual(back.byId(second.id()).orElseThrow().code(), second.code(),
                 "the code of the second network after loading an older registry");
             helper.succeed();
+        });
+    }
+    /**
+     * Night 2026-09-11, 1B #3c / 1A #10. {@code WorkbayMenu#transfer} unbinds the block a network
+     * is leaving only if that block is loaded; an unloaded one keeps the id in its NBT and, when
+     * its chunk comes back, ticks and opens the same record as the block that took it. A gametest
+     * cannot unload a chunk, so the stale block is made directly: a second Workbay bound by hand
+     * to a network whose {@code lastKnownPos} is the first. The record already says where its
+     * block is, so the stale one lets go on its own tick; the live one keeps the id.
+     */
+    @GameTest(timeoutTicks = 100)
+    @TestHolder(description = "A Workbay whose network says its block stands elsewhere lets go of it on its own tick.")
+    public static void aBlockWhoseNetworkMovedLetsGoOnTick(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(9, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos home = helper.absolutePos(new BlockPos(1, 1, 1));
+            level.setBlock(home, WBBlocks.WORKBAY.get().defaultBlockState(), Block.UPDATE_ALL);
+            WBBlocks.WORKBAY.get().setPlacedBy(level, home, level.getBlockState(home), player,
+                new ItemStack(WBBlocks.WORKBAY.get()));
+            WorkbayBlockEntity real = (WorkbayBlockEntity) level.getBlockEntity(home);
+            UUID id = real.workbayId().orElseThrow();
+
+            BlockPos away = helper.absolutePos(new BlockPos(6, 1, 1));
+            level.setBlock(away, WBBlocks.WORKBAY.get().defaultBlockState(), Block.UPDATE_ALL);
+            WorkbayBlockEntity stale = (WorkbayBlockEntity) level.getBlockEntity(away);
+            stale.bindTo(id);
+
+            helper.startSequence()
+                .thenIdle(10)
+                .thenExecute(() -> {
+                    helper.assertValueEqual(real.workbayId().orElse(null), id,
+                        "the network on the block the record points at");
+                    helper.assertValueEqual(stale.workbayId().isPresent(), false,
+                        "whether a block the record does not point at is still holding the network");
+                    helper.assertValueEqual(
+                        RoomRegistry.get(level.getServer()).byId(id).orElseThrow().deployedCount(),
+                        1, "blocks the record counts on the network");
+                })
+                .thenSucceed();
         });
     }
 }
