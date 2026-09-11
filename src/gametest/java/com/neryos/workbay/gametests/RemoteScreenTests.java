@@ -206,4 +206,33 @@ public class RemoteScreenTests {
             helper.succeed();
         });
     }
+
+    /**
+     * Night audit 1A finding 12. The mixin widened {@code canInteractWithBlock} for every caller,
+     * and use and dig ask it with a boost of 1.0 -- so while a remote screen was open, the block at
+     * the machine's coordinates in the player's <em>own</em> dimension was usable and breakable
+     * from anywhere. Only {@code stillValid}'s question (boost 4.0) is widened now.
+     */
+    @GameTest
+    @TestHolder(description = "A remote screen widens the menu's distance check only, not use or dig.")
+    public static void aRemoteScreenWidensOnlyTheMenusReach(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            Racked r = rack(helper);
+            GameTestPlayer player = r.player();
+            BlockPos machine = r.machine();
+            helper.assertTrue(RemoteScreens.open(player, r.backshop(), machine), "no screen opened");
+            helper.assertTrue(RemoteScreens.isOpenAt(player, machine),
+                "the screen does not read as open, so the widening is not what is under test");
+
+            helper.assertTrue(player.canInteractWithBlock(machine, 4.0),
+                "the menu's own distance check (boost 4.0) is not widened, so the screen closes");
+            helper.assertFalse(player.canInteractWithBlock(machine, 1.0),
+                "use and dig (boost 1.0) are widened too: the block at the machine's coordinates in "
+                    + "the player's own dimension is reachable from anywhere");
+            player.closeContainer();
+            helper.succeed();
+        });
+    }
 }
