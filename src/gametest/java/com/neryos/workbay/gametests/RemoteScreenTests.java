@@ -151,4 +151,59 @@ public class RemoteScreenTests {
             helper.succeed();
         });
     }
+
+    /**
+     * Night audit 1A finding 2. Neither {@code /workbay remote} nor {@code /workbay charge} asked
+     * who was running it: any player could open the machine in any Workbay's bay, lock ignored,
+     * and fill any energy block for free. {@code remote} now applies the menu's rule (a locked
+     * Workbay opens only for its owner) and {@code charge}, a test fixture, needs permission 2.
+     *
+     * <p>Every refusal is paired with the same command landing for somebody allowed to run it, so
+     * a pick that misses the block cannot pass this as a refusal.
+     */
+    @GameTest
+    @TestHolder(description = "/workbay remote refuses a stranger on a locked Workbay and "
+        + "/workbay charge refuses a non-op; the owner and an op are served.")
+    public static void commandsRefuseStrangersAndNonOps(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 5, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            Racked r = rack(helper);
+            GameTestPlayer owner = r.player();
+            BlockPos pos = helper.absolutePos(new BlockPos(0, 1, 0));
+            WorkbayBlockEntity workbay = (WorkbayBlockEntity) helper.getLevel().getBlockEntity(pos);
+            if (!workbay.record().orElseThrow().locked()) {
+                helper.fail("a fresh Workbay is not locked");
+                return;
+            }
+            var commands = helper.getLevel().getServer().getCommands();
+
+            // Standing two blocks above the Workbay, looking straight down at it.
+            GameTestPlayer stranger = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            stranger.moveTo(pos.getX() + 0.5, pos.getY() + 2, pos.getZ() + 0.5, 0.0F, 90.0F);
+            commands.performPrefixedCommand(stranger.createCommandSourceStack().withPermission(0),
+                "workbay remote 0");
+            helper.assertTrue(stranger.containerMenu == stranger.inventoryMenu,
+                "/workbay remote opened a locked Workbay's machine for a stranger");
+
+            owner.moveTo(pos.getX() + 0.5, pos.getY() + 2, pos.getZ() + 0.5, 0.0F, 90.0F);
+            commands.performPrefixedCommand(owner.createCommandSourceStack().withPermission(0),
+                "workbay remote 0");
+            helper.assertTrue(owner.containerMenu != owner.inventoryMenu,
+                "/workbay remote opened nothing for the owner, so the refusal above proves nothing");
+            owner.closeContainer();
+
+            // charge: the Workbay's own buffer is an energy block. Emptied first.
+            workbay.energy().deserializeNBT(null, net.minecraft.nbt.IntTag.valueOf(0));
+            commands.performPrefixedCommand(owner.createCommandSourceStack().withPermission(0),
+                "workbay charge");
+            helper.assertValueEqual(workbay.energy().getEnergyStored(), 0,
+                "FE a non-op pushed into a block with /workbay charge");
+            commands.performPrefixedCommand(owner.createCommandSourceStack().withPermission(2),
+                "workbay charge");
+            helper.assertTrue(workbay.energy().getEnergyStored() > 0,
+                "/workbay charge pushed nothing for an op, so the refusal above proves nothing");
+            helper.succeed();
+        });
+    }
 }

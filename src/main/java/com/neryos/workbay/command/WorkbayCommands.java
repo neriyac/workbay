@@ -41,7 +41,9 @@ public class WorkbayCommands {
                         ResourceLocationArgument.getId(context, "block")))))
             .then(Commands.literal("ports")
                 .executes(context -> ports(context.getSource())))
+            // A test fixture that fills any energy block for free: operators only.
             .then(Commands.literal("charge")
+                .requires(source -> source.hasPermission(2))
                 .executes(context -> charge(context.getSource())))
             .then(Commands.literal("room")
                 .then(Commands.argument("room", com.mojang.brigadier.arguments.IntegerArgumentType.integer(0))
@@ -151,6 +153,12 @@ public class WorkbayCommands {
             player.server.getLevel(com.neryos.workbay.world.WorkbayDimensions.BACKSHOP);
         if (record.isEmpty() || backshop == null || bay < 0 || bay >= record.get().bayCapacity()) {
             source.sendFailure(Component.literal("No such bay."));
+            return 0;
+        }
+        // The menu's rule, because this is the menu's button without the menu: a locked Workbay
+        // opens its machines for the owner alone.
+        if (record.get().locked() && !record.get().owner().equals(player.getUUID())) {
+            source.sendFailure(com.neryos.workbay.WorkbayLang.message("locked"));
             return 0;
         }
         net.minecraft.core.BlockPos machine =
