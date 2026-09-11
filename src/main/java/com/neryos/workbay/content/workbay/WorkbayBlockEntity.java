@@ -270,6 +270,14 @@ public class WorkbayBlockEntity extends BlockEntity {
      * enabled flag, name, filter or anything else about it changed. Found in play: toggling a
      * link's checkbox visibly jumped it to the end of the list.
      */
+    /**
+     * Links one network may hold: eight bays, four resources, two directions. Past it a new link
+     * is refused and an edit still lands. Unbounded, the list grew by one per Add packet forever,
+     * and the snapshot carrying it disconnected every viewer past a megabyte (night audit 1A,
+     * finding 5).
+     */
+    public static final int MAX_LINKS = 64;
+
     public void addBus(BusConfig bus) {
         editBuses(record -> {
             List<BusConfig> updated = new ArrayList<>(record.buses());
@@ -289,6 +297,8 @@ public class WorkbayBlockEntity extends BlockEntity {
                 // is a capability lookup on the next tick; getting it wrong is a link that quietly
                 // keeps talking to the block it used to point at.
                 runner.forget(bus.id());
+            } else if (updated.size() >= MAX_LINKS) {
+                return null;
             } else {
                 updated.add(bus);
             }

@@ -1105,4 +1105,45 @@ public class MenuTests {
             helper.succeed();
         });
     }
+
+    /**
+     * Night audit 1A finding 5. Every Add minted a link and nothing capped the list, so a record
+     * grew without bound, every viewer's snapshot grew with it, and past a megabyte the snapshot
+     * packet disconnected whoever right-clicked the block. {@code addBus} now refuses a
+     * <em>new</em> link once the record holds {@link WorkbayBlockEntity#MAX_LINKS}; edits of an
+     * existing one are never refused.
+     */
+    @GameTest
+    @TestHolder(description = "A network holds at most 64 links; Add past that mints nothing.")
+    public static void aNetworkHoldsAtMostSixtyFourLinks(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
+            GlobalPos connectorPos = GlobalPos.of(level.dimension(), workbayPos.above());
+            workbay.addConnector(new WorkbayRecord.Connector(java.util.UUID.randomUUID(),
+                connectorPos, "feed", GlobalPos.of(level.dimension(), workbayPos.above(2)),
+                Optional.empty()));
+            java.util.UUID connector = workbay.connectorAt(connectorPos).orElseThrow().id();
+
+            // The button's own code, straight, so the menu's action budget is not what stops it.
+            WorkbayMenu.addChannel(workbay, workbay.record().orElseThrow(), connector, 0);
+            helper.assertValueEqual(workbay.buses().size(), 1, "links after the first Add");
+            for (int i = 1; i < 100; i++) {
+                WorkbayMenu.addChannel(workbay, workbay.record().orElseThrow(), connector, 0);
+            }
+            helper.assertValueEqual(workbay.buses().size(), WorkbayBlockEntity.MAX_LINKS,
+                "links after a hundred Adds");
+
+            // An edit of a link that exists still lands on a full record.
+            BusConfig first = workbay.buses().getFirst();
+            workbay.addBus(first.withName("renamed"));
+            helper.assertValueEqual(workbay.bus(first.id()).orElseThrow().name(), "renamed",
+                "the first link's name after an edit on a full record");
+            helper.succeed();
+        });
+    }
 }
