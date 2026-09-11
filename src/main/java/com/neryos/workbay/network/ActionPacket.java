@@ -42,10 +42,26 @@ public record ActionPacket(int containerId, WorkbayAction action, long arg,
             ACTION, ActionPacket::action,
             ByteBufCodecs.VAR_LONG, ActionPacket::arg,
             UUIDUtil.STREAM_CODEC.apply(ByteBufCodecs::optional), ActionPacket::link,
-            // Capped, because it is drawn on a 130-pixel line and arrives from a client.
-            ByteBufCodecs.stringUtf8(64).apply(ByteBufCodecs::optional), ActionPacket::text,
+            // Capped, because it is drawn on a 130-pixel line and arrives from a client; and
+            // filtered, because it is drawn on every viewer's screen.
+            ByteBufCodecs.stringUtf8(64).map(ActionPacket::cleanName, s -> s)
+                .apply(ByteBufCodecs::optional), ActionPacket::text,
             ByteBufCodecs.BOOL, ActionPacket::back,
             ActionPacket::new);
+
+    /**
+     * A player-typed name, made safe to draw: formatting codes go as a pair (vanilla's chat filter
+     * drops the section sign and keeps the letter), then the chat filter for control characters,
+     * then the format-category characters it lets through -- a zero-width space is one, and a name
+     * of nothing but those passed {@code isBlank()}. Night audit 1A, finding 9.
+     */
+    public static String cleanName(String text) {
+        String stripped = net.minecraft.ChatFormatting.stripFormatting(text);
+        return net.minecraft.util.StringUtil.filterText(stripped == null ? "" : stripped).chars()
+            .filter(c -> Character.getType(c) != Character.FORMAT)
+            .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append)
+            .toString().strip();
+    }
 
     @Override
     public Type<? extends CustomPacketPayload> type() {

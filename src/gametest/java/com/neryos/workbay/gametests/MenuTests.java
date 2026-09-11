@@ -1146,4 +1146,38 @@ public class MenuTests {
             helper.succeed();
         });
     }
+
+    /**
+     * Night audit 1A finding 9. A name arrived capped but not filtered: a formatting code
+     * obfuscated every viewer's screen, control characters and zero-width joiners passed, and a
+     * zero-width-only name passed {@code isBlank()}. One filter on the wire codec, vanilla's own
+     * {@code StringUtil#filterText} plus the format-category characters it keeps.
+     */
+    @GameTest
+    @TestHolder(description = "A name is filtered on the wire: formatting codes, control and zero-width characters are dropped.")
+    public static void aNameIsFilteredOnTheWire(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            WorkbayBlockEntity workbay = placeWorkbay(helper, helper.absolutePos(new BlockPos(1, 1, 1)), player);
+            WorkbayMenu menu = menuFor(workbay, player);
+
+            // Exactly the round trip a client's packet takes: encode, decode, handle. The name is
+            // a section sign + k, "foo", a zero-width space and a bell, padded with spaces.
+            String dirty = " " + (char) 0xa7 + "kfoo" + (char) 0x200b + (char) 0x07 + " ";
+            var buf = new net.minecraft.network.RegistryFriendlyByteBuf(
+                io.netty.buffer.Unpooled.buffer(), helper.getLevel().registryAccess());
+            com.neryos.workbay.network.ActionPacket.STREAM_CODEC.encode(buf,
+                new com.neryos.workbay.network.ActionPacket(1, WorkbayAction.SET_BAY_NAME, 0,
+                    Optional.empty(), Optional.of(dirty), false));
+            com.neryos.workbay.network.ActionPacket decoded =
+                com.neryos.workbay.network.ActionPacket.STREAM_CODEC.decode(buf);
+            menu.act(decoded.action(), decoded.arg(), decoded.link(), decoded.text(), decoded.back());
+
+            helper.assertValueEqual(workbay.record().orElseThrow().bay(0).name(), "foo",
+                "the bay's name after a packet carrying a formatting code, a zero-width space and a bell");
+            helper.succeed();
+        });
+    }
 }

@@ -211,7 +211,8 @@ public class ConnectorBlock extends BaseEntityBlock {
     /** Whatever an anvil wrote on the stack, or "" for one that was never renamed. */
     private static String nameOn(ItemStack stack) {
         Component custom = stack.get(net.minecraft.core.component.DataComponents.CUSTOM_NAME);
-        return custom == null ? "" : custom.getString().strip();
+        return custom == null ? ""
+            : com.neryos.workbay.network.ActionPacket.cleanName(custom.getString());
     }
 
     /** Hands this block to the network as a Connector it owns. No channel: SPEC.md §0. */
