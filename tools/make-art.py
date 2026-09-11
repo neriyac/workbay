@@ -1073,6 +1073,26 @@ ICONS = {
             "................",
             "................"],
 
+    # Networks: three nodes on two links, the picture every network diagram already is. Cyan
+    # nodes because a network is the mod's own thing; the tab it sits on used to borrow the
+    # filter's sheet of paper, which on a tab strip read as "documents" (HANDOFF, art/icons).
+    "NETWORKS": ["................",
+                 "..CCCCC.........",
+                 "..CECCC.........",
+                 "..CCCCC.........",
+                 "..CCCCC.........",
+                 ".......SS.......",
+                 "........SSCCCCC.",
+                 "..........CECCC.",
+                 "..........CCCCC.",
+                 "........SSCCCCC.",
+                 ".......SS.......",
+                 "..CCCCC.........",
+                 "..CECCC.........",
+                 "..CCCCC.........",
+                 "..CCCCC.........",
+                 "................"],
+
     # The trip to a hosted machine: an arrow crossing a distance into a doorway. The arrowhead
     # reaches furthest on its middle rows, or it points the other way.
     "ENTER": ["................",

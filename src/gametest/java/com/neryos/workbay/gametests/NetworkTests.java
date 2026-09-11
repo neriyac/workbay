@@ -452,7 +452,7 @@ public class NetworkTests {
             RoomRegistry back = RoomRegistry.load(tag, registries);
             java.util.List<String> names = back.ownedBy(owner).stream()
                 .map(WorkbayRecord::name).sorted().toList();
-            helper.assertValueEqual(names, java.util.List.of("Workbay 1", "Workbay 2"),
+            helper.assertValueEqual(names, java.util.List.of("tester's Workbay", "tester's Workbay 2"),
                 "the names an older registry loads with");
             helper.assertValueEqual(back.byId(first.id()).orElseThrow().bay(0).hosted().isPresent(),
                 true, "the machine in bay 0 after loading an older registry");
@@ -501,6 +501,68 @@ public class NetworkTests {
                         1, "blocks the record counts on the network");
                 })
                 .thenSucceed();
+        });
+    }
+    /**
+     * OPEN_ISSUES #108, Neriya's call. Numbered per owner, every player's first network was
+     * "Workbay 1", so a chat line or a bay title naming one on a server named nobody's. A network
+     * is born carrying its owner's name; the second gets a number; a name ending in s -- Neryos
+     * -- still takes 's, because the bare apostrophe reads as a cut.
+     */
+    @GameTest
+    @TestHolder(description = "A network is born named after its owner.")
+    public static void aNetworkIsBornCarryingItsOwnersName(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(1, 1, 1));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            RoomRegistry registry = new RoomRegistry();
+            UUID neryos = UUID.randomUUID();
+            UUID silas = UUID.randomUUID();
+            helper.assertValueEqual(registry.create(neryos, "Neryos", level.getRandom()).label(),
+                "Neryos's Workbay", "the first network's name");
+            helper.assertValueEqual(registry.create(neryos, "Neryos", level.getRandom()).label(),
+                "Neryos's Workbay 2", "the second network's name");
+            helper.assertValueEqual(registry.create(silas, "Silas", level.getRandom()).label(),
+                "Silas's Workbay", "a network of another owner");
+            helper.succeed();
+        });
+    }
+
+    /**
+     * OPEN_ISSUES #111. SPEC.md §14's audit command, cited by {@code WorkbayRecord} and never
+     * registered. A bay keeps the id of the block last racked in it when that block's mod is gone;
+     * the command counts those bays and nothing else -- a furnace's bay is not an orphan.
+     */
+    @GameTest
+    @TestHolder(description = "/workbay orphans counts every bay whose machine's mod is gone.")
+    public static void orphansCountsEveryBayWhoseMachineIsGone(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(1, 1, 1));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            var commands = level.getServer().getCommands();
+            java.util.function.IntSupplier count = () -> {
+                int[] got = {-1};
+                commands.performPrefixedCommand(level.getServer().createCommandSourceStack()
+                    .withSuppressedOutput().withPermission(4)
+                    .withCallback((success, result) -> got[0] = result), "workbay orphans");
+                return got[0];
+            };
+            int before = count.getAsInt();
+            helper.assertTrue(before >= 0, "/workbay orphans did not run at all");
+
+            RoomRegistry registry = RoomRegistry.get(level.getServer());
+            WorkbayRecord record = registry.create(UUID.randomUUID(), "auditor", level.getRandom());
+            registry.put(record
+                .withBay(record.bay(0).withHosted(java.util.Optional.of(
+                    net.minecraft.resources.ResourceLocation.parse("gone_mod:crusher"))))
+                .withBay(record.bay(1).withHosted(java.util.Optional.of(
+                    net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(Blocks.FURNACE)))));
+
+            helper.assertValueEqual(count.getAsInt(), before + 1,
+                "orphan bays after one network gained a bay whose mod is gone and one with a furnace");
+            helper.succeed();
         });
     }
 }

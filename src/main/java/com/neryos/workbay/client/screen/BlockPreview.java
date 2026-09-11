@@ -12,7 +12,6 @@ import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.neoforged.neoforge.client.model.data.ModelData;
 import org.jetbrains.annotations.Nullable;
 
@@ -41,19 +40,14 @@ public class BlockPreview {
     private double dragged;
 
     /**
-     * The same block with whatever facing property it has pointed north, which is the side
-     * {@link #DEFAULT_YAW} looks at. Without it the preview opens on the back of half the machines
-     * in the game, because a default block state is not reliably north-facing.
+     * The same block as it stands in the bay: faced north, which is the side {@link #DEFAULT_YAW}
+     * looks at. Without it the preview opens on the back of half the machines in the game,
+     * because a default block state is not reliably north-facing. <b>The bay's own rule</b>, not
+     * a copy of it: a second rule here laid a barrel on its side that the rack stood upright.
+     * OPEN_ISSUES #99.
      */
     public static BlockState facingCamera(BlockState state) {
-        if (state.hasProperty(BlockStateProperties.HORIZONTAL_FACING)) {
-            return state.setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.NORTH);
-        }
-        if (state.hasProperty(BlockStateProperties.FACING)
-            && BlockStateProperties.FACING.getPossibleValues().contains(Direction.NORTH)) {
-            return state.setValue(BlockStateProperties.FACING, Direction.NORTH);
-        }
-        return state;
+        return com.neryos.workbay.world.BayHosting.orient(state, Direction.NORTH);
     }
 
     /** Turned back to the angle the screen opened at, so a lost block is one double-click away. */

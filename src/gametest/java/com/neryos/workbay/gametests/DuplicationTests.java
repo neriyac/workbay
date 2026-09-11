@@ -792,7 +792,9 @@ public class DuplicationTests {
         if (links.isEmpty()) {
             throw new GameTestAssertException("placing a paired Connector did not create a link");
         }
-        BusConfig link = links.get(links.size() - 1).withEnabled(true).withRate(16).withSpeed(10);
+        // Bay to target, as every test here was written before a channel was born EXTRACT (#56).
+        BusConfig link = links.get(links.size() - 1).withEnabled(true).withRate(16).withSpeed(10)
+            .withMode(BusConfig.Mode.INSERT);
         workbay.addBus(link);
         return link;
     }

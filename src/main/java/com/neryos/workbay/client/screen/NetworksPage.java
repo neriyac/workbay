@@ -53,7 +53,10 @@ class NetworksPage extends WorkbayPage {
 
     @Override
     int height() {
-        return rowsTop() + Math.max(1, snapshot().networks().size()) * ROW_PITCH + 22;
+        int natural = rowsTop() + Math.max(1, snapshot().networks().size()) * ROW_PITCH + 22;
+        // A bound Workbay's pages share one height (#89); an empty block has this page alone and
+        // no tab strip to keep still, so it stays as tall as its list.
+        return snapshot().bound() ? Math.max(natural, screen.panelHeight()) : natural;
     }
 
     private int rowsTop() {
@@ -101,12 +104,13 @@ class NetworksPage extends WorkbayPage {
     private void banner(GuiGraphics g, int mouseX, int mouseY) {
         WorkbaySnapshot snap = snapshot();
         // <b>Two independent facts, not one.</b> Whether a network can be *minted* here is the
-        // limit; whether one can be *moved* here is whether any of yours is asleep. The banner was
-        // amber whenever the count reached the limit, which called a block "quota reached" while a
-        // sleeping network sat in the list one row below waiting to be transferred into it. Amber
-        // is this mod's colour for a problem, and the only real problem is having neither.
+        // limit; whether one can be *moved* here is whether you own any at all -- Transfer takes a
+        // network out of a live block as readily as it wakes a sleeping one. The banner was amber
+        // whenever the count reached the limit, which called a block "quota reached" while every
+        // row under it offered a Transfer that works (OPEN_ISSUES #106). Amber is this mod's
+        // colour for a problem, and the only real problem is having neither.
         boolean canMint = snap.networks().size() < snap.maxNetworks();
-        boolean canTake = snap.networks().stream().anyMatch(WorkbaySnapshot.Net::asleep);
+        boolean canTake = snap.networks().stream().anyMatch(net -> !net.here());
         boolean stuck = !canMint && !canTake;
         int room = ROW_W - 16 - (canMint ? NEW_W + 6 : 0);
         Draw.notice(g, x(ROW_X), y(HEADER_H + 5), ROW_W, BANNER_H);

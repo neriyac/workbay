@@ -355,6 +355,17 @@ public class WorkbayScreen extends AbstractContainerScreen<WorkbayMenu> {
         return height;
     }
 
+    /**
+     * <b>One height for every page.</b> The window's, between the floor Minecraft's guiScale cap
+     * guarantees and what the LINKS list can use; every page of a bound Workbay is this tall, so
+     * the panel keeps its top edge and the tab strip stays under the cursor from one tab to the
+     * next. Five pages were five heights, centred, and every control moved on every tab press.
+     * OPEN_ISSUES #89. A page with more to show than this may still grow past it.
+     */
+    public int panelHeight() {
+        return Math.clamp(height - 8, 240, 316);
+    }
+
     // ------------------------------------------------------------- clickable
 
     /**

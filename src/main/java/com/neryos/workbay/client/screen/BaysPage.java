@@ -39,14 +39,9 @@ class BaysPage extends WorkbayPage {
 
     private static final int WIDTH = 320;
 
-    /**
-     * SPEC.md §4 starts at 268 tall. Minecraft only ever guarantees a 240-tall scaled canvas, so a
-     * fixed 268 is a screen that runs off the bottom for anyone at a high GUI scale — and 316, which
-     * is what the LINKS list actually wants, is worse. So the page takes what the window has between
-     * those two, and the rack pitch and the row count follow from it.
-     */
-    private static final int MIN_HEIGHT = 240;
-    private static final int MAX_HEIGHT = 316;
+    // SPEC.md §4 starts at 268 tall and Minecraft only guarantees 240, so the page takes what the
+    // window has (WorkbayScreen#panelHeight, shared by every page) and the rack pitch and the row
+    // count follow from it.
 
     private static final int RACK_X = 8;
     private static final int RACK_Y = 50;
@@ -200,7 +195,7 @@ class BaysPage extends WorkbayPage {
 
     BaysPage(WorkbayScreen screen) {
         super(screen);
-        height = Math.clamp(screen.availableHeight() - 8, MIN_HEIGHT, MAX_HEIGHT);
+        height = screen.panelHeight();
         // Eight bay slots always fit, however short the window is; they lose pitch, not slots.
         rackPitch = Math.clamp((height - RACK_Y - 12) / BayGeometry.MAX_BAYS, 20, 26);
         slot = rackPitch - 2;
@@ -1037,6 +1032,15 @@ class BaysPage extends WorkbayPage {
             g.fill(x(LIST_X + 4), ruleY, x(LIST_X + LIST_W - 10), ruleY + 1, 0x12FFFFFF);
         }
 
+        if (knownAtAdd != null) {
+            for (int i = 0; i < visible.size(); i++) {
+                if (!knownAtAdd.contains(visible.get(i).config().id())) {
+                    scroll = i - rows + 1;
+                    knownAtAdd = null;
+                    break;
+                }
+            }
+        }
         scroll = Math.clamp(scroll, 0, Math.max(0, visible.size() - rows));
         scrollbar(g, visible.size());
         for (int visibleRow = 0; visibleRow < rows && visibleRow + scroll < visible.size(); visibleRow++) {
@@ -1183,7 +1187,7 @@ class BaysPage extends WorkbayPage {
         // list that OPEN_ISSUES #74 is about; same fault, same fix, one row over.
         //
         // Right-aligned rather than left, so the column still has a straight edge to read down.
-        String statusText = statusShort(link.status()).getString();
+        String statusText = statusShort(link).getString();
         int statusW = Math.min(STATUS_W, Draw.width(screen.font(), statusText));
         int statusRight = px + STATUS_X + STATUS_W;
         int nameRight = statusRight - statusW - 6;
@@ -1221,12 +1225,12 @@ class BaysPage extends WorkbayPage {
             // the target used to be drawn. The name column still says which bay.
             screen.hit(px + STATUS_X, py + 2, STATUS_W, ROW_PITCH - 4,
                 () -> screen.send(WorkbayAction.LINK_CYCLE_TARGET_BAY, config.id()),
-                statusName(link.status()),
-                broken ? statusHelp(link.status())
+                statusName(link),
+                broken ? statusHelp(link)
                     : WorkbayScreen.gui("links.internal.retarget.tip"));
         } else {
             screen.hit(px + STATUS_X, py + 2, STATUS_W, ROW_PITCH - 4, () -> { },
-                statusName(link.status()), statusHelp(link.status()));
+                statusName(link), statusHelp(link));
         }
 
         faceButton(g, mouseX, mouseY, px + 194, py + 3, config);
@@ -1784,8 +1788,22 @@ class BaysPage extends WorkbayPage {
         int bay = screen.selectedBay();
         pickedConnectors.forEach(id -> screen.send(WorkbayAction.ADD_CHANNEL, bay, id));
         pickedBays.forEach(target -> screen.send(WorkbayAction.CREATE_INTERNAL_LINK, target));
+        // A channel given back off the waiting list keeps its id, so only the attached ones are
+        // "known": the row that appears is new to the bay whether or not it is new to the network.
+        knownAtAdd = snapshot().links().stream().filter(l -> !l.config().detached())
+            .map(l -> l.config().id()).collect(java.util.stream.Collectors.toSet());
         closePicker();
     }
+
+    /**
+     * Every link the snapshot carried when Add was pressed, kept until a snapshot arrives with
+     * one that is not in it -- that one is the row Add just made, and the list scrolls to it.
+     * Add appends, and on a bay with six rows the new one landed below the fold, where a player
+     * who has just pressed a button sees nothing happen. Scrolled to, never re-sorted: rows must
+     * not move under the cursor (OPEN_ISSUES #74). Null while nothing is expected. #100.
+     */
+    @org.jetbrains.annotations.Nullable
+    private static java.util.Set<UUID> knownAtAdd;
 
     /**
      * What the selected bay could be given a channel through: on the Connectors tab <b>every
@@ -2015,16 +2033,28 @@ class BaysPage extends WorkbayPage {
         return config.detached() ? "—" : "B" + (config.bay() + 1);
     }
 
-    private static Component statusShort(BusRunner.BusStatus status) {
-        return WorkbayScreen.gui("status.short." + status.name().toLowerCase(java.util.Locale.ROOT));
+    private static Component statusShort(WorkbaySnapshot.Link link) {
+        return status("status.short.", link);
     }
 
-    private static Component statusName(BusRunner.BusStatus status) {
-        return WorkbayScreen.gui("status." + status.name().toLowerCase(java.util.Locale.ROOT));
+    private static Component statusName(WorkbaySnapshot.Link link) {
+        return status("status.", link);
     }
 
-    private static Component statusHelp(BusRunner.BusStatus status) {
-        return WorkbayScreen.gui("status." + status.name().toLowerCase(java.util.Locale.ROOT) + ".tip");
+    private static Component statusHelp(WorkbaySnapshot.Link link) {
+        return status("status.", link, ".tip");
+    }
+
+    /**
+     * Every status string takes the link's resource as its one argument, so the two "no port"
+     * statuses can say what is missing -- a tank, item slots -- instead of "No machine" over a
+     * machine that is standing right there. The rest ignore it. OPEN_ISSUES #101.
+     */
+    private static Component status(String prefix, WorkbaySnapshot.Link link, String... suffix) {
+        String key = prefix + link.status().name().toLowerCase(java.util.Locale.ROOT)
+            + (suffix.length == 0 ? "" : suffix[0]);
+        return WorkbayScreen.gui(key,
+            WorkbayScreen.gui("port." + link.config().resource().getSerializedName()));
     }
 
 

@@ -117,13 +117,18 @@ abstract class WorkbayPage {
         tab(g, mouseX, mouseY, width() - 66, WBIcons.MAP, WorkbayScreen.Page.FLOW, "flow");
         // <b>Which network this block is.</b> Last before the lock, because it is the question a
         // player asks least often and the one whose answer changes everything else on the screen.
-        tab(g, mouseX, mouseY, width() - 44, WBIcons.PAPER, WorkbayScreen.Page.NETWORKS,
+        tab(g, mouseX, mouseY, width() - 44, WBIcons.NETWORKS, WorkbayScreen.Page.NETWORKS,
             "networks");
-        iconButton(g, mouseX, mouseY, x(width() - 22), y(6),
-            snap.locked() ? WBIcons.LOCK : WBIcons.UNLOCK, snap.locked(),
-            () -> screen.send(WorkbayAction.TOGGLE_LOCK),
-            WorkbayScreen.gui(snap.locked() ? "button.unlock" : "button.lock"),
-            WorkbayScreen.gui("button.lock.tip"));
+        if (snap.owned()) {
+            iconButton(g, mouseX, mouseY, x(width() - 22), y(6),
+                snap.locked() ? WBIcons.LOCK : WBIcons.UNLOCK, snap.locked(),
+                () -> screen.send(WorkbayAction.TOGGLE_LOCK),
+                WorkbayScreen.gui(snap.locked() ? "button.unlock" : "button.lock"),
+                WorkbayScreen.gui("button.lock.tip"));
+        } else {
+            ownerOnly(g, x(width() - 22), y(6), WBIcons.UNLOCK,
+                WorkbayScreen.gui(snap.locked() ? "button.unlock" : "button.lock"));
+        }
     }
 
     /**
@@ -192,6 +197,15 @@ abstract class WorkbayPage {
         Draw.button(g, px, py, 18, 18, hover, active);
         WBIcons.draw(g, icon, px + 3, py + 3, active ? Draw.TEXT : Draw.TEXT_DIM);
         screen.hit(px, py, 18, 18, onClick, tooltip);
+    }
+
+    /**
+     * A control a guest may see and only the owner may press, drawn disabled with the reason as
+     * its tooltip. The server refuses the press anyway; this is so the refusal is read before the
+     * click rather than after it. OPEN_ISSUES #107.
+     */
+    protected void ownerOnly(GuiGraphics g, int px, int py, String[] icon, Component name) {
+        unbuiltButton(g, px, py, 18, icon, name, com.neryos.workbay.WorkbayLang.message("owner_only"));
     }
 
     /**

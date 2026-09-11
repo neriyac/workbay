@@ -45,6 +45,11 @@ public class WorkbayCommands {
             .then(Commands.literal("charge")
                 .requires(source -> source.hasPermission(2))
                 .executes(context -> charge(context.getSource())))
+            // Every bay whose machine's mod is gone: operators only, because it lists every
+            // network on the server. SPEC.md §14; it was cited and not registered (#111).
+            .then(Commands.literal("orphans")
+                .requires(source -> source.hasPermission(2))
+                .executes(context -> orphans(context.getSource())))
             .then(Commands.literal("room")
                 .then(Commands.argument("room", com.mojang.brigadier.arguments.IntegerArgumentType.integer(0))
                     .executes(context -> room(context.getSource(),
@@ -97,6 +102,31 @@ public class WorkbayCommands {
             }
         }
         return new Charged(stored, claimed);
+    }
+
+    /**
+     * The {@code was:} record, read out: a bay keeps the id of the block last racked in it even
+     * after that block's mod is uninstalled and vanilla has dropped the block itself, so a pack
+     * author auditing an update finds every hole at once rather than one empty bay at a time.
+     */
+    private static int orphans(CommandSourceStack source) {
+        int found = 0;
+        for (var record : com.neryos.workbay.world.RoomRegistry.get(source.getServer()).all()) {
+            for (var bay : record.bays()) {
+                if (bay.hosted().isEmpty() || BuiltInRegistries.BLOCK.containsKey(bay.hosted().get())) {
+                    continue;
+                }
+                found++;
+                String id = bay.hosted().get().toString();
+                source.sendSuccess(() -> Component.literal(record.label() + " (" + record.ownerName()
+                    + "), bay " + (bay.index() + 1) + ": was " + id).withStyle(ChatFormatting.RED), false);
+            }
+        }
+        int total = found;
+        source.sendSuccess(() -> Component.literal(total == 0
+            ? "No bay is missing its machine's mod."
+            : total + " bay(s) hold a block whose mod is not installed."), false);
+        return found;
     }
 
     private static int charge(CommandSourceStack source) {

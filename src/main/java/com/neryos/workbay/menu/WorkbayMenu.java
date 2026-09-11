@@ -424,13 +424,21 @@ public class WorkbayMenu extends AbstractContainerMenu {
         // Workbay still being there, because the trip is not instant and a block can be broken.
         WorkbayBlockEntity origin = workbay;
         int bay = selectedBay;
-        return com.neryos.workbay.remote.RemoteScreens.open(viewer, backshop,
+        boolean opened = com.neryos.workbay.remote.RemoteScreens.open(viewer, backshop,
             BayGeometry.machinePos(record.bayColumn(), selectedBay),
             () -> {
                 if (origin != null && !origin.isRemoved()) {
                     open(viewer, origin, bay);
                 }
             });
+        // A furnace screen over the overworld looks like a furnace in the overworld. One chat line
+        // says which bay of which network it really is -- the same three facts the bay's own
+        // title says on arrival -- and a chat line survives the screen. OPEN_ISSUES #90.
+        if (opened) {
+            viewer.sendSystemMessage(com.neryos.workbay.WorkbayLang.message("remote_opened",
+                com.neryos.workbay.world.BayVisit.describe(record, bay)));
+        }
+        return opened;
     }
 
     private void editLink(Optional<UUID> linkId, java.util.function.UnaryOperator<BusConfig> edit) {
@@ -494,8 +502,12 @@ public class WorkbayMenu extends AbstractContainerMenu {
             .map(connector -> workbay.addBus(workbay.linksAt(connector.pos()).stream()
                 .filter(BusConfig::detached).findFirst()
                 .map(waiting -> waiting.withBay(bay))
+                // <b>Born EXTRACT</b>: pulling from the target into the bay. The commonest first
+                // channel anybody makes is a chest of ore into a furnace, and born INSERT it moved
+                // the furnace's output the other way -- which looks like nothing happened, on the
+                // first thing a new player builds. OPEN_ISSUES #56, Neriya's call.
                 .orElseGet(() -> BusConfig.create(UUID.randomUUID(), bay,
-                    BusConfig.Resource.ITEM, BusConfig.Mode.INSERT,
+                    BusConfig.Resource.ITEM, BusConfig.Mode.EXTRACT,
                     connector.pos(), connector.target())
                     .withTargetBlock(connector.targetBlock()))))
             .orElse(true);
@@ -852,7 +864,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
         registry.putRoom(released.withBuiltTier(0));
         WorkbaySounds.confirm(serverPlayer,
             com.neryos.workbay.WorkbayLang.message("room_removed", index + 1),
-            net.minecraft.sounds.SoundEvents.COPPER_BULB_TURN_OFF, 1.0F);
+            com.neryos.workbay.init.WBSounds.ROOM_RETURNED.get(), 1.0F);
         refreshNow();
     }
 
@@ -1141,7 +1153,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
         workbay.rememberPosition();
         com.neryos.workbay.WorkbaySounds.confirm(player,
             com.neryos.workbay.WorkbayLang.message("network_transferred", target.label()),
-            net.minecraft.sounds.SoundEvents.BEACON_ACTIVATE, 1.4F);
+            com.neryos.workbay.init.WBSounds.NETWORK_ARRIVES.get(), 1.4F);
         refreshNow();
     }
 
@@ -1167,7 +1179,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
         workbay.rememberPosition();
         com.neryos.workbay.WorkbaySounds.confirm(player,
             com.neryos.workbay.WorkbayLang.message("network_created", made.label()),
-            net.minecraft.sounds.SoundEvents.BEACON_ACTIVATE, 1.2F);
+            com.neryos.workbay.init.WBSounds.NETWORK_ARRIVES.get(), 1.2F);
         refreshNow();
     }
 

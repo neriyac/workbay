@@ -36,6 +36,7 @@ public class Workbay {
         WBDataComponents.register(modEventBus);
         WBCreativeTabs.register(modEventBus);
         WBMenus.register(modEventBus);
+        com.neryos.workbay.init.WBSounds.register(modEventBus);
         WBAttachments.register(modEventBus);
         WorkbayTickets.register(modEventBus);
         modEventBus.addListener(WBCapabilities::register);

@@ -5,8 +5,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
+import com.neryos.workbay.init.WBSounds;
 import net.minecraft.sounds.SoundEvent;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
@@ -15,10 +15,11 @@ import net.minecraft.world.phys.Vec3;
 /**
  * Every sound the mod makes. SPEC.md §7's "answers from across the room", heard rather than read.
  *
- * <p><b>All of them are vanilla.</b> No {@code sounds.json}, no registry holder, no {@code .ogg}:
- * a custom set is a second art budget and none of these moments needs one. What they need is to
- * exist — a machine that racks in silence reads as a mod that did not finish, whatever the inside
- * is like.
+ * <p><b>All of them are vanilla recordings.</b> No {@code .ogg}: a custom set is a second art
+ * budget and none of these moments needs one. What they need is to exist — a machine that racks
+ * in silence reads as a mod that did not finish, whatever the inside is like. Each is the mod's
+ * <em>own event</em> ({@link WBSounds}) borrowing a vanilla one, because a borrowed event carries
+ * the other block's subtitle: "Vault rejects item" over a Workbay refusing. OPEN_ISSUES #91.
  *
  * <p>Two rules decide every entry below, and both come from playing the moment twenty times rather
  * than once.
@@ -56,12 +57,12 @@ public final class WorkbaySounds {
         // Vanilla's own "that did not go in": a quarter-second wooden knock, dry, with no tune in
         // it to get tired of. The alternative auditioned was ENTITY_VILLAGER_NO, which is funny
         // once and unbearable by the fifth full bay.
-        player.playNotifySound(SoundEvents.VAULT_INSERT_ITEM_FAIL, SoundSource.BLOCKS, 0.7F, 1.0F);
+        player.playNotifySound(WBSounds.REFUSE.get(), SoundSource.BLOCKS, 0.7F, 1.0F);
     }
 
     /** The other half: something the player asked for that worked, said the same way. */
     public static void confirm(Player player, Component what) {
-        confirm(player, what, SoundEvents.VAULT_INSERT_ITEM, 1.2F);
+        confirm(player, what, WBSounds.CONFIRM.get(), 1.2F);
     }
 
     /**
@@ -90,17 +91,17 @@ public final class WorkbaySounds {
 
     /** An upgrade fitted. One clank of a hammer on a plate; SPEC.md §1's rungs are rare. */
     public static void upgraded(Level level, BlockPos pos) {
-        at(level, pos, SoundEvents.SMITHING_TABLE_USE, 0.8F, 1.0F);
+        at(level, pos, WBSounds.UPGRADED.get(), 0.8F, 1.0F);
     }
 
     /** A room's Anchor, switched. Rare enough to afford a sound with a tail on it. */
     public static void anchored(Level level, BlockPos pos, boolean on) {
-        at(level, pos, on ? SoundEvents.BEACON_ACTIVATE : SoundEvents.BEACON_DEACTIVATE, 0.5F, 1.4F);
+        at(level, pos, (on ? WBSounds.ANCHOR_ON : WBSounds.ANCHOR_OFF).get(), 0.5F, 1.4F);
     }
 
     /** A door in a room's wall, opening onto the list of ways out. */
     public static void door(Level level, BlockPos pos) {
-        at(level, pos, SoundEvents.IRON_DOOR_OPEN, 0.6F, 1.1F);
+        at(level, pos, WBSounds.DOOR.get(), 0.6F, 1.1F);
     }
 
     /**
@@ -115,9 +116,9 @@ public final class WorkbaySounds {
         Vec3 where = player.position();
         move.run();
         from.playSound(null, where.x, where.y, where.z,
-            SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 0.6F, 1.2F);
+            WBSounds.TRAVEL.get(), SoundSource.PLAYERS, 0.6F, 1.2F);
         player.serverLevel().playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 0.6F, 1.2F);
+            WBSounds.TRAVEL.get(), SoundSource.PLAYERS, 0.6F, 1.2F);
     }
 
     /**
@@ -128,17 +129,17 @@ public final class WorkbaySounds {
      * between. Quiet on purpose: this is furniture noticing something, not an alarm.
      */
     public static void started(Level level, BlockPos pos) {
-        at(level, pos, SoundEvents.VAULT_OPEN_SHUTTER, 0.35F, 1.3F);
+        at(level, pos, WBSounds.STARTED.get(), 0.35F, 1.3F);
     }
 
     /** The same edge, downwards. A chain that has run out of things to move says so. */
     public static void stopped(Level level, BlockPos pos) {
-        at(level, pos, SoundEvents.VAULT_CLOSE_SHUTTER, 0.3F, 1.3F);
+        at(level, pos, WBSounds.STOPPED.get(), 0.3F, 1.3F);
     }
 
     /** Something needs the player. Low and short — amber means a problem, and so does this. */
     public static void stuck(Level level, BlockPos pos) {
-        at(level, pos, SoundEvents.COPPER_BULB_TURN_OFF, 0.5F, 0.7F);
+        at(level, pos, WBSounds.STUCK.get(), 0.5F, 0.7F);
     }
 
     /**

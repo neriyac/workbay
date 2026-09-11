@@ -247,4 +247,42 @@ public class BayTests {
             helper.succeed();
         });
     }
+    /**
+     * OPEN_ISSUES #99. A barrel's default facing is UP; turning it north to "face the camera" laid
+     * it on its side in the bay and on the face cube, while the item preview stood it up. A
+     * furnace is the positive control: its facing is horizontal and racking still turns it north.
+     */
+    @GameTest(timeoutTicks = 600)
+    @TestHolder(description = "A barrel racks standing up; a furnace still racks facing north.")
+    public static void anUprightBlockIsRackedUpright(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(1, 1, 1));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel backshop = helper.getLevel().getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            helper.assertNotNull(backshop, "getLevel(workbay:backshop) returned null");
+            ChunkPos column = new ChunkPos(3072, 128);
+            UUID owner = UUID.fromString("00000000-0000-0000-0000-00000000ba99");
+            WorkbayTickets.force(backshop, owner, column);
+            var player = helper.makeTickingMockServerPlayerInLevel(
+                net.minecraft.world.level.GameType.SURVIVAL);
+
+            com.neryos.workbay.world.BayHosting.rack(backshop, column, 0,
+                new net.minecraft.world.item.ItemStack(Blocks.BARREL), player, Direction.NORTH);
+            com.neryos.workbay.world.BayHosting.rack(backshop, column, 1,
+                new net.minecraft.world.item.ItemStack(Blocks.FURNACE), player, Direction.NORTH);
+
+            var barrel = backshop.getBlockState(BayGeometry.machinePos(column, 0));
+            var furnace = backshop.getBlockState(BayGeometry.machinePos(column, 1));
+            helper.assertValueEqual(barrel.getValue(
+                net.minecraft.world.level.block.state.properties.BlockStateProperties.FACING),
+                Direction.UP, "the way a racked barrel faces");
+            helper.assertValueEqual(furnace.getValue(
+                net.minecraft.world.level.block.state.properties.BlockStateProperties.HORIZONTAL_FACING),
+                Direction.NORTH, "the way a racked furnace faces");
+            // The face cube draws through BayHosting.orient too (BlockPreview#facingCamera), so
+            // it cannot disagree with this; a client class is not loadable here to say so.
+            WorkbayTickets.release(backshop, owner, column);
+            helper.succeed();
+        });
+    }
 }

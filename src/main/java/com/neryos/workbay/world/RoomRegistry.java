@@ -282,7 +282,7 @@ public class RoomRegistry extends SavedData {
         WorkbayRecord record = new WorkbayRecord(id, mintCode(random),
             // Locked at mint: an unlocked Workbay lets any passer-by eject the owner's machines
             // into their own hand, so sharing is what the owner opts into with the Lock button.
-            defaultName(ownedBy(owner).size() + 1), owner, ownerName, true,
+            defaultName(ownerName, ownedBy(owner).size() + 1), owner, ownerName, true,
             column, WorkbayRecord.Upgrades.NONE, Optional.empty(), List.of(), List.of(), List.of(),
             0, List.of());
         byId.put(id, record);
@@ -320,9 +320,17 @@ public class RoomRegistry extends SavedData {
      * The name a network is born with. Not translated: it is written into the save the moment the
      * network is minted, so a server that changes language would otherwise have its networks
      * change name — and the player may rename it to anything in one gesture.
+     *
+     * <p><b>The owner's name is in it.</b> Numbered per owner, every player's first network was
+     * "Workbay 1", so a chat line, a bay title or a room subtitle naming one on a server named
+     * nobody's in particular. "Neryos's Workbay", then "Neryos's Workbay 2": unique, says whose,
+     * and still one gesture from anything else. OPEN_ISSUES #108, Neriya's call. A blank owner
+     * name (a record from before names were kept) falls back to the old form. Always {@code 's},
+     * even after an s -- the bare apostrophe is the older rule and reads as a cut.
      */
-    public static String defaultName(int ordinal) {
-        return "Workbay " + ordinal;
+    public static String defaultName(String ownerName, int ordinal) {
+        String whose = ownerName.isBlank() ? "Workbay" : ownerName + "'s Workbay";
+        return ordinal == 1 && !ownerName.isBlank() ? whose : whose + " " + ordinal;
     }
 
     /**
@@ -344,7 +352,7 @@ public class RoomRegistry extends SavedData {
         byId.values().stream().filter(record -> !record.name().isBlank())
             .forEach(record -> next.merge(record.owner(), 1, Integer::sum));
         unnamed.forEach(record -> byId.put(record.id(), record.withName(defaultName(
-            next.merge(record.owner(), 1, Integer::sum)))));
+            record.ownerName(), next.merge(record.owner(), 1, Integer::sum)))));
         setDirty();
     }
 

@@ -196,7 +196,8 @@ class RoomsPage extends WorkbayPage {
      */
     @Override
     int height() {
-        return roomsTop() + Math.max(1, snapshot().rooms().size()) * ROW_PITCH + 8;
+        return Math.max(roomsTop() + Math.max(1, snapshot().rooms().size()) * ROW_PITCH + 8,
+            screen.panelHeight());
     }
 
     private int roomsTop() {
@@ -237,7 +238,7 @@ class RoomsPage extends WorkbayPage {
             int py = y(LADDER_Y + i * ROW_PITCH);
             int installed = snap.upgrades().installed(upgrade);
             boolean maxed = installed >= upgrade.max();
-            boolean canInstall = !maxed;
+            boolean canInstall = !maxed && snap.owned();
 
             Draw.well(g, px, py, ROW_W, ROW_H);
             // The whole row answers, not only the plus -- see UpgradesPage. OPEN_ISSUES #68.
@@ -266,6 +267,8 @@ class RoomsPage extends WorkbayPage {
                 canInstall ? () -> screen.send(WorkbayAction.INSTALL_UPGRADE, ordinal) : () -> { },
                 maxed ? new Component[] {
                     WorkbayScreen.gui(key), WorkbayScreen.gui("upgrades.maxed") }
+                    : !canInstall ? new Component[] {
+                        WorkbayScreen.gui(key), com.neryos.workbay.WorkbayLang.message("owner_only") }
                     : new Component[] {
                         WorkbayScreen.gui(key), WorkbayScreen.gui(key + ".long"),
                         WorkbayScreen.gui("upgrades.add", WorkbayScreen.gui(key)) });
@@ -285,10 +288,18 @@ class RoomsPage extends WorkbayPage {
                 Draw.TEXT_FAINT);
             return;
         }
+        // What a guest may press on a shared Workbay: the door of a room they were invited into,
+        // and nothing else on the row. Drawn disabled rather than refused on the press, which
+        // used to close the whole screen on the way to saying no. OPEN_ISSUES #107.
+        boolean owned = snap.owned();
+        java.util.UUID me = net.minecraft.client.Minecraft.getInstance().player == null ? null
+            : net.minecraft.client.Minecraft.getInstance().player.getUUID();
         for (WorkbaySnapshot.Room room : snap.rooms()) {
             int px = x(ROW_X);
             int py = y(top + room.index() * ROW_PITCH);
             Draw.well(g, px, py, ROW_W, ROW_H);
+            boolean mayEnter = owned || (room.built()
+                && room.guests().stream().anyMatch(guest -> guest.id().equals(me)));
 
             String name = room.name().isEmpty()
                 ? WorkbayScreen.gui("rooms.name", room.index() + 1).getString() : room.name();
@@ -330,7 +341,9 @@ class RoomsPage extends WorkbayPage {
             // Handing the room back. Only a built one has anything to hand back, and the click is
             // asked twice: once to arm, once to do it. A room is four chunks of somebody's build
             // and this is the only control on the screen that can take one away.
-            if (room.built()) {
+            if (room.built() && !owned) {
+                ownerOnly(g, px + REMOVE_X, py, WBIcons.CROSS, WorkbayScreen.gui("rooms.remove"));
+            } else if (room.built()) {
                 boolean sure = armed == room.index();
                 iconButton(g, mouseX, mouseY, px + REMOVE_X, py, WBIcons.CROSS, sure,
                     () -> armed = sure ? -1 : room.index(),
@@ -351,13 +364,16 @@ class RoomsPage extends WorkbayPage {
             // unopened one has no record to remember either choice on -- SPEC.md §8 spends the
             // region on first entry.
             if (room.built()) {
-                swatch(g, mouseX, mouseY, px + SETTINGS_X, py, room);
+                swatch(g, mouseX, mouseY, px + SETTINGS_X, py, room, owned);
             }
 
             // The Anchor toggle only exists once the network owns an Anchor. SPEC.md §4: a control
             // whose feature is not there is hidden, not drawn faint -- faint is honest for one
             // session and furniture after two.
-            if (snap.upgrades().anchors() > 0 && room.built()) {
+            if (snap.upgrades().anchors() > 0 && room.built() && !owned) {
+                ownerOnly(g, px + ANCHOR_X, py, WBIcons.ANCHOR,
+                    WorkbayScreen.gui(room.anchored() ? "rooms.anchored" : "rooms.unanchored"));
+            } else if (snap.upgrades().anchors() > 0 && room.built()) {
                 iconButton(g, mouseX, mouseY, px + ANCHOR_X, py, WBIcons.ANCHOR, room.anchored(),
                     () -> screen.send(WorkbayAction.TOGGLE_ROOM_ANCHOR, room.index()),
                     WorkbayScreen.gui(room.anchored() ? "rooms.anchored" : "rooms.unanchored"),
@@ -371,11 +387,17 @@ class RoomsPage extends WorkbayPage {
             // A door to walk through, or a plus to spend the region on one. Two icons rather than
             // two words, because "Enter" and "Open" are four letters apart and the thing that
             // actually differs is whether the room exists yet.
-            iconButton(g, mouseX, mouseY, px + ENTER_X, py,
-                room.built() ? WBIcons.ENTER : WBIcons.PLUS, false,
-                () -> screen.send(WorkbayAction.ENTER_ROOM, room.index()),
-                WorkbayScreen.gui(room.built() ? "rooms.enter" : "rooms.open"),
-                WorkbayScreen.gui("rooms.enter.tip"));
+            if (!mayEnter) {
+                unbuiltButton(g, px + ENTER_X, py, BTN, room.built() ? WBIcons.ENTER : WBIcons.PLUS,
+                    WorkbayScreen.gui(room.built() ? "rooms.enter" : "rooms.open"),
+                    com.neryos.workbay.WorkbayLang.message("room_not_yours"));
+            } else {
+                iconButton(g, mouseX, mouseY, px + ENTER_X, py,
+                    room.built() ? WBIcons.ENTER : WBIcons.PLUS, false,
+                    () -> screen.send(WorkbayAction.ENTER_ROOM, room.index()),
+                    WorkbayScreen.gui(room.built() ? "rooms.enter" : "rooms.open"),
+                    WorkbayScreen.gui("rooms.enter.tip"));
+            }
         }
     }
 
@@ -385,11 +407,18 @@ class RoomsPage extends WorkbayPage {
      * only judge by looking, so the button <b>is</b> the value.
      */
     private void swatch(GuiGraphics g, int mouseX, int mouseY, int px, int py,
-        WorkbaySnapshot.Room room) {
-        boolean hover = screen.hovered(px, py, BTN, BTN, mouseX, mouseY);
-        Draw.button(g, px, py, BTN, BTN, hover, open == room.index());
+        WorkbaySnapshot.Room room, boolean owned) {
+        boolean hover = owned && screen.hovered(px, py, BTN, BTN, mouseX, mouseY);
+        Draw.button(g, px, py, BTN, BTN, hover, open == room.index(), owned);
         g.fill(px + 4, py + 4, px + BTN - 4, py + BTN - 4, 0xFF000000 | room.colour().tint());
         int index = room.index();
+        if (!owned) {
+            // The value still shows -- a guest may look at the colour -- but the window behind it
+            // is the owner's. OPEN_ISSUES #107.
+            screen.hit(px, py, BTN, BTN, () -> { }, WorkbayScreen.gui("rooms.settings"),
+                com.neryos.workbay.WorkbayLang.message("owner_only"));
+            return;
+        }
         screen.hit(px, py, BTN, BTN, () -> setOpen(open == index ? -1 : index),
             WorkbayScreen.gui("rooms.settings"),
             WorkbayScreen.gui("rooms.colour",

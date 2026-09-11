@@ -121,6 +121,13 @@ public final class WBIcons {
      */
     public static final String[] MAP = texture("map");
 
+    /**
+     * <b>Networks.</b> Three nodes on two links -- the picture every network diagram is. The tab
+     * borrowed the filter's sheet of paper until the icon set merged, and a sheet on a tab strip
+     * read as "documents".
+     */
+    public static final String[] NETWORKS = texture("networks");
+
     // ------------------------------------------------------- what a link carries
 
     /**

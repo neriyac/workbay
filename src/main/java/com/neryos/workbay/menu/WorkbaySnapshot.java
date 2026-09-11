@@ -119,6 +119,17 @@ public record WorkbaySnapshot(
         return !network.isBlank();
     }
 
+    /**
+     * Whether the player looking at this block owns its network. {@link #networks} is the viewer's
+     * own list and {@code here} marks this block's, so the two together already say it; nothing
+     * extra travels. What a guest on an unlocked, shared Workbay may not press -- the padlock,
+     * an upgrade, a room's controls -- is drawn disabled off this rather than refused on the
+     * press. OPEN_ISSUES #107.
+     */
+    public boolean owned() {
+        return networks.stream().anyMatch(Net::here);
+    }
+
     public static final Codec<WorkbaySnapshot> CODEC = RecordCodecBuilder.create(i -> i.group(
         Codec.STRING.fieldOf("Network").forGetter(WorkbaySnapshot::network),
         Codec.BOOL.fieldOf("Locked").forGetter(WorkbaySnapshot::locked),

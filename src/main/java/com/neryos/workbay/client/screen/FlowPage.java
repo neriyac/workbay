@@ -33,15 +33,6 @@ class FlowPage extends WorkbayPage {
 
     /** The panel is one size again. What used to grow is now the view onto something bigger. */
     private static final int WIDTH = 320;
-    /** What the canvas gets when the window has room for it. */
-    private static final int CANVAS_MAX = 190;
-    /**
-     * And what it gets when the window has not. Minecraft only ever guarantees a 240-tall scaled
-     * canvas, and at GUI scale 3 and 4 a great many players have less: 190 + {@link #CHROME} is 288,
-     * so the title ran off the top and the legend off the bottom on every window shorter than that.
-     * OPEN_ISSUES #37, and the reason the bays page has taken its height from the window since §4.
-     */
-    private static final int CANVAS_MIN = 110;
 
     private static final int MARGIN = 12;
     /** Room between two columns, which is all an arrow gets to say which way it points. */
@@ -70,7 +61,7 @@ class FlowPage extends WorkbayPage {
     /** Header, the gap under the canvas, three legend rows, and the bottom margin. */
     private static final int CHROME = TOP_Y + 8 + 3 * 12 + 8;
 
-    /** The canvas, fitted to the window rather than written down. See {@link #CANVAS_MIN}. */
+    /** The canvas, fitted to the window rather than written down: the shared panel height less the chrome. */
     private final int canvasH;
 
     private final int nodeW;
@@ -85,8 +76,10 @@ class FlowPage extends WorkbayPage {
 
     FlowPage(WorkbayScreen screen) {
         super(screen);
-        // Eight pixels of air outside the panel, the same margin the bays page leaves.
-        this.canvasH = Math.clamp(screen.availableHeight() - 8 - CHROME, CANVAS_MIN, CANVAS_MAX);
+        // The canvas is whatever the shared panel height leaves after the chrome, so this page is
+        // exactly as tall as BAYS and the tab strip does not move between them (#89). That height
+        // is already clamped to what the window has (OPEN_ISSUES #37).
+        this.canvasH = screen.panelHeight() - CHROME;
         WorkbaySnapshot snap = screen.snapshot();
 
         // ------------------------------------------------------------------ what is on the map
@@ -148,7 +141,14 @@ class FlowPage extends WorkbayPage {
         // editor runs, and the two phases that matter here are the two this screen used to skip --
         // a port per edge on a box's side, and a track per vertical run in a channel.
         int n = labels.size();
-        this.nodeW = n > 12 ? 84 : NODE_W;
+        // As wide as the widest name asks for, up to a ceiling: at a fixed hundred the box cut
+        // "Enrichment Chamber" and "Rotary Condensentrator" on every map that had one, and a map
+        // is the one page whose boxes carry nothing but the name. The fit-to-view below pays for
+        // it in zoom, which is the right currency -- a smaller whole map beats a cut name.
+        // OPEN_ISSUES #87. The label's room is the box less its icon and two margins (node()).
+        int widest = labels.stream().mapToInt(l -> Draw.width(screen.font(), l.getString()))
+            .max().orElse(0);
+        this.nodeW = Math.clamp(widest + 24, n > 12 ? 84 : NODE_W, 140);
         FlowLayout layout = new FlowLayout(n, wires, nodeW);
         for (int i = 0; i < n; i++) {
             nodes.add(new Node(labels.get(i), icons.get(i), isBay.get(i), tips.get(i),

@@ -148,7 +148,7 @@ public class WorkbayBlock extends BaseEntityBlock {
         if (record == null) {
             if (placer instanceof Player player) {
                 WorkbaySounds.confirm(player, WorkbayLang.message("network_quota"),
-                    net.minecraft.sounds.SoundEvents.COMPARATOR_CLICK, 0.8F);
+                    com.neryos.workbay.init.WBSounds.RELAY.get(), 0.8F);
             }
             return;
         }
@@ -229,7 +229,7 @@ public class WorkbayBlock extends BaseEntityBlock {
         // Which network, because that is the whole of what pairing decides now: a Connector is
         // owned by a network and used from whichever bays the player picks later.
         WorkbaySounds.confirm(player, WorkbayLang.message("connector_paired", record.label()),
-            net.minecraft.sounds.SoundEvents.COMPARATOR_CLICK, 1.6F);
+            com.neryos.workbay.init.WBSounds.RELAY.get(), 1.6F);
         return net.minecraft.world.ItemInteractionResult.CONSUME;
     }
 
@@ -263,7 +263,7 @@ public class WorkbayBlock extends BaseEntityBlock {
             // network is found by owner -- but this is the one moment a player is choosing between
             // two networks, and a name is what a choice needs.
             WorkbaySounds.confirm(player, WorkbayLang.message("workbay_stamped", record.label()),
-                net.minecraft.sounds.SoundEvents.COMPARATOR_CLICK, 1.2F);
+                com.neryos.workbay.init.WBSounds.RELAY.get(), 1.2F);
         }
         return net.minecraft.world.ItemInteractionResult.CONSUME;
     }

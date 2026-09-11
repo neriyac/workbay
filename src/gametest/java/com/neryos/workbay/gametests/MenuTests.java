@@ -262,6 +262,10 @@ public class MenuTests {
         WorkbayMenu.addChannel(workbay, workbay.record().orElseThrow(),
             workbay.connectorAt(connector).orElseThrow(() -> new GameTestAssertException(
                 "placing a paired Connector did not register it on the network")).id(), bay);
+        // Bay to target, as every test here was written before a channel was born EXTRACT (#56);
+        // BusTests#aNewChannelIsBornPullingIntoTheBay pins the born default.
+        BusConfig made = workbay.buses().get(workbay.buses().size() - 1);
+        workbay.addBus(made.withMode(BusConfig.Mode.INSERT));
     }
 
     private static WorkbayBlockEntity placeWorkbay(ExtendedGameTestHelper helper, BlockPos pos,

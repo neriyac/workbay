@@ -13,7 +13,6 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
-import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
@@ -39,11 +38,6 @@ public final class BayHosting {
     private BayHosting() {}
 
     private static final Logger LOG = LogUtils.getLogger();
-
-    /** The properties a machine might orient itself by, in the order a block is likely to use them. */
-    private static final DirectionProperty[] FACINGS = {
-        BlockStateProperties.HORIZONTAL_FACING, BlockStateProperties.FACING
-    };
 
     /**
      * Puts a machine in a bay. SPEC.md §10's insert order, in order.
@@ -134,11 +128,23 @@ public final class BayHosting {
         return stack;
     }
 
-    private static BlockState orient(BlockState state, Direction facing) {
-        for (DirectionProperty property : FACINGS) {
-            if (state.hasProperty(property) && property.getPossibleValues().contains(facing)) {
-                return state.setValue(property, facing);
-            }
+    /**
+     * The machine turned to face {@code facing} -- and <b>a block that can stand up, stood up</b>.
+     * A block with a horizontal facing (a furnace, every Mekanism machine) is choosing a front,
+     * and gets the one asked for. A block with the six-way {@code FACING} -- a barrel, a piston,
+     * a dispenser -- is drawn upright by its own item model, and turning it north laid a barrel
+     * on its side in the bay and on the face cube while the item preview beside it stood up.
+     * Its default is no help (a barrel's is north); UP is what its picture shows, and a hopper,
+     * which cannot face up, keeps its own. OPEN_ISSUES #99. Public because the face cube draws
+     * through the same rule, so the block in the bay and the block on the screen cannot disagree.
+     */
+    public static BlockState orient(BlockState state, Direction facing) {
+        if (state.hasProperty(BlockStateProperties.HORIZONTAL_FACING)) {
+            return state.setValue(BlockStateProperties.HORIZONTAL_FACING, facing);
+        }
+        if (state.hasProperty(BlockStateProperties.FACING)
+            && BlockStateProperties.FACING.getPossibleValues().contains(Direction.UP)) {
+            return state.setValue(BlockStateProperties.FACING, Direction.UP);
         }
         return state;
     }

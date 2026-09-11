@@ -472,9 +472,11 @@ public class BusTests {
 
         // A new channel is switched off, so nothing moves before the player has looked at the row.
         // These tests are about what moves once it is on, so they turn it on the way a player does.
-        // aNewLinkStartsSwitchedOff asserts the default itself.
+        // aNewLinkStartsSwitchedOff asserts the default itself. And <b>bay to target</b>, which
+        // is how every test here was written before a channel was born EXTRACT (OPEN_ISSUES #56);
+        // aNewChannelIsBornPullingIntoTheBay asserts that default itself.
         return addChannel(helper, workbay, GlobalPos.of(level.dimension(), at), 0)
-            .withEnabled(true);
+            .withEnabled(true).withMode(BusConfig.Mode.INSERT);
     }
 
     /**
@@ -1350,6 +1352,42 @@ public class BusTests {
                     "items moved by a link nobody switched on"))
                 .thenExecute(() -> tearDown(helper, workbayPos))
                 .thenSucceed();
+        });
+    }
+
+    /**
+     * OPEN_ISSUES #56, Neriya's call. The commonest first channel anybody makes is a chest of ore
+     * into a furnace; born INSERT it moved the furnace's output the other way, which on the first
+     * thing a new player builds reads as nothing happening. So a channel is born pulling from its
+     * target into the bay. The flip is still one click; this pins which way the click starts.
+     */
+    @GameTest
+    @TestHolder(description = "A channel made with Add is born pulling from its target into the bay.")
+    public static void aNewChannelIsBornPullingIntoTheBay(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos targetPos = helper.absolutePos(new BlockPos(4, 1, 4));
+            level.setBlock(targetPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.FURNACE));
+
+            ItemStack connector = new ItemStack(WBBlocks.CONNECTOR.get());
+            WorkbayBlock.pair(connector, workbay.record().orElseThrow(),
+                GlobalPos.of(level.dimension(), workbayPos));
+            BlockState state = WBBlocks.CONNECTOR.get().defaultBlockState()
+                .setValue(ConnectorBlock.FACING, Direction.DOWN);
+            level.setBlock(targetPos.above(), state, Block.UPDATE_ALL);
+            WBBlocks.CONNECTOR.get().setPlacedBy(level, targetPos.above(), state, player, connector);
+
+            BusConfig born = addChannel(helper, workbay,
+                GlobalPos.of(level.dimension(), targetPos.above()), 0);
+            helper.assertValueEqual(born.mode(), BusConfig.Mode.EXTRACT,
+                "the direction a channel is born with");
+            tearDown(helper, workbayPos);
+            helper.succeed();
         });
     }
 

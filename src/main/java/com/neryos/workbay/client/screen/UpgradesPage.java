@@ -64,7 +64,7 @@ class UpgradesPage extends WorkbayPage {
 
     @Override
     int height() {
-        return HEIGHT;
+        return Math.max(HEIGHT, screen.panelHeight());
     }
 
     @Override
@@ -158,7 +158,7 @@ class UpgradesPage extends WorkbayPage {
             // in one sentence what it was for. Whether the player is holding the item is the
             // server's question, so the row cannot answer it -- the click either installs or says
             // why, which is the same shape every other refusal on these screens has.
-            boolean canInstall = !maxed;
+            boolean canInstall = !maxed && snap.owned();
 
             Draw.well(g, px, py, ROW_W, ROW_H);
             // The whole row, registered before the + so the + still wins the click: hits dispatch
@@ -200,6 +200,9 @@ class UpgradesPage extends WorkbayPage {
                 // One line, not two. A maxed row printed "as many as a Workbay takes" twice, and an
                 maxed ? new net.minecraft.network.chat.Component[] {
                     WorkbayScreen.gui(key), WorkbayScreen.gui("upgrades.maxed") }
+                    : !canInstall ? new net.minecraft.network.chat.Component[] {
+                        WorkbayScreen.gui(key),
+                        com.neryos.workbay.WorkbayLang.message("owner_only") }
                     : new net.minecraft.network.chat.Component[] {
                         WorkbayScreen.gui(key),
                         WorkbayScreen.gui(key + ".long"),

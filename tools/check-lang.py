@@ -33,6 +33,7 @@ BUILT = {
     "gui.workbay.faces.": ("bus/BusConfig.java", "Resource", "serial"),
     "gui.workbay.status.": ("bus/BusRunner.java", "BusStatus", "name"),
     "gui.workbay.status.short.": ("bus/BusRunner.java", "BusStatus", "name"),
+    "gui.workbay.port.": ("bus/BusConfig.java", "Resource", "serial"),
     "gui.workbay.bay.": ("menu/WorkbaySnapshot.java", "State", "name"),
     "gui.workbay.bay.short.": ("menu/WorkbaySnapshot.java", "State", "name"),
     "gui.workbay.redstone.": ("world/RedstoneMode.java", "RedstoneMode", "serial"),
@@ -81,10 +82,16 @@ def constants(rel, enum, style):
 
 def wanted():
     keys = set()
-    literal = re.compile(r'\b(gui|tooltip|message|status|info)\("([A-Za-z0-9_.]+)"\)')
+    # Every quoted key inside the call, not only a call that is one quoted key: a ternary picking
+    # between three keys -- gui(stuck ? "a" : canMint ? "b" : "c") -- shipped its third key
+    # untranslated, drawn as gui.workbay.networks.empty.take.tip on the NETWORKS page. A literal
+    # ending in a dot is a prefix being concatenated with an enum, which BUILT covers.
+    call = re.compile(r'\b(gui|tooltip|message|status|info)\(([^;{}]*?)\)')
+    literal = re.compile(r'"([a-z][A-Za-z0-9_.]*[A-Za-z0-9_])"')
     for java in SRC.rglob("*.java"):
-        for kind, path in literal.findall(java.read_text(encoding="utf-8")):
-            keys.add("%s.workbay.%s" % (kind, path))
+        for kind, inside in call.findall(java.read_text(encoding="utf-8")):
+            for path in literal.findall(inside):
+                keys.add("%s.workbay.%s" % (kind, path))
     for prefix, (rel, enum, style) in BUILT.items():
         keys.update(prefix + suffix for suffix in constants(rel, enum, style))
     for prefix, suffixes in BUILT_LITERAL.items():

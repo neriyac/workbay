@@ -17,9 +17,31 @@ public class WBLanguageProvider extends LanguageProvider {
         super(output, Workbay.MOD_ID, "en_us");
     }
 
+    private void subtitle(String sound, String caption) {
+        add("subtitles." + Workbay.MOD_ID + "." + sound, caption);
+    }
+
     @Override
     protected void addTranslations() {
         add("itemGroup." + Workbay.MOD_ID, "Workbay");
+
+        // What a sound is called in the subtitle corner. Every sound is a vanilla recording under
+        // the mod's own event (WBSounds), so the caption names the Workbay's moment rather than
+        // the vault, beacon or enderman it was borrowed from. OPEN_ISSUES #91.
+        subtitle("refuse", "Workbay refuses");
+        subtitle("confirm", "Workbay confirms");
+        subtitle("relay", "Workbay relay ticks");
+        subtitle("linked", "Connector links");
+        subtitle("upgraded", "Upgrade fitted");
+        subtitle("anchor_on", "Anchor holds");
+        subtitle("anchor_off", "Anchor lets go");
+        subtitle("door", "Room door opens");
+        subtitle("travel", "Workbay carries a player");
+        subtitle("started", "Workbay starts moving");
+        subtitle("stopped", "Workbay goes quiet");
+        subtitle("stuck", "Workbay is stuck");
+        subtitle("network_arrives", "Network arrives");
+        subtitle("room_returned", "Room handed back");
 
         addBlock(WBBlocks.WORKBAY, "Workbay");
         addBlock(WBBlocks.PORT, "Port");
@@ -125,14 +147,17 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("power"), "%s / %s FE");
         add(WorkbayLang.guiKey("power.tip"), "Energy stored in the Workbay itself. Hosted machines keep their own.");
         add(WorkbayLang.guiKey("power.machine.tip"), "Energy stored in this machine.");
-        add(WorkbayLang.guiKey("power.none"), "No power");
+        // "No power" read as a fault on a barrel and a furnace, which need none. OPEN_ISSUES #102.
+        add(WorkbayLang.guiKey("power.none"), "Needs no power");
 
         // The header's three counters. Keys rather than strings built in the Java: they sit on the
         // same line as power.none, which has always been a key, and a count with no plural rule is
         // how "1 links" got shipped.
         add(WorkbayLang.guiKey("count.bays"), "%s / %s bays");
-        add(WorkbayLang.guiKey("count.links"), "%s links");
-        add(WorkbayLang.guiKey("count.links.one"), "1 link");
+        // Channels, not links: SPEC.md §0 calls what a bay gets a channel, and the Add list beside
+        // this header already says "Connectors". OPEN_ISSUES #103.
+        add(WorkbayLang.guiKey("count.links"), "%s channels");
+        add(WorkbayLang.guiKey("count.links.one"), "1 channel");
         add(WorkbayLang.guiKey("count.problems"), "%s problems");
         add(WorkbayLang.guiKey("count.problems.one"), "1 problem");
         add(WorkbayLang.guiKey("count.problems.none"), "no problems");
@@ -186,7 +211,12 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("button.paste.empty"), "Copy a bay first.");
 
         add(WorkbayLang.guiKey("bay.n"), "Bay %s");
-        add(WorkbayLang.guiKey("bay.here"), "Bay %s · %s · Workbay %s");
+        // The network's label is the whole name now ("Neryos's Workbay"), not a number. #108.
+        add(WorkbayLang.guiKey("bay.here"), "Bay %s · %s · %s");
+        // Under a machine's screen opened from the Workbay: the screen looks like the machine is
+        // where the player stands, and nothing else says where it is. OPEN_ISSUES #90.
+        add(WorkbayLang.messageKey("remote_opened"), "Opened from here: %s. The machine itself "
+            + "stays in its bay.");
         add(WorkbayLang.guiKey("bay.empty"), "Empty bay");
         add(WorkbayLang.guiKey("bay.empty.tip"), "Hold a machine and click here to rack it.");
         add(WorkbayLang.guiKey("bay.rack.tip"), "Hold a machine and click to rack it in this bay.");
@@ -401,8 +431,8 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("status.short.connector_gone"), "Gone");
         add(WorkbayLang.guiKey("status.short.target_missing"), "No target");
         add(WorkbayLang.guiKey("status.short.target_not_loaded"), "Unloaded");
-        add(WorkbayLang.guiKey("status.short.target_no_port"), "No port");
-        add(WorkbayLang.guiKey("status.short.machine_no_port"), "No machine");
+        add(WorkbayLang.guiKey("status.short.target_no_port"), "No %s");
+        add(WorkbayLang.guiKey("status.short.machine_no_port"), "No %s");
         add(WorkbayLang.guiKey("status.short.machine_no_face"), "No face");
         add(WorkbayLang.guiKey("status.short.needs_resonator"), "Off-world");
         add(WorkbayLang.guiKey("status.running"), "Running");
@@ -418,12 +448,19 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("status.target_missing.tip"), "The dimension this link points into is gone.");
         add(WorkbayLang.guiKey("status.target_not_loaded"), "Chunk not loaded");
         add(WorkbayLang.guiKey("status.target_not_loaded.tip"), "The target's chunk is unloaded. It resumes on its own.");
-        add(WorkbayLang.guiKey("status.target_no_port"), "No port");
-        add(WorkbayLang.guiKey("status.target_no_port.tip"), "The target is there but has nothing "
-            + "this link can connect to on any face.");
-        add(WorkbayLang.guiKey("status.machine_no_port"), "Machine unreachable");
-        add(WorkbayLang.guiKey("status.machine_no_port.tip"), "The machine answers on none of the faces this link may use. "
-            + "Most open a face only once you set it in their own side config.");
+        // Both name the resource: "No machine" on a fluid link into a furnace said the machine was
+        // missing when what is missing is a tank the furnace will never have. OPEN_ISSUES #101.
+        add(WorkbayLang.guiKey("status.target_no_port"), "Target has no %s");
+        add(WorkbayLang.guiKey("status.target_no_port.tip"), "The target is there, but offers no "
+            + "%s on any face. Some blocks never will; others open one in their own side config.");
+        add(WorkbayLang.guiKey("status.machine_no_port"), "Machine has no %s");
+        add(WorkbayLang.guiKey("status.machine_no_port.tip"), "The machine offers no %s on any "
+            + "face this link may use. A furnace or a chest never will; a machine that has one may "
+            + "open it only in its own side config, or on a face the cube has turned off.");
+        add(WorkbayLang.guiKey("port.item"), "item slots");
+        add(WorkbayLang.guiKey("port.fluid"), "tank");
+        add(WorkbayLang.guiKey("port.energy"), "power port");
+        add(WorkbayLang.guiKey("port.chemical"), "chemical tank");
         add(WorkbayLang.guiKey("status.machine_no_face"), "No face for this");
         add(WorkbayLang.guiKey("status.needs_resonator"), "Needs a Resonator");
         add(WorkbayLang.guiKey("status.needs_resonator.tip"), "This link crosses into another dimension. Install a Resonator to let it.");
@@ -460,6 +497,11 @@ public class WBLanguageProvider extends LanguageProvider {
         // being a working Workbay.
         add(WorkbayLang.guiKey("networks.empty"), "This Workbay holds no network");
         add(WorkbayLang.guiKey("networks.empty.tip"), "Start one here, or move one of yours in.");
+        // At the limit with every network placed: nothing to mint, but any row's Transfer works.
+        // Drawn as its own key until 2026-09-11 -- the ternary that picks it hid it from
+        // check-lang. OPEN_ISSUES #106.
+        add(WorkbayLang.guiKey("networks.empty.take.tip"), "Every network you own already has a "
+            + "block. Pick one and press Transfer to move it here; the block it leaves stands empty.");
         add(WorkbayLang.guiKey("networks.new"), "New network");
         add(WorkbayLang.guiKey("networks.new.tip"), "Makes a fresh network in this Workbay: two "
             + "empty bays, no Connectors, nothing racked. It counts against the number of networks "

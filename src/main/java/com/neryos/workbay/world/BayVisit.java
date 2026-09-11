@@ -199,15 +199,24 @@ public final class BayVisit {
         player.connection.send(
             new net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket(
                 com.neryos.workbay.WorkbayLang.gui("bay.n", bay + 1)));
+        player.connection.send(
+            new net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket(
+                describe(record, bay)));
+    }
+
+    /**
+     * "Bay 3 · Furnace · Neryos's Workbay": which bay, what is in it, which network. The one line
+     * that says where a machine is, used on arrival in the bay and under a machine's screen
+     * opened from a distance (OPEN_ISSUES #90), so the two cannot describe one bay two ways.
+     */
+    public static net.minecraft.network.chat.Component describe(WorkbayRecord record, int bay) {
         String named = record.bay(bay).name();
         net.minecraft.network.chat.Component what = named.isEmpty()
             ? record.bay(bay).hosted()
                 .map(id -> net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(id).getName())
                 .orElseGet(() -> com.neryos.workbay.WorkbayLang.gui("bay.empty"))
             : net.minecraft.network.chat.Component.literal(named);
-        player.connection.send(
-            new net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket(
-                com.neryos.workbay.WorkbayLang.gui("bay.here", bay + 1, what, record.label())));
+        return com.neryos.workbay.WorkbayLang.gui("bay.here", bay + 1, what, record.label());
     }
 
     /** Puts a visitor back where they came from. Silent and harmless if they are not one. */
