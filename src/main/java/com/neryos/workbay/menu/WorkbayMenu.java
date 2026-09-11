@@ -877,9 +877,11 @@ public class WorkbayMenu extends AbstractContainerMenu {
      * {@link com.neryos.workbay.world.RoomGuest#LOOK} because the safe end of the ring is the one
      * an accidental click lands on, and the ring steps upward from there.
      *
-     * <p>The name is resolved against the players who are online and then against the profile
-     * cache, which is what a whitelist command does. Somebody this server has never seen cannot be
-     * invited, and the refusal says so rather than adding a guest with an id made up on the spot.
+     * <p>The name is resolved against the players who are online and nothing else. The profile
+     * cache is what a whitelist command reads, and a miss there is a synchronous Mojang HTTP
+     * request on the server thread -- once per packet, from any player with a Room Frame, which
+     * is why it is not read here (night audit 1A, finding 3). Somebody offline cannot be invited,
+     * and the refusal says so rather than adding a guest with an id made up on the spot.
      */
     private void inviteGuest(ServerPlayer serverPlayer, WorkbayRecord record, int index,
         String name) {
@@ -897,22 +899,18 @@ public class WorkbayMenu extends AbstractContainerMenu {
             return;
         }
         ServerPlayer online = serverPlayer.server.getPlayerList().getPlayerByName(name);
-        java.util.Optional<com.mojang.authlib.GameProfile> profile = online != null
-            ? java.util.Optional.of(online.getGameProfile())
-            : serverPlayer.server.getProfileCache() == null
-                ? java.util.Optional.empty()
-                : serverPlayer.server.getProfileCache().get(name);
-        if (profile.isEmpty()) {
+        if (online == null) {
             WorkbaySounds.refuse(serverPlayer,
                 com.neryos.workbay.WorkbayLang.message("guest_unknown", name));
             return;
         }
-        if (profile.get().getId().equals(record.owner())) {
+        com.mojang.authlib.GameProfile profile = online.getGameProfile();
+        if (profile.getId().equals(record.owner())) {
             WorkbaySounds.refuse(serverPlayer,
                 com.neryos.workbay.WorkbayLang.message("guest_is_owner"));
             return;
         }
-        registry.putRoom(rooms.get(index).withGuest(profile.get().getId(), profile.get().getName(),
+        registry.putRoom(rooms.get(index).withGuest(profile.getId(), profile.getName(),
             com.neryos.workbay.world.RoomGuest.LOOK));
     }
 

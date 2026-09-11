@@ -398,7 +398,7 @@
   "message.workbay.connector_unpaired": "This Connector isn't paired yet. Right-click a Workbay with it first.",
   "message.workbay.filter_no_chemical": "There is no chemical in that tank to name. Fill it first, then list what is in it.",
   "message.workbay.guest_is_owner": "That is you. The room is already yours.",
-  "message.workbay.guest_unknown": "This server has never seen a player called %s. They have to have logged in once before they can be invited.",
+  "message.workbay.guest_unknown": "%s is not online. A player has to be on the server to be invited.",
   "message.workbay.internal_link_needs_second_bay": "This Workbay only has one bay. Install an Expansion Plate before linking bay to bay.",
   "message.workbay.locked": "This Workbay is locked.",
   "message.workbay.network_cap_reached": "You already own the maximum of %s Workbay network(s). Break one before starting another.",

@@ -1401,4 +1401,51 @@ public class RoomTests {
         });
     }
 
+
+    /**
+     * Night audit 1A finding 3. An invite for a name nobody online carried went to the profile
+     * cache, and a cache miss there is a <b>synchronous Mojang HTTP request on the server thread</b>,
+     * once per packet, unthrottled. Only online players can be invited now, and the only lookup is
+     * the player list. <b>The gametest server has no profile cache</b> ({@code GameTestServer}
+     * runs on {@code NO_SERVICES}), so this test cannot watch the HTTP go away; the absence is
+     * proved by reading {@code WorkbayMenu#inviteGuest}. What it pins is the shape that stays:
+     * an unknown name is refused and leaves the guest list alone, an online one is invited.
+     */
+    @GameTest
+    @TestHolder(description = "Inviting a room guest resolves online players only; a cached offline name is refused.")
+    public static void anInviteResolvesOnlinePlayersOnly(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            // Every mock player carries the same name, and getPlayerByName answers the first one
+            // logged in -- so the friend logs in before the owner, or the invite names the owner.
+            GameTestPlayer friend = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            Site site = site(helper, 1);
+            RoomRegistry registry = RoomRegistry.get(helper.getLevel().getServer());
+            WorkbayRecord record = registry.byId(site.record().id()).orElseThrow();
+            // Mint room 0 the way a player does, by walking in.
+            helper.assertTrue(RoomVisit.enter(site.player(), record, 0), "the owner was refused their own room");
+            RoomVisit.leave(site.player());
+
+            WorkbayBlockEntity workbay = (WorkbayBlockEntity) helper.getLevel().getBlockEntity(site.workbayPos());
+            com.neryos.workbay.menu.WorkbayMenu menu = new com.neryos.workbay.menu.WorkbayMenu(1,
+                site.player().getInventory(), workbay,
+                com.neryos.workbay.menu.WorkbayMenu.build(workbay, site.player(), 0));
+
+            // A name nobody online carries: the case that used to go to the cache and, on a miss,
+            // to Mojang.
+            String offline = "zz_offline_" + Integer.toHexString(java.util.UUID.randomUUID().hashCode());
+            menu.act(com.neryos.workbay.menu.WorkbayAction.INVITE_ROOM_GUEST, 0,
+                java.util.Optional.empty(), java.util.Optional.of(offline), false);
+            helper.assertTrue(room(helper, site).guests().isEmpty(),
+                "an unknown name was invited");
+
+            // Positive control: somebody online is invited.
+            menu.act(com.neryos.workbay.menu.WorkbayAction.INVITE_ROOM_GUEST, 0,
+                java.util.Optional.empty(), java.util.Optional.of(friend.getGameProfile().getName()), false);
+            helper.assertValueEqual(room(helper, site).guests().size(), 1,
+                "guests after inviting an online player");
+            helper.succeed();
+        });
+    }
 }

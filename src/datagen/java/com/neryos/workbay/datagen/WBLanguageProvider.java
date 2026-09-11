@@ -64,8 +64,8 @@ public class WBLanguageProvider extends LanguageProvider {
             + "change it. Open what is here as you like; its owner can raise that to May build.");
         add(WorkbayLang.messageKey("room_look_only"), "You were invited to look at this room, not "
             + "to change it. Its owner can raise that to Build.");
-        add(WorkbayLang.messageKey("guest_unknown"), "This server has never seen a player called "
-            + "%s. They have to have logged in once before they can be invited.");
+        add(WorkbayLang.messageKey("guest_unknown"), "%s is not online. A player has to be on the "
+            + "server to be invited.");
         add(WorkbayLang.messageKey("guest_is_owner"), "That is you. The room is already yours.");
 
         // Insert rejections. Action bar, RED. SPEC.md §6: say what happened, then why, then what
