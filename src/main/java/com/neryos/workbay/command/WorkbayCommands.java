@@ -155,10 +155,8 @@ public class WorkbayCommands {
             source.sendFailure(Component.literal("No such bay."));
             return 0;
         }
-        // The menu's rule, because this is the menu's button without the menu: a locked Workbay
-        // opens its machines for the owner alone.
-        if (record.get().locked() && !record.get().owner().equals(player.getUUID())) {
-            source.sendFailure(com.neryos.workbay.WorkbayLang.message("locked"));
+        // The one lock, because this is the menu's button without the menu.
+        if (record.get().refuses(player)) {
             return 0;
         }
         net.minecraft.core.BlockPos machine =
@@ -193,6 +191,11 @@ public class WorkbayCommands {
         var record = workbay.record();
         if (record.isEmpty()) {
             source.sendFailure(Component.literal("That Workbay is not bound to a network."));
+            return 0;
+        }
+        // The one lock: this is the ROOMS page's Enter without the page, and the page would not
+        // have opened. A guest's invite is asked after it, by RoomVisit.
+        if (record.get().refuses(player)) {
             return 0;
         }
         if (record.get().roomCapacity() == 0) {

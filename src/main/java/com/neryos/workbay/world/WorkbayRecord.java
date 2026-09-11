@@ -179,6 +179,41 @@ public record WorkbayRecord(
     }
 
     /**
+     * <b>The one question every door asks.</b> A locked network is its owner's alone -- not
+     * look-only, not for operators: nothing opens, nothing is read, and the refusal says why. The
+     * block's two right-clicks, the menu (open, act, {@code stillValid}), the Connector's placement,
+     * panel and rename, the remote screen, the bay trip and the commands all ask this and nothing
+     * else, because the lock has already leaked once through a door nobody had listed. A room's own
+     * guest list is a different question ({@link RoomVisit#mayEnter}) asked once the player is
+     * through this one.
+     */
+    public boolean admits(UUID who) {
+        return !locked || owner.equals(who);
+    }
+
+    /** {@link #admits}, said out loud. True when the door stays shut. */
+    public boolean refuses(net.minecraft.server.level.ServerPlayer who) {
+        if (admits(who.getUUID())) {
+            return false;
+        }
+        com.neryos.workbay.WorkbaySounds.refuse(who, com.neryos.workbay.WorkbayLang.message("locked"));
+        return true;
+    }
+
+    /**
+     * The owner's alone even on an unlocked network: the lock itself, upgrades, rooms and guests.
+     * Its own message, because "locked" is a lie on a Workbay whose owner chose to share.
+     */
+    public boolean refusesNonOwner(net.minecraft.server.level.ServerPlayer who) {
+        if (owner.equals(who.getUUID())) {
+            return false;
+        }
+        com.neryos.workbay.WorkbaySounds.refuse(who,
+            com.neryos.workbay.WorkbayLang.message("owner_only"));
+        return true;
+    }
+
+    /**
      * <b>A network is awake exactly while a Workbay block stands on it.</b> One block, one network
      * (SPEC.md §0); with no block, nothing ticks it, nothing holds a chunk for it and its bays,
      * machines, Connectors and channels are all still there waiting — which is what makes placing

@@ -1114,7 +1114,7 @@ public class MenuTests {
      * existing one are never refused.
      */
     @GameTest
-    @TestHolder(description = "A network holds at most 64 links; Add past that mints nothing.")
+    @TestHolder(description = "A network holds at most 64 links; Add past that mints nothing and says so.")
     public static void aNetworkHoldsAtMostSixtyFourLinks(final DynamicTest test) {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
 
@@ -1137,6 +1137,12 @@ public class MenuTests {
             }
             helper.assertValueEqual(workbay.buses().size(), WorkbayBlockEntity.MAX_LINKS,
                 "links after a hundred Adds");
+
+            // The button itself, once more: the 65th Add used to fail in silence.
+            menuFor(workbay, player).act(WorkbayAction.ADD_CHANNEL, 0, Optional.of(connector));
+            helper.assertValueEqual(LockTests.lastRefusal(player),
+                com.neryos.workbay.WorkbayLang.messageKey("link_cap"),
+                "what the player was told on the Add past the cap");
 
             // An edit of a link that exists still lands on a full record.
             BusConfig first = workbay.buses().getFirst();

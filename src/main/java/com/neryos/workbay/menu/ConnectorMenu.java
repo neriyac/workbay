@@ -112,8 +112,11 @@ public class ConnectorMenu extends AbstractContainerMenu {
             GlobalPos here = GlobalPos.of(level.dimension(), view.pos());
             com.neryos.workbay.world.RoomRegistry registry =
                 com.neryos.workbay.world.RoomRegistry.get(player.server);
+            // The lock, asked again here: the panel is a door the block already guarded, and a
+            // packet is a thing anybody can send without a panel.
             connector.pairing().flatMap(pairing -> registry.byId(pairing.workbayId()))
                 .filter(record -> record.connectorAt(here).isPresent())
+                .filter(record -> !record.refuses(player))
                 .ifPresent(record -> registry.put(record.withConnectorRenamed(here, text.strip())));
         }
         player.closeContainer();

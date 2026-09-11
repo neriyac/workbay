@@ -134,13 +134,18 @@ public class WorkbayMenu extends AbstractContainerMenu {
         return ItemStack.EMPTY;
     }
 
+    /**
+     * Reach, and the lock: a stranger's screen closes on the tick the owner locks, the way any
+     * menu closes when its block is broken. {@code act} asks the lock first so the refusal is said.
+     */
     @Override
     public boolean stillValid(Player player) {
         return workbay == null
             || (!workbay.isRemoved() && player.distanceToSqr(
                 workbay.getBlockPos().getX() + 0.5,
                 workbay.getBlockPos().getY() + 0.5,
-                workbay.getBlockPos().getZ() + 0.5) <= 64.0);
+                workbay.getBlockPos().getZ() + 0.5) <= 64.0
+                && workbay.record().map(record -> record.admits(player.getUUID())).orElse(true));
     }
 
     @Override
@@ -185,10 +190,20 @@ public class WorkbayMenu extends AbstractContainerMenu {
     public void act(WorkbayAction action, long arg, Optional<UUID> linkId,
         Optional<String> text, boolean back) {
         if (workbay == null || !(player instanceof ServerPlayer serverPlayer)
-            || player.isSpectator() || !stillValid(player)) {
+            || player.isSpectator()) {
             return;
         }
         if (++actionsThisWindow > MAX_ACTIONS_PER_WINDOW) {
+            return;
+        }
+        // The lock, before anything -- including Transfer, which would otherwise let a stranger
+        // move their own network into this block and put the owner's to sleep. Budgeted above so
+        // a hostile client cannot make the server say "locked" a thousand times a tick.
+        WorkbayRecord record = workbay.record().orElse(null);
+        if (record != null && record.refuses(serverPlayer)) {
+            return;
+        }
+        if (!stillValid(player)) {
             return;
         }
         // Before the record check, and deliberately: these two are the only things a Workbay
@@ -208,14 +223,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
             }
             default -> { }
         }
-        WorkbayRecord record = workbay.record().orElse(null);
         if (record == null) {
-            return;
-        }
-        // The lock is checked once, for every action that changes something. Selecting a bay only
-        // changes what this player is looking at.
-        if (action != WorkbayAction.SELECT_BAY && action != WorkbayAction.TOGGLE_LOCK
-            && refused(serverPlayer, record)) {
             return;
         }
         switch (action) {
@@ -311,7 +319,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
                 }
             }
             case CREATE_INTERNAL_LINK -> createInternalLink(serverPlayer, record, (int) arg);
-            case ADD_CHANNEL -> addChannel(record, linkId, (int) arg);
+            case ADD_CHANNEL -> addChannel(serverPlayer, record, linkId, (int) arg);
             case LINK_CYCLE_TARGET_BAY -> editLink(linkId, link -> link.internal()
                 ? link.withTarget(GlobalPos.of(WorkbayDimensions.BACKSHOP,
                     BayGeometry.machinePos(record.bayColumn(),
@@ -455,25 +463,42 @@ public class WorkbayMenu extends AbstractContainerMenu {
      * this Workbay with the X: that one kept its resource, direction, filter and rate, and giving
      * it back is what the player meant. OPEN_ISSUES #70.
      */
-    private void addChannel(WorkbayRecord record, Optional<UUID> connectorId, int bay) {
-        connectorId.ifPresent(id -> addChannel(workbay, record, id, bay));
+    private void addChannel(ServerPlayer serverPlayer, WorkbayRecord record,
+        Optional<UUID> connectorId, int bay) {
+        if (connectorId.isPresent() && !addChannel(workbay, record, connectorId.get(), bay)) {
+            atLinkCap(serverPlayer);
+        }
     }
 
-    /** Static so a gametest presses the button rather than re-writing what the button does. */
-    public static void addChannel(WorkbayBlockEntity workbay, WorkbayRecord record,
+    /**
+     * The cap is {@code addBus}'s, in the one place a link is minted; this is the only thing that
+     * says so, because the 65th Add otherwise did nothing at all.
+     */
+    private static void atLinkCap(ServerPlayer serverPlayer) {
+        WorkbaySounds.refuse(serverPlayer, com.neryos.workbay.WorkbayLang.message("link_cap",
+            WorkbayBlockEntity.MAX_LINKS));
+    }
+
+    /**
+     * Static so a gametest presses the button rather than re-writing what the button does.
+     *
+     * @return false only when a new link was refused at {@link WorkbayBlockEntity#MAX_LINKS}
+     */
+    public static boolean addChannel(WorkbayBlockEntity workbay, WorkbayRecord record,
         UUID connectorId, int bay) {
         if (bay < 0 || bay >= record.bayCapacity()) {
-            return;
+            return true;
         }
-        record.connectors().stream().filter(connector -> connector.id().equals(connectorId))
+        return record.connectors().stream().filter(connector -> connector.id().equals(connectorId))
             .findFirst()
-            .ifPresent(connector -> workbay.addBus(workbay.linksAt(connector.pos()).stream()
+            .map(connector -> workbay.addBus(workbay.linksAt(connector.pos()).stream()
                 .filter(BusConfig::detached).findFirst()
                 .map(waiting -> waiting.withBay(bay))
                 .orElseGet(() -> BusConfig.create(UUID.randomUUID(), bay,
                     BusConfig.Resource.ITEM, BusConfig.Mode.INSERT,
                     connector.pos(), connector.target())
-                    .withTargetBlock(connector.targetBlock()))));
+                    .withTargetBlock(connector.targetBlock()))))
+            .orElse(true);
     }
 
     /**
@@ -481,19 +506,6 @@ public class WorkbayMenu extends AbstractContainerMenu {
      * message naming the category — the item stays in hand, which is the whole point of rejecting
      * at the registry level rather than after placement (SPEC.md §11).
      */
-    /**
-     * A locked Workbay only lets its owner change anything. One guard for every mutation: rack and
-     * eject each carried a copy of this and {@code cycleFace} carried none, so anyone could rewrite
-     * a locked Workbay's face config.
-     */
-    private boolean refused(ServerPlayer who, WorkbayRecord record) {
-        if (!record.locked() || record.owner().equals(who.getUUID())) {
-            return false;
-        }
-        WorkbaySounds.refuse(who, com.neryos.workbay.WorkbayLang.message("locked"));
-        return true;
-    }
-
     /**
      * Whether racking this stack would quietly throw its block entity data away.
      *
@@ -545,9 +557,6 @@ public class WorkbayMenu extends AbstractContainerMenu {
     }
 
     private void rack(ServerPlayer serverPlayer, WorkbayRecord record) {
-        if (refused(serverPlayer, record)) {
-            return;
-        }
         if (selectedBay >= record.bayCapacity()) {
             WorkbaySounds.refuse(serverPlayer, com.neryos.workbay.WorkbayLang.message("reject.no_bay"));
             return;
@@ -610,9 +619,6 @@ public class WorkbayMenu extends AbstractContainerMenu {
     }
 
     private void eject(ServerPlayer serverPlayer, WorkbayRecord record) {
-        if (refused(serverPlayer, record)) {
-            return;
-        }
         ServerLevel backshop = serverPlayer.server.getLevel(WorkbayDimensions.BACKSHOP);
         if (backshop == null) {
             return;
@@ -631,10 +637,9 @@ public class WorkbayMenu extends AbstractContainerMenu {
         workbay.setChanged();
     }
 
-    /** Only the owner may lock or unlock. Everything else on the screen stays readable. */
+    /** Only the owner may lock or unlock; an unlocked Workbay is shared, not given away. */
     private void toggleLock(ServerPlayer serverPlayer, WorkbayRecord record) {
-        if (!record.owner().equals(serverPlayer.getUUID())) {
-            WorkbaySounds.refuse(serverPlayer, com.neryos.workbay.WorkbayLang.message("locked"));
+        if (record.refusesNonOwner(serverPlayer)) {
             return;
         }
         RoomRegistry.get(serverPlayer.server).put(record.withLocked(!record.locked()));
@@ -642,9 +647,6 @@ public class WorkbayMenu extends AbstractContainerMenu {
 
     private void cycleFace(ServerPlayer serverPlayer, WorkbayRecord record, int packed,
         boolean back) {
-        if (refused(serverPlayer, record)) {
-            return;
-        }
         BusConfig.Resource resource = BusConfig.Resource.values()[
             Math.clamp(packed & 0xF, 0, BusConfig.Resource.values().length - 1)];
         Direction face = Direction.values()[
@@ -658,9 +660,6 @@ public class WorkbayMenu extends AbstractContainerMenu {
      * the filter join it when they exist, and the action already carries the room for them.
      */
     private void pasteBay(ServerPlayer serverPlayer, WorkbayRecord record, long bits) {
-        if (refused(serverPlayer, record)) {
-            return;
-        }
         setFaces(serverPlayer, record, FaceConfig.fromBits(bits));
     }
 
@@ -724,7 +723,10 @@ public class WorkbayMenu extends AbstractContainerMenu {
         GlobalPos anchor = GlobalPos.of(serverPlayer.level().dimension(), workbay.getBlockPos());
         GlobalPos target = GlobalPos.of(WorkbayDimensions.BACKSHOP,
             BayGeometry.machinePos(record.bayColumn(), targetBay));
-        workbay.addBus(BusConfig.createInternal(UUID.randomUUID(), selectedBay, anchor, target));
+        if (!workbay.addBus(BusConfig.createInternal(UUID.randomUUID(), selectedBay, anchor,
+            target))) {
+            atLinkCap(serverPlayer);
+        }
     }
 
     /** Which bay an internal link's {@code target} currently points at, by position. */
@@ -762,8 +764,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
             return;
         }
         WorkbayUpgrade upgrade = WorkbayUpgrade.values()[ordinal];
-        if (!record.owner().equals(serverPlayer.getUUID())) {
-            WorkbaySounds.refuse(serverPlayer, com.neryos.workbay.WorkbayLang.message("locked"));
+        if (record.refusesNonOwner(serverPlayer)) {
             return;
         }
         // An Annex Plate with no Room Frame fitted is the "installs and does nothing" failure
@@ -808,8 +809,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
      * is not.
      */
     private void removeRoom(ServerPlayer serverPlayer, WorkbayRecord record, int index) {
-        if (!record.owner().equals(serverPlayer.getUUID())) {
-            WorkbaySounds.refuse(serverPlayer, com.neryos.workbay.WorkbayLang.message("locked"));
+        if (record.refusesNonOwner(serverPlayer)) {
             return;
         }
         com.neryos.workbay.world.RoomRegistry registry =
@@ -857,8 +857,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
     }
 
     private void toggleRoomAnchor(ServerPlayer serverPlayer, WorkbayRecord record, int index) {
-        if (!record.owner().equals(serverPlayer.getUUID())) {
-            WorkbaySounds.refuse(serverPlayer, com.neryos.workbay.WorkbayLang.message("locked"));
+        if (record.refusesNonOwner(serverPlayer)) {
             return;
         }
         com.neryos.workbay.world.RoomRegistry registry =
@@ -900,8 +899,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
      */
     private void inviteGuest(ServerPlayer serverPlayer, WorkbayRecord record, int index,
         String name) {
-        if (!record.owner().equals(serverPlayer.getUUID())) {
-            WorkbaySounds.refuse(serverPlayer, com.neryos.workbay.WorkbayLang.message("locked"));
+        if (record.refusesNonOwner(serverPlayer)) {
             return;
         }
         if (name.isEmpty()) {
@@ -936,8 +934,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
      */
     private void editGuest(ServerPlayer serverPlayer, WorkbayRecord record, int index,
         int guest, boolean step) {
-        if (!record.owner().equals(serverPlayer.getUUID())) {
-            WorkbaySounds.refuse(serverPlayer, com.neryos.workbay.WorkbayLang.message("locked"));
+        if (record.refusesNonOwner(serverPlayer)) {
             return;
         }
         com.neryos.workbay.world.RoomRegistry registry =
@@ -962,8 +959,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
      * remember the choice on (SPEC.md §8 spends the region on first entry).
      */
     private void cycleRoomBiome(ServerPlayer serverPlayer, WorkbayRecord record, int index) {
-        if (!record.owner().equals(serverPlayer.getUUID())) {
-            WorkbaySounds.refuse(serverPlayer, com.neryos.workbay.WorkbayLang.message("locked"));
+        if (record.refusesNonOwner(serverPlayer)) {
             return;
         }
         com.neryos.workbay.world.RoomRegistry registry =
@@ -987,8 +983,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
      */
     private void cycleRoomColour(ServerPlayer serverPlayer, WorkbayRecord record, int index,
         boolean backwards) {
-        if (!record.owner().equals(serverPlayer.getUUID())) {
-            WorkbaySounds.refuse(serverPlayer, com.neryos.workbay.WorkbayLang.message("locked"));
+        if (record.refusesNonOwner(serverPlayer)) {
             return;
         }
         com.neryos.workbay.world.RoomRegistry registry =
@@ -1079,8 +1074,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
     @Nullable
     private com.neryos.workbay.world.RoomRecord editableRoom(ServerPlayer serverPlayer,
         WorkbayRecord record, int index) {
-        if (!record.owner().equals(serverPlayer.getUUID())) {
-            WorkbaySounds.refuse(serverPlayer, com.neryos.workbay.WorkbayLang.message("locked"));
+        if (record.refusesNonOwner(serverPlayer)) {
             return null;
         }
         List<com.neryos.workbay.world.RoomRecord> rooms =
@@ -1204,6 +1198,12 @@ public class WorkbayMenu extends AbstractContainerMenu {
      * hand — closing the machine's screen should undo the visit, not undo everything.
      */
     public static void open(ServerPlayer viewer, WorkbayBlockEntity workbay, int bay) {
+        // The lock, at the only door: a stranger gets the refusal and no screen -- not the bays,
+        // not NETWORKS, nothing to read. BayVisit's return trip lands here too, so an owner who
+        // locked while a guest was in a bay leaves them with the message rather than the screen.
+        if (workbay.record().map(record -> record.refuses(viewer)).orElse(false)) {
+            return;
+        }
         viewer.openMenu(new net.minecraft.world.SimpleMenuProvider(
             (id, inventory, who) -> new WorkbayMenu(id, inventory, workbay,
                 build(workbay, viewer, bay)),
@@ -1256,10 +1256,9 @@ public class WorkbayMenu extends AbstractContainerMenu {
         // that has something to learn is still nothing next to a write per poll.
         backfill.forEach(workbay::addBus);
 
-        // A locked Workbay opens for a stranger -- they may look, not act -- and the snapshot used
-        // to hand them every Connector's and target's coordinates in every dimension, the room
-        // names and the guest lists. Blanked here, in the one place the snapshot is assembled;
-        // the owner's is untouched. Night 2026-09-11, 1A #7.
+        // A locked Workbay no longer opens for a stranger at all, but a screen open on the tick the
+        // owner locks polls once more before stillValid closes it. That one snapshot carries no
+        // Connector or target coordinates, room names or guest lists. Night 2026-09-11, 1A #7.
         List<WorkbaySnapshot.Room> rooms = readRooms(player, record);
         List<WorkbayRecord.Connector> connectors = workbay.connectors();
         if (record.locked() && !record.owner().equals(player.getUUID())) {

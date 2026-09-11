@@ -111,6 +111,13 @@ public class ConnectorBlock extends BaseEntityBlock {
     public BlockState getStateForPlacement(BlockPlaceContext context) {
         BlockState state = defaultBlockState().setValue(FACING, context.getClickedFace().getOpposite());
         Player player = context.getPlayer();
+        // The network's lock, on the server where the registry is: a Connector paired to somebody
+        // else's locked network is a way into it, and placing one registers it there.
+        if (player instanceof net.minecraft.server.level.ServerPlayer who
+            && networkOf(who.server, context.getItemInHand().get(WBDataComponents.PAIRING.get()))
+                .map(record -> record.refuses(who)).orElse(false)) {
+            return null;
+        }
         if (player != null) {
             BlockPos target = target(state, context.getClickedPos());
             if (!context.getLevel().mayInteract(player, target)) {
@@ -144,6 +151,13 @@ public class ConnectorBlock extends BaseEntityBlock {
 
     public static BlockPos target(BlockState state, BlockPos pos) {
         return pos.relative(state.getValue(FACING));
+    }
+
+    /** The network a pairing names, through the registry so the Workbay's chunk need not load. */
+    public static java.util.Optional<WorkbayRecord> networkOf(
+        net.minecraft.server.MinecraftServer server, @Nullable ConnectorPairing pairing) {
+        return pairing == null ? java.util.Optional.empty()
+            : com.neryos.workbay.world.RoomRegistry.get(server).byId(pairing.workbayId());
     }
 
     /**
@@ -209,7 +223,10 @@ public class ConnectorBlock extends BaseEntityBlock {
             WorkbaySounds.refuse(player, WorkbayLang.message("connector_unpaired"));
             return InteractionResult.CONSUME;
         }
-        if (player instanceof net.minecraft.server.level.ServerPlayer server) {
+        // The network's lock: its Connectors are its doors too, and this panel renames one.
+        if (player instanceof net.minecraft.server.level.ServerPlayer server
+            && !networkOf(server.server, connector.pairing().get())
+                .map(record -> record.refuses(server)).orElse(false)) {
             com.neryos.workbay.menu.ConnectorMenu.open(server, pos);
         }
         return InteractionResult.CONSUME;

@@ -278,8 +278,9 @@ public class WorkbayBlockEntity extends BlockEntity {
      */
     public static final int MAX_LINKS = 64;
 
-    public void addBus(BusConfig bus) {
-        editBuses(record -> {
+    /** @return false when a <em>new</em> link did not land: the network is at {@link #MAX_LINKS}. */
+    public boolean addBus(BusConfig bus) {
+        return editBuses(record -> {
             List<BusConfig> updated = new ArrayList<>(record.buses());
             int existing = -1;
             for (int i = 0; i < updated.size(); i++) {
@@ -357,29 +358,34 @@ public class WorkbayBlockEntity extends BlockEntity {
      * list, write it back. {@code edit} returns {@code null} for "nothing changed" so a no-op edit
      * (removing a link that is already gone) does not touch the registry or fire {@code setChanged}.
      */
-    private void editBuses(java.util.function.Function<WorkbayRecord, List<BusConfig>> edit) {
-        editRecord(record -> {
+    private boolean editBuses(java.util.function.Function<WorkbayRecord, List<BusConfig>> edit) {
+        return editRecord(record -> {
             List<BusConfig> updated = edit.apply(record);
             return updated == null ? null : record.withBuses(updated);
         });
     }
 
-    /** Reads this Workbay's record, applies an edit and writes it back. Null means no change. */
-    private void editRecord(java.util.function.UnaryOperator<WorkbayRecord> edit) {
+    /**
+     * Reads this Workbay's record, applies an edit and writes it back. Null means no change.
+     *
+     * @return whether anything was written
+     */
+    private boolean editRecord(java.util.function.UnaryOperator<WorkbayRecord> edit) {
         if (!(level instanceof ServerLevel server) || workbayId == null) {
-            return;
+            return false;
         }
         RoomRegistry registry = RoomRegistry.get(server.getServer());
         WorkbayRecord record = registry.byId(workbayId).orElse(null);
         if (record == null) {
-            return;
+            return false;
         }
         WorkbayRecord updated = edit.apply(record);
         if (updated == null) {
-            return;
+            return false;
         }
         registry.put(updated);
         setChanged();
+        return true;
     }
 
     public List<WorkbayRecord.Connector> connectors() {

@@ -54,7 +54,13 @@ public class WBLanguageProvider extends LanguageProvider {
             + "is standing empty.");
         add(WorkbayLang.messageKey("break_warning"), "Breaking this Workbay leaves its bays behind. "
             + "The machines keep running \u2014 place any fresh Workbay to get back in.");
-        add(WorkbayLang.messageKey("locked"), "This Workbay is locked.");
+        // Two refusals, two reasons. "Locked" is the stranger's and closes every door; "owner
+        // only" is what a shared Workbay says to a guest who reaches for the lock, an upgrade or a
+        // room -- calling that "locked" was a lie the screen told (OPEN_ISSUES #107).
+        add(WorkbayLang.messageKey("locked"), "This Workbay is locked. Only its owner can open it.");
+        add(WorkbayLang.messageKey("owner_only"), "Only this Workbay's owner can do that.");
+        add(WorkbayLang.messageKey("link_cap"), "This network already has %s links, its most. "
+            + "Break a Connector to make room.");
 
         // Rooms have an owner, and a guest list per room. SPEC.md 8. Each of these says who
         // decides, because the answer is never "the server" and never "wait a bit".

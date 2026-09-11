@@ -215,11 +215,12 @@ public class WorkbayBlock extends BaseEntityBlock {
         if (record == null) {
             return net.minecraft.world.ItemInteractionResult.FAIL;
         }
-        // The menu's lock, on the world gesture too: a stranger must not pair a Connector into
+        // The one lock, on the world gesture too: a stranger must not pair a Connector into
         // somebody else's Add list, nor stamp a blank Workbay with their network for later.
-        if (record.locked() && !record.owner().equals(player.getUUID())) {
-            WorkbaySounds.refuse(player, WorkbayLang.message("locked"));
-            return net.minecraft.world.ItemInteractionResult.FAIL;
+        // CONSUME, not FAIL: FAIL lets the item's own use run next, which placed the Connector
+        // against the block and wrote "isn't paired yet" over the refusal.
+        if (player instanceof net.minecraft.server.level.ServerPlayer who && record.refuses(who)) {
+            return net.minecraft.world.ItemInteractionResult.CONSUME;
         }
         if (blank) {
             return stamp(stack, record, player);
@@ -283,7 +284,8 @@ public class WorkbayBlock extends BaseEntityBlock {
         }
         // <b>No guard on having a network.</b> A block holding nothing is exactly the block that
         // has something to say: it opens on NETWORKS, listing the player's own with a Transfer
-        // beside each. Refusing to open it was the old model's last refusal.
+        // beside each. Refusing to open it was the old model's last refusal. The one refusal left
+        // is the lock's, and `open` says it.
         com.neryos.workbay.menu.WorkbayMenu.open(serverPlayer, workbay, 0);
         return net.minecraft.world.InteractionResult.CONSUME;
     }
