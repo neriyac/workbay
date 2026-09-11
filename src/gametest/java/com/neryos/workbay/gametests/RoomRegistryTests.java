@@ -365,6 +365,54 @@ public class RoomRegistryTests {
         });
     }
 
+    /**
+     * Night 2026-09-11, 4C: a dedicated server hard-killed three minutes after a room was built
+     * came back with no room, {@code NextRoomRegion 0} and the shell still standing in the
+     * Backshop. A SavedData is written at autosave and on a clean stop; chunks also on unload. A
+     * structural change to the registry has to reach the disk when it happens, not at the next
+     * autosave.
+     */
+    @GameTest
+    @TestHolder(description = "A minted network and room are on disk before any autosave or save-all.")
+    public static void aMintReachesTheDiskWithoutAnAutosave(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(1, 1, 1));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            String name = "workbay_registry_probe_" + UUID.randomUUID().toString().substring(0, 8);
+            Path file = dataFile(helper, name);
+            try {
+                Files.createDirectories(file.getParent());
+                Files.deleteIfExists(file);
+                RoomRegistry registry = RoomRegistry.read(
+                    helper.getLevel().getServer().overworld().getDataStorage(), file.getParent(), name);
+                WorkbayRecord minted = registry.create(ALICE, "Alice", RandomSource.create(7L));
+                registry.createRoom();
+                // No storage.save(), no save-all: only what the mint itself wrote.
+                net.neoforged.neoforge.common.IOUtilities.waitUntilIOWorkerComplete();
+                if (!Files.exists(file)) {
+                    helper.fail("the registry file does not exist after a mint; a hard kill "
+                        + "before the next autosave loses the network");
+                    return;
+                }
+                CompoundTag after = NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap())
+                    .getCompound("data");
+                boolean found = after.getList("Workbays", Tag.TAG_COMPOUND).stream()
+                    .anyMatch(t -> ((CompoundTag) t).getString("Code").equals(minted.code()));
+                helper.assertTrue(found, "the minted network is not in the registry file");
+                helper.assertValueEqual(after.getInt("NextRoomRegion"), 1,
+                    "NextRoomRegion in the registry file after one room was minted");
+            } catch (IOException e) {
+                helper.fail("could not read the probe registry file: " + e);
+            } finally {
+                try {
+                    Files.deleteIfExists(file);
+                } catch (IOException ignored) {
+                }
+            }
+            helper.succeed();
+        });
+    }
+
     @GameTest
     @TestHolder(description = "The registry lives on the overworld and is the same instance every time.")
     public static void livesOnTheOverworld(final DynamicTest test) {

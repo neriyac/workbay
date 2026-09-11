@@ -97,6 +97,15 @@ public class RoomRegistry extends SavedData {
     private final List<Tag> unparsedRooms = new ArrayList<>();
     private CompoundTag foreign;
 
+    /**
+     * How a change reaches the disk <em>now</em>. A SavedData is written at autosave and on a clean
+     * stop; chunks are also written when they unload. A dedicated server hard-killed three minutes
+     * after a room was built came back with the room's shell standing in the Backshop and no
+     * record of it (night 2026-09-11, 4C): the next room minted would have landed on top of it. Set
+     * by {@link #read}; null for a registry the tests build by hand, or while {@link #load} runs.
+     */
+    private Runnable flush;
+
     private int nextBayColumn = 0;
 
     /**
@@ -138,7 +147,23 @@ public class RoomRegistry extends SavedData {
                 }
             }
         }
-        return storage.computeIfAbsent(FACTORY, name);
+        RoomRegistry registry = storage.computeIfAbsent(FACTORY, name);
+        registry.flush = storage::save;
+        return registry;
+    }
+
+    /**
+     * Every write to this registry is structural -- a network, a room, an upgrade, a link, a lock --
+     * and the per-tick state ({@link #busTurn}, {@link #busStatuses}) never comes through here, so
+     * every one is worth a write to disk. {@code DimensionDataStorage#save} encodes the dirty
+     * SavedData on this thread (a few KB) and writes them on the IO worker.
+     */
+    @Override
+    public void setDirty() {
+        super.setDirty();
+        if (flush != null) {
+            flush.run();
+        }
     }
 
     /**
@@ -324,8 +349,7 @@ public class RoomRegistry extends SavedData {
     }
 
     private ChunkPos allocateBayColumn() {
-        int index = nextBayColumn++;
-        setDirty();
+        int index = nextBayColumn++; // create() calls setDirty once the record is in.
         // Positive quadrant, well away from the room regions at far negative x (SPEC.md §8).
         return new ChunkPos((index & 0xFFF) * COLUMN_SPACING, (index >> 12) * COLUMN_SPACING);
     }
