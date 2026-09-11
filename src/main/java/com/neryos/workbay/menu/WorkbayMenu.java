@@ -59,6 +59,16 @@ public class WorkbayMenu extends AbstractContainerMenu {
     /** Rebuilt at most this often. It is a status screen, not an animation. */
     private static final int REFRESH_TICKS = 5;
 
+    /**
+     * Actions one menu runs per refresh window; the rest are dropped. A room repaint is up to
+     * 13.4k {@code setBlock}s and a biome change nine chunk loads, per packet, and nothing else
+     * rate-limits a client (night audit 1A, finding 4). Sized above the largest honest burst: the
+     * Add picker's Apply sends one packet per ticked Connector plus one per ticked bay
+     * ({@code BaysPage#applyPicked}), and a network holds at most {@code MAX_LINKS} = 64 links
+     * plus seven other bays, so 71 is the most that can land anything.
+     */
+    public static final int MAX_ACTIONS_PER_WINDOW = 80;
+
     private final Player player;
 
     @Nullable
@@ -68,6 +78,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
     private WorkbaySnapshot sent = WorkbaySnapshot.EMPTY;
     private int selectedBay;
     private int cooldown;
+    private int actionsThisWindow;
 
     /** Client side: the snapshot arrives in the menu-open buffer, so frame 1 is already correct. */
     public WorkbayMenu(int containerId, Inventory inventory, RegistryFriendlyByteBuf buffer) {
@@ -142,6 +153,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
             return;
         }
         cooldown = REFRESH_TICKS;
+        actionsThisWindow = 0;
         snapshot = build(workbay, serverPlayer, selectedBay);
         if (!Objects.equals(snapshot, sent)) {
             sent = snapshot;
@@ -174,6 +186,9 @@ public class WorkbayMenu extends AbstractContainerMenu {
         Optional<String> text, boolean back) {
         if (workbay == null || !(player instanceof ServerPlayer serverPlayer)
             || player.isSpectator() || !stillValid(player)) {
+            return;
+        }
+        if (++actionsThisWindow > MAX_ACTIONS_PER_WINDOW) {
             return;
         }
         // Before the record check, and deliberately: these two are the only things a Workbay

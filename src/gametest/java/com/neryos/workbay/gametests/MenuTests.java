@@ -1068,4 +1068,41 @@ public class MenuTests {
             helper.succeed();
         });
     }
+
+    /**
+     * Night audit 1A finding 4. Nothing in {@code act} limited how many actions one menu ran per
+     * tick, and a room repaint is up to 13.4k {@code setBlock}s per packet. One budget at the
+     * single entry: past {@link WorkbayMenu#MAX_ACTIONS_PER_WINDOW} in one refresh window an action
+     * is dropped, and the window is the snapshot's own five-tick cadence.
+     *
+     * <p>Renames rather than repaints, because the assertion is on which packet landed and a bay
+     * name is the cheapest thing that keeps a number.
+     */
+    @GameTest
+    @TestHolder(description = "A menu drops actions past its per-window budget, and takes them again after the window turns.")
+    public static void aMenuBudgetsActionsPerRefreshWindow(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            WorkbayBlockEntity workbay = placeWorkbay(helper, helper.absolutePos(new BlockPos(1, 1, 1)), player);
+            WorkbayMenu menu = menuFor(workbay, player);
+
+            for (int i = 1; i <= 200; i++) {
+                menu.act(WorkbayAction.SET_BAY_NAME, 0, Optional.empty(), Optional.of("n" + i), false);
+            }
+            helper.assertValueEqual(workbay.record().orElseThrow().bay(0).name(),
+                "n" + WorkbayMenu.MAX_ACTIONS_PER_WINDOW,
+                "the bay's name after two hundred renames in one tick");
+
+            // The window turns with the snapshot cadence; one more rename lands.
+            for (int tick = 0; tick < 10; tick++) {
+                menu.broadcastChanges();
+            }
+            menu.act(WorkbayAction.SET_BAY_NAME, 0, Optional.empty(), Optional.of("after"), false);
+            helper.assertValueEqual(workbay.record().orElseThrow().bay(0).name(), "after",
+                "the bay's name after the window turned");
+            helper.succeed();
+        });
+    }
 }
