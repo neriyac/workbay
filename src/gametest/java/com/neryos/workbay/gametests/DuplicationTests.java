@@ -512,6 +512,98 @@ public class DuplicationTests {
     }
 
     /**
+     * A Workbay broken and put back while a pair of opposed links circulates through one chest.
+     * Night 2026-09-11, 2C's RED-candidate: a re-placed network "ate gold" -- the probe had read
+     * another network's bay chest, and the loop was conserving all along -- but nothing had ever
+     * proven that a re-placed block's fresh runner and caches keep a loop both moving and honest.
+     *
+     * <p>Counted twice, on purpose. A stack written straight into the bay chest's slot 0 has to
+     * turn up in the world chest -- the extract link does the moving, and that is the positive
+     * control that the loop is alive -- and the census of cobblestone and gold together has to be
+     * what it was, after the break as before it.
+     */
+    @GameTest(timeoutTicks = 400)
+    @TestHolder(description = "Breaking and re-placing a Workbay keeps a circulating pair of links "
+        + "moving and loses nothing.")
+    public static void aReplacedWorkbayKeepsACirculatingLoopHonest(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos targetPos = helper.absolutePos(new BlockPos(4, 1, 4));
+            level.setBlock(targetPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+
+            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = backshop(helper);
+            WorkbayTickets.force(backshop, record.id(), record.bayColumn());
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+
+            player.getInventory().clearContent();
+            rack(menuFor(workbay, player), player, 0, new ItemStack(Blocks.CHEST, 1));
+            put(level, targetPos, 0, new ItemStack(Items.COBBLESTONE, 48));
+            put(backshop, machinePos, 0, new ItemStack(Items.COBBLESTONE, 8));
+            // One Connector, two channels: the world chest's cobblestone into the bay, and the
+            // bay's back out. What Alpha's Workbay 2 carried.
+            BusConfig insert = connect(helper, workbay, 0, targetPos.above(), player);
+            WorkbayMenu.addChannel(workbay, workbay.record().orElseThrow(),
+                workbay.connectorAt(insert.connector()).orElseThrow().id(), 0);
+            BusConfig extract = workbay.buses().stream()
+                .filter(bus -> !bus.id().equals(insert.id())).findFirst().orElseThrow()
+                .withMode(BusConfig.Mode.EXTRACT).withEnabled(true).withRate(16).withSpeed(10);
+            workbay.addBus(extract);
+
+            java.util.function.IntSupplier census = () ->
+                inContainer(level, targetPos, Items.COBBLESTONE)
+                    + inContainer(backshop, machinePos, Items.COBBLESTONE)
+                    + inContainer(level, targetPos, Items.GOLD_INGOT)
+                    + inContainer(backshop, machinePos, Items.GOLD_INGOT)
+                    + loose(helper, Items.COBBLESTONE) + loose(helper, Items.GOLD_INGOT);
+            // What the census should read. Writing slot 0 destroys whatever the loop had put
+            // there, so the seed books that out before it books the gold in.
+            int[] expected = { 56 };
+            Runnable seedGold = () -> {
+                expected[0] += 8 - ((Container) backshop.getBlockEntity(machinePos)).getItem(0).getCount();
+                put(backshop, machinePos, 0, new ItemStack(Items.GOLD_INGOT, 8));
+            };
+            Runnable goldSurfaced = () -> {
+                if (inContainer(level, targetPos, Items.GOLD_INGOT) < 8) {
+                    throw new GameTestAssertException("the gold written into the bay chest's slot 0"
+                        + " has not reached the world chest");
+                }
+            };
+
+            helper.startSequence()
+                .thenExecute(seedGold)
+                .thenWaitUntil(goldSurfaced)
+                .thenExecute(() -> helper.assertValueEqual(census.getAsInt(), expected[0],
+                    "cobblestone and gold across the loop before the break"))
+                .thenExecute(() -> {
+                    // Mined, as a player mines it, and put back from a fresh item: the sleeping
+                    // network of this player's is what setPlacedBy wakes.
+                    player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.DIAMOND_PICKAXE));
+                    player.gameMode.destroyBlock(workbayPos);
+                    helper.assertTrue(level.getBlockState(workbayPos).isAir(),
+                        "the Workbay is still standing after destroyBlock");
+                })
+                .thenIdle(5)
+                .thenExecute(() -> {
+                    WorkbayBlockEntity again = placeWorkbay(helper, workbayPos, player);
+                    helper.assertValueEqual(again.record().map(WorkbayRecord::id).orElse(null),
+                        record.id(), "the network the re-placed Workbay woke");
+                    seedGold.run();
+                })
+                .thenWaitUntil(goldSurfaced)
+                .thenIdle(40)
+                .thenExecute(() -> helper.assertValueEqual(census.getAsInt(), expected[0],
+                    "cobblestone and gold across the loop after the break and re-place"))
+                .thenSucceed();
+        });
+    }
+
+    /**
      * The energy half, end to end, with a real Mekanism machine at both ends: a charged Basic
      * Energy Cube standing in the world, a link pulling from it, and an empty Basic Energy Cube
      * racked in a bay. <b>Nothing had ever pushed FE through a link into a hosted machine</b> — the
