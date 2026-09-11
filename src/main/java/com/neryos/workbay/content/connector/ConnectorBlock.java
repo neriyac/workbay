@@ -99,11 +99,33 @@ public class ConnectorBlock extends BaseEntityBlock {
         return SHAPES[state.getValue(FACING).ordinal()];
     }
 
-    /** Facing the block that was clicked, so the Connector ends up stuck to it. */
+    /**
+     * Facing the block that was clicked, so the Connector ends up stuck to it -- and null, which
+     * is no placement, when the placer may not reach that block. A Connector is a hopper across a
+     * claim border otherwise: the block it goes on is checked by the game, the block it points at
+     * was checked by nobody. What is asked is what a claim mod answers: {@code mayInteract} and a
+     * posted {@code RightClickBlock} on the target (night audit 1A, question 6).
+     */
     @Nullable
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext context) {
-        return defaultBlockState().setValue(FACING, context.getClickedFace().getOpposite());
+        BlockState state = defaultBlockState().setValue(FACING, context.getClickedFace().getOpposite());
+        Player player = context.getPlayer();
+        if (player != null) {
+            BlockPos target = target(state, context.getClickedPos());
+            if (!context.getLevel().mayInteract(player, target)) {
+                return null;
+            }
+            var asked = net.neoforged.neoforge.common.CommonHooks.onRightClickBlock(player,
+                context.getHand(), target, new net.minecraft.world.phys.BlockHitResult(
+                    net.minecraft.world.phys.Vec3.atCenterOf(target),
+                    state.getValue(FACING).getOpposite(), target, false));
+            if (asked.isCanceled()
+                || asked.getUseBlock() == net.neoforged.neoforge.common.util.TriState.FALSE) {
+                return null;
+            }
+        }
+        return state;
     }
 
     /** Nothing to link to means nothing to be. Falls off if the target is mined out from under it. */

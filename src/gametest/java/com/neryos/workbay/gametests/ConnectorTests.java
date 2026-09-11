@@ -569,4 +569,64 @@ public class ConnectorTests {
             helper.succeed();
         });
     }
+
+    /**
+     * Night audit 1A, question 6. Nothing asked whether the placer may reach the block the
+     * Connector was going onto -- the hopper-across-a-claim-border class. Placement now posts a
+     * {@code RightClickBlock} for the target, which is what claim mods cancel, and refuses on a
+     * cancel or a {@code useBlock} of FALSE.
+     */
+    @GameTest
+    @TestHolder(description = "A Connector cannot be placed against a block the placer may not right-click.")
+    public static void aConnectorRefusesATargetTheClaimForbids(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            WorkbayBlockEntity workbay = placeWorkbay(helper, helper.absolutePos(new BlockPos(0, 1, 0)), player);
+            BlockPos chest = helper.absolutePos(new BlockPos(2, 1, 2));
+            BlockPos plate = chest.above();
+            level.setBlock(chest, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+
+            // A claim mod, in one line: nobody may right-click the chest.
+            java.util.function.Consumer<net.neoforged.neoforge.event.entity.player.PlayerInteractEvent.RightClickBlock> claim =
+                event -> {
+                    if (event.getPos().equals(chest)) {
+                        event.setCanceled(true);
+                    }
+                };
+            net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(claim);
+            try {
+                placeByHand(level, player, paired(level, workbay), chest, Direction.UP);
+                helper.assertTrue(level.getBlockState(plate).isAir(),
+                    "a Connector went onto a block the placer may not right-click");
+                helper.assertTrue(workbay.connectors().isEmpty(),
+                    "a refused Connector was still registered on the network");
+            } finally {
+                net.neoforged.neoforge.common.NeoForge.EVENT_BUS.unregister(claim);
+            }
+
+            // Positive control: with the claim gone, the same gesture places and registers.
+            placeByHand(level, player, paired(level, workbay), chest, Direction.UP);
+            helper.assertTrue(level.getBlockState(plate).is(WBBlocks.CONNECTOR.get()),
+                "the Connector would not go on the chest once nothing forbade it");
+            helper.assertValueEqual(workbay.connectors().size(), 1, "Connectors on the network");
+            helper.succeed();
+        });
+    }
+
+    /** The item, used on a face of a block, exactly as a sneaking player's crosshair reports it. */
+    private static void placeByHand(ServerLevel level, GameTestPlayer player, ItemStack held,
+        BlockPos box, Direction face) {
+        player.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, held);
+        player.setShiftKeyDown(true);
+        held.useOn(new net.minecraft.world.item.context.UseOnContext(player,
+            net.minecraft.world.InteractionHand.MAIN_HAND,
+            new net.minecraft.world.phys.BlockHitResult(
+                net.minecraft.world.phys.Vec3.atCenterOf(box)
+                    .add(face.getStepX() * 0.5, face.getStepY() * 0.5, face.getStepZ() * 0.5),
+                face, box, false)));
+        player.setShiftKeyDown(false);
+    }
 }
