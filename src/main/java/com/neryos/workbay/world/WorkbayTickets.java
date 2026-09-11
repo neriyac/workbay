@@ -138,6 +138,12 @@ public final class WorkbayTickets {
         }
     }
 
+    /** How many tickets this mod holds in a level right now; what the bench reports as forced. */
+    public static int held(ServerLevel level) {
+        Set<Hold> here = HELD.get(level.dimension());
+        return here == null ? 0 : here.size();
+    }
+
     /**
      * Loads the chunk and registers the ticket for it, in that order — the sync load first so the
      * caller can touch the chunk on the same tick, then the ticket so it stays.

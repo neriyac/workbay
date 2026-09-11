@@ -12,6 +12,7 @@ import com.neryos.workbay.world.BayHosting;
 import com.neryos.workbay.world.RoomRegistry;
 import com.neryos.workbay.world.WorkbayDimensions;
 import com.neryos.workbay.world.WorkbayRecord;
+import com.neryos.workbay.world.WorkbayTickets;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
@@ -299,6 +300,126 @@ public class PerfBench {
         });
     }
 
+    /**
+     * The claim SPEC.md §0 makes and nothing measured: a network with no block costs the server
+     * nothing. Thirty-two networks, each a racked furnace and two switched-on links, each ticked
+     * once so it has mirrored its column, then every block broken. On minus off should be noise,
+     * and the ticket count written beside it should come back to where it started.
+     */
+    @GameTest(timeoutTicks = 80_000, batch = "perfSleeping")
+    @TestHolder(description = "PERF: thirty-two networks whose Workbay block was broken.")
+    public static void thirtyTwoSleepingNetworks(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(18, 4, 18));
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            if (skip(helper)) {
+                return;
+            }
+            ServerLevel level = helper.getLevel();
+            profile(helper, "sleeping", () -> {
+                GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+                String before = tickets(level);
+                List<WorkbayBlockEntity> units = new ArrayList<>();
+                for (int i = 0; i < 32; i++) {
+                    BlockPos at = helper.absolutePos(new BlockPos(1 + (i / 8) * 4, 1, 1 + (i % 8) * 2));
+                    units.add(unit(helper, player, at, 2, Blocks.FURNACE));
+                }
+                // One tick each by hand, so every one has mirrored its column and holds a ticket
+                // the break then has to let go of. Built and broken on the same tick they would
+                // never have held one, and "released" would be measuring nothing.
+                units.forEach(w -> WorkbayBlockEntity.serverTick(level, w.getBlockPos(),
+                    level.getBlockState(w.getBlockPos()), w));
+                String awake = tickets(level);
+                units.forEach(w -> level.destroyBlock(w.getBlockPos(), false));
+                note("sleeping.on", "tickets before " + before + "\n# tickets awake " + awake
+                    + "\n# tickets asleep " + tickets(level));
+            }, () -> { }, () -> 0)
+                .thenSucceed();
+        });
+    }
+
+    /**
+     * A placed Workbay with nothing to do: two cold furnaces racked, no links. What a block costs
+     * for standing there -- its serverTick, the mirroring check, and a column chunk kept ticking
+     * with two furnaces in it.
+     */
+    @GameTest(timeoutTicks = 80_000, batch = "perfIdle")
+    @TestHolder(description = "PERF: sixteen placed Workbays with two cold furnaces and no links.")
+    public static void sixteenIdleWorkbays(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(4, 4, 34));
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            if (skip(helper)) {
+                return;
+            }
+            ServerLevel level = helper.getLevel();
+            profile(helper, "idle", () -> {
+                GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+                ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+                String before = tickets(level);
+                for (int i = 0; i < 16; i++) {
+                    WorkbayBlockEntity workbay = bareWorkbay(helper, player,
+                        helper.absolutePos(new BlockPos(1, 1, 1 + i * 2)));
+                    WorkbayRecord record = workbay.record().orElseThrow();
+                    for (int bay = 0; bay < 2; bay++) {
+                        BayHosting.rack(backshop, record.bayColumn(), bay,
+                            new ItemStack(Blocks.FURNACE), player, Direction.NORTH);
+                    }
+                }
+                note("idle.on", "tickets before " + before);
+            }, () -> { }, () -> 0)
+                .thenExecute(() -> note("idle.on", "tickets after " + tickets(level)))
+                .thenSucceed();
+        });
+    }
+
+    /**
+     * One network at {@link WorkbayBlockEntity#MAX_LINKS}: eight sources into each of eight bays.
+     * Rate 4 rather than 8 so a bay's barrel is not full before the window ends, at the same
+     * speed as the eight-link scenario -- so the slope against it is per link turn, and the
+     * per-item figure divides out the halved rate.
+     */
+    @GameTest(timeoutTicks = 80_000, batch = "perfCap")
+    @TestHolder(description = "PERF: one network with sixty-four busy links, the cap.")
+    public static void sixtyFourLinksOneNetwork(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(13, 4, 10));
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            if (skip(helper)) {
+                return;
+            }
+            ServerLevel level = helper.getLevel();
+            List<WorkbayBlockEntity> units = new ArrayList<>();
+            List<BlockPos> sources = new ArrayList<>();
+            profile(helper, "sixty-four-links", () -> {
+                GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+                BlockPos origin = helper.absolutePos(new BlockPos(1, 1, 1));
+                WorkbayBlockEntity workbay = bareWorkbay(helper, player, origin);
+                WorkbayRecord record = workbay.record().orElseThrow();
+                ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+                for (int bay = 0; bay < LINKS; bay++) {
+                    BayHosting.rack(backshop, record.bayColumn(), bay, new ItemStack(Blocks.BARREL),
+                        player, Direction.NORTH);
+                    for (int k = 0; k < WorkbayBlockEntity.MAX_LINKS / LINKS; k++) {
+                        BlockPos source = origin.offset(2 + bay, 0, k);
+                        level.setBlock(source, Blocks.BARREL.defaultBlockState(), Block.UPDATE_ALL);
+                        workbay.addBus(connect(helper, workbay, source.above(), player)
+                            .withEnabled(true).withBay(bay).withMode(BusConfig.Mode.EXTRACT)
+                            .withRate(4).withSpeed(10));
+                        sources.add(source);
+                    }
+                }
+                units.add(workbay);
+                note("sixty-four-links.on", "links " + workbay.buses().size());
+            }, () -> {
+                ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+                WorkbayRecord record = units.get(0).record().orElseThrow();
+                for (int bay = 0; bay < LINKS; bay++) {
+                    empty(backshop, BayGeometry.machinePos(record.bayColumn(), bay));
+                }
+                sources.forEach(source -> fill(level, source, 8));
+            }, () -> delivered(helper, units))
+                .thenSucceed();
+        });
+    }
+
     /** One or many identical Workbay units, each with eight bays and eight busy links. */
     private static void workbays(ExtendedGameTestHelper helper, String label, int count) {
         if (skip(helper)) {
@@ -409,14 +530,20 @@ public class PerfBench {
      */
     private static WorkbayBlockEntity unit(ExtendedGameTestHelper helper, GameTestPlayer player,
         BlockPos origin) {
+        return unit(helper, player, origin, LINKS, Blocks.BARREL);
+    }
+
+    /** The same, {@code bays} wide, with {@code first} racked in bay 0 and barrels in the rest. */
+    private static WorkbayBlockEntity unit(ExtendedGameTestHelper helper, GameTestPlayer player,
+        BlockPos origin, int bays, Block first) {
         ServerLevel level = helper.getLevel();
         WorkbayBlockEntity workbay = bareWorkbay(helper, player, origin);
         WorkbayRecord record = workbay.record().orElseThrow();
         ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
 
-        for (int bay = 0; bay < LINKS; bay++) {
-            BayHosting.rack(backshop, record.bayColumn(), bay, new ItemStack(Blocks.BARREL),
-                player, Direction.NORTH);
+        for (int bay = 0; bay < bays; bay++) {
+            BayHosting.rack(backshop, record.bayColumn(), bay,
+                new ItemStack(bay == 0 ? first : Blocks.BARREL), player, Direction.NORTH);
             BlockPos source = origin.offset(2 + bay, 0, 0);
             level.setBlock(source, Blocks.BARREL.defaultBlockState(), Block.UPDATE_ALL);
             workbay.addBus(connect(helper, workbay, source.above(), player)
@@ -484,6 +611,13 @@ public class PerfBench {
                 fill(level, workbay.getBlockPos().offset(2 + bay, 0, 0), 8);
             }
         }
+    }
+
+    /** Tickets this mod holds, overworld and Backshop, for the report to read beside a delta. */
+    private static String tickets(ServerLevel level) {
+        ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+        return "overworld " + WorkbayTickets.held(level) + " backshop "
+            + (backshop == null ? 0 : WorkbayTickets.held(backshop));
     }
 
     private static void fill(ServerLevel level, BlockPos pos, int stacks) {
