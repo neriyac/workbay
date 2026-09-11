@@ -840,7 +840,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
         var standing = com.neryos.workbay.world.RoomBuilder.firstThingInside(backshop, room);
         if (standing.isPresent()) {
             WorkbaySounds.refuse(serverPlayer, com.neryos.workbay.WorkbayLang.message(
-                "room_not_empty", standing.get().getBlock().getName()));
+                "room_not_empty", standing.get()));
             return;
         }
         // Its ticket first: a room that is no longer built must not be holding chunks, and

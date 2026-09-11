@@ -135,6 +135,64 @@ public class RoomTests {
         });
     }
 
+    /**
+     * Night 2026-09-11, 1B #10a. The emptiness check scanned blocks; an item on the floor, an item
+     * frame, a chest minecart are not blocks, so the room was handed back with them in it and
+     * {@code demolish} took the floor out from under them -- the Backshop's floor is the bottom
+     * of the world. Same fixture as above with an item entity in place of the chest.
+     */
+    @GameTest
+    @TestHolder(description = "A room with an item lying on its floor is not handed back, so the item is not dropped into the void.")
+    public static void aRoomWithALooseItemInItIsNotHandedBack(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            Site site = site(helper, 1);
+            ServerLevel backshop = site.backshop();
+            helper.assertTrue(RoomVisit.enter(site.player(), site.record(), 0),
+                "opening the room failed");
+            RoomVisit.leave(site.player());
+            RoomRecord room = room(helper, site);
+            helper.assertTrue(room.built(), "the room was not built by entering it");
+
+            BlockPos inside = RoomGeometry.origin(room.region()).offset(2, 1, 2);
+            // Nobody is in the room, so its chunk would unload and an entity in an unloaded chunk
+            // is invisible to getEntities -- the assertion's and the mod's alike.
+            net.minecraft.world.level.ChunkPos chunk = new net.minecraft.world.level.ChunkPos(inside);
+            backshop.setChunkForced(chunk.x, chunk.z, true);
+            net.minecraft.world.entity.item.ItemEntity dropped =
+                new net.minecraft.world.entity.item.ItemEntity(backshop, inside.getX() + 0.5,
+                    inside.getY() + 0.1, inside.getZ() + 0.5, new ItemStack(Items.IRON_INGOT, 64));
+            backshop.addFreshEntity(dropped);
+
+            WorkbayBlockEntity workbay =
+                (WorkbayBlockEntity) helper.getLevel().getBlockEntity(site.workbayPos());
+            com.neryos.workbay.menu.WorkbayMenu menu = new com.neryos.workbay.menu.WorkbayMenu(1,
+                site.player().getInventory(), workbay,
+                com.neryos.workbay.menu.WorkbayMenu.build(workbay, site.player(), 0));
+            menu.act(com.neryos.workbay.menu.WorkbayAction.REMOVE_ROOM, 0, java.util.Optional.empty());
+
+            helper.startSequence()
+                .thenIdle(60)
+                .thenExecute(() -> {
+                    int ingots = 0;
+                    for (net.minecraft.world.entity.item.ItemEntity entity : backshop.getEntitiesOfClass(
+                        net.minecraft.world.entity.item.ItemEntity.class,
+                        RoomGeometry.interiorBox(room.region(), 1).inflate(1, 64, 1))) {
+                        if (entity.getItem().is(Items.IRON_INGOT)) {
+                            ingots += entity.getItem().getCount();
+                        }
+                    }
+                    helper.assertValueEqual(ingots, 64,
+                        "iron ingots still lying in the room after Remove Room was pressed");
+                    helper.assertTrue(room(helper, site).built(),
+                        "a room with an item on its floor was handed back");
+                    backshop.setChunkForced(chunk.x, chunk.z, false);
+                })
+                .thenSucceed();
+        });
+    }
+
     @GameTest
     @TestHolder(description = "A player enters a room, stands on its floor, and is still in it ticks later.")
     public static void aRoomIsAPlaceAPlayerCanStandIn(final DynamicTest test) {

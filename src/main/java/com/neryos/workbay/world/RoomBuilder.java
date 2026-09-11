@@ -234,10 +234,13 @@ public final class RoomBuilder {
      * not count -- and stops at the first block it finds, so an empty room costs a scan and a room
      * with a chest by the door costs almost nothing.
      *
-     * @return the block standing in the room, or empty for a room holding nothing but air
+     * <p>Entities too: an item on the floor, an item frame, a chest minecart are not blocks, and
+     * the floor {@link #demolish} takes away is the bottom of the world (night 2026-09-11, 1B #10a).
+     *
+     * @return the name of the first thing found in the room, or empty for one holding nothing
      */
-    public static java.util.Optional<BlockState> firstThingInside(ServerLevel backshop,
-        RoomRecord room) {
+    public static java.util.Optional<net.minecraft.network.chat.Component> firstThingInside(
+        ServerLevel backshop, RoomRecord room) {
         int inside = RoomGeometry.interior(room.builtTier());
         int high = RoomGeometry.height(room.builtTier());
         BlockPos low = RoomGeometry.origin(room.region()).offset(1, 1, 1);
@@ -248,12 +251,14 @@ public final class RoomBuilder {
                     at.set(low.getX() + x, low.getY() + y, low.getZ() + z);
                     BlockState state = backshop.getBlockState(at);
                     if (!state.isAir() && !isShell(state)) {
-                        return java.util.Optional.of(state);
+                        return java.util.Optional.of(state.getBlock().getName());
                     }
                 }
             }
         }
-        return java.util.Optional.empty();
+        return backshop.getEntities((net.minecraft.world.entity.Entity) null,
+                RoomGeometry.interiorBox(room.region(), room.builtTier()))
+            .stream().findFirst().map(net.minecraft.world.entity.Entity::getName);
     }
 
     /**
