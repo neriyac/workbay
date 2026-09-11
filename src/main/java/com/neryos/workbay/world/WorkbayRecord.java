@@ -120,6 +120,12 @@ public record WorkbayRecord(
         return connectors.stream().filter(c -> c.pos().equals(pos)).findFirst();
     }
 
+    /** The same record with the Connector at {@code pos} renamed; unchanged if none stands there. */
+    public WorkbayRecord withConnectorRenamed(GlobalPos pos, String name) {
+        return withConnectors(connectors.stream()
+            .map(c -> c.pos().equals(pos) ? c.withName(name) : c).toList());
+    }
+
     public WorkbayRecord withConnectors(List<Connector> newConnectors) {
         return new WorkbayRecord(id, code, name, owner, ownerName, locked, bayColumn, upgrades,
             lastKnownPos, bays, rooms, buses, deployedCount, List.copyOf(newConnectors));

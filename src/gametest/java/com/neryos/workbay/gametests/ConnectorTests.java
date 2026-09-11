@@ -629,4 +629,44 @@ public class ConnectorTests {
                 face, box, false)));
         player.setShiftKeyDown(false);
     }
+    /**
+     * Night 2026-09-11, 1A #14. The rename used to go through the Workbay's block entity, which
+     * meant loading the Workbay's chunk synchronously on the server thread for every Save. The
+     * Connector's pairing already names the network, and the registry knows the Connector; so the
+     * rename works with no Workbay block standing at all -- which is also the proof it loads no
+     * chunk.
+     */
+    @GameTest
+    @TestHolder(description = "Renaming a Connector goes through the registry, not the Workbay's block.")
+    public static void renamingAConnectorNeedsNoWorkbayBlock(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(7, 5, 7));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos chestPos = helper.absolutePos(new BlockPos(4, 1, 4));
+            BlockPos connectorPos = chestPos.above();
+            level.setBlock(chestPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
+            java.util.UUID network = workbay.workbayId().orElseThrow();
+            place(level, connectorPos, Direction.DOWN, paired(level, workbay), player);
+            GlobalPos here = GlobalPos.of(level.dimension(), connectorPos);
+
+            // The Workbay is gone (the network sleeps, the record and its Connectors stay): the
+            // block-entity path has nothing to find, the registry path does.
+            level.removeBlock(workbayPos, false);
+            helper.assertFalse(level.getBlockEntity(workbayPos) instanceof WorkbayBlockEntity,
+                "the Workbay block is still standing, so this proves nothing about the chunk");
+
+            new com.neryos.workbay.menu.ConnectorMenu(1,
+                new com.neryos.workbay.menu.ConnectorMenu.View(connectorPos, "", "", 0, true))
+                .act(com.neryos.workbay.menu.WorkbayAction.SET_CONNECTOR_NAME, "Ore feed", player);
+
+            helper.assertValueEqual(RoomRegistry.get(level.getServer()).byId(network).orElseThrow()
+                    .connectorAt(here).map(WorkbayRecord.Connector::name).orElse("<gone>"),
+                "Ore feed", "the Connector's name on the record after a rename with no Workbay block");
+            helper.succeed();
+        });
+    }
 }

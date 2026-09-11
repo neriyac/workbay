@@ -410,9 +410,7 @@ public class WorkbayBlockEntity extends BlockEntity {
      * its own to disagree with. OPEN_ISSUES #97.
      */
     public void renameConnector(GlobalPos pos, String name) {
-        editRecord(record -> record.connectorAt(pos).map(connector -> record.withConnectors(
-            record.connectors().stream()
-                .map(c -> c.pos().equals(pos) ? c.withName(name) : c).toList()))
+        editRecord(record -> record.connectorAt(pos).map(c -> record.withConnectorRenamed(pos, name))
             .orElse(null));
     }
 

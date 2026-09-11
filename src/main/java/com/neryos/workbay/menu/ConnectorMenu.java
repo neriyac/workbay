@@ -104,8 +104,18 @@ public class ConnectorMenu extends AbstractContainerMenu {
             return;
         }
         ServerLevel level = player.serverLevel();
-        found(level, view.pos()).ifPresent(found -> found.workbay()
-            .renameConnector(GlobalPos.of(level.dimension(), view.pos()), text.strip()));
+        // Through the registry, not the Workbay's block entity: the block may stand in an unloaded
+        // chunk, and loading it synchronously for a rename is a disk read on the server thread per
+        // Save (night 2026-09-11, 1A #14). The pairing names the network; the record knows the
+        // Connector.
+        if (level.getBlockEntity(view.pos()) instanceof ConnectorBlockEntity connector) {
+            GlobalPos here = GlobalPos.of(level.dimension(), view.pos());
+            com.neryos.workbay.world.RoomRegistry registry =
+                com.neryos.workbay.world.RoomRegistry.get(player.server);
+            connector.pairing().flatMap(pairing -> registry.byId(pairing.workbayId()))
+                .filter(record -> record.connectorAt(here).isPresent())
+                .ifPresent(record -> registry.put(record.withConnectorRenamed(here, text.strip())));
+        }
         player.closeContainer();
     }
 
