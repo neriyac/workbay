@@ -3,14 +3,24 @@ package com.neryos.workbay.world;
 import com.mojang.logging.LogUtils;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.storage.DimensionDataStorage;
+import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.level.saveddata.SavedData;
 import org.slf4j.Logger;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -76,6 +86,17 @@ public class RoomRegistry extends SavedData {
     private final Map<UUID, Map<UUID, com.neryos.workbay.bus.BusRunner.BusStatus>>
         busStatuses = new HashMap<>();
 
+    /**
+     * What this build could not read, carried through {@link #save} untouched so a later build
+     * (or a human) still can. Elements of {@code Workbays} / {@code Rooms} whose codec failed, and
+     * — {@link #foreign} — the entire file when its {@link #DATA_VERSION} is not ours. Throwing
+     * or dropping here is not refusal: vanilla swallows the throw and the next save makes the
+     * drop permanent (night 2026-09-11, 1B #11a/#11b, 1C #5).
+     */
+    private final List<Tag> unparsedWorkbays = new ArrayList<>();
+    private final List<Tag> unparsedRooms = new ArrayList<>();
+    private CompoundTag foreign;
+
     private int nextBayColumn = 0;
 
     /**
@@ -88,7 +109,36 @@ public class RoomRegistry extends SavedData {
         new SavedData.Factory<>(RoomRegistry::new, RoomRegistry::load, null);
 
     public static RoomRegistry get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, FILE);
+        return read(server.overworld().getDataStorage(),
+            server.getWorldPath(LevelResource.ROOT).resolve("data"), FILE);
+    }
+
+    /**
+     * {@code dataFolder} is the storage's own (private) folder; the tests pass a probe name.
+     *
+     * <p>Vanilla's {@code readSavedData} catches every exception a file raises — truncated,
+     * corrupt, not NBT at all — logs it and hands out {@code null}, so {@code computeIfAbsent}
+     * mints a fresh empty registry and the first {@code put} writes it over the only copy of every
+     * network (night 2026-09-11, 1C #5a). {@link #load} itself no longer throws, so this is the
+     * one path left that can replace a file: copy it aside first, once.
+     */
+    public static RoomRegistry read(DimensionDataStorage storage, Path dataFolder, String name) {
+        if (storage.get(FACTORY, name) == null) {
+            Path file = dataFolder.resolve(name + ".dat");
+            if (Files.exists(file)) {
+                Path copy = dataFolder.resolve(name + ".dat.corrupt-" + DateTimeFormatter
+                    .ofPattern("yyyyMMdd-HHmmss").format(LocalDateTime.now()));
+                try {
+                    Files.copy(file, copy, StandardCopyOption.REPLACE_EXISTING);
+                    LOG.error("{} could not be read (see the error above). A copy is kept at {}; "
+                        + "the registry starts empty and every network in it is unreachable "
+                        + "until the copy is restored", file, copy);
+                } catch (IOException e) {
+                    LOG.error("{} could not be read and could not be copied aside either", file, e);
+                }
+            }
+        }
+        return storage.computeIfAbsent(FACTORY, name);
     }
 
     /**
@@ -303,52 +353,70 @@ public class RoomRegistry extends SavedData {
 
     @Override
     public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
+        if (foreign != null) {
+            tag.merge(foreign);
+            return tag;
+        }
         tag.putInt(VERSION_KEY, DATA_VERSION);
         tag.putInt("NextBayColumn", nextBayColumn);
         tag.putInt("NextRoomRegion", nextRoomRegion);
-        tag.put("Rooms", RoomRecord.CODEC.listOf()
+        ListTag roomList = (ListTag) RoomRecord.CODEC.listOf()
             .encodeStart(NbtOps.INSTANCE, List.copyOf(rooms.values()))
-            .getOrThrow(e -> new IllegalStateException("could not write the room registry: " + e)));
-        tag.put("Workbays", WorkbayRecord.CODEC.listOf()
+            .getOrThrow(e -> new IllegalStateException("could not write the room registry: " + e));
+        roomList.addAll(unparsedRooms);
+        tag.put("Rooms", roomList);
+        ListTag list = (ListTag) WorkbayRecord.CODEC.listOf()
             .encodeStart(NbtOps.INSTANCE, List.copyOf(byId.values()))
-            .getOrThrow(e -> new IllegalStateException("could not write the Workbay registry: " + e)));
+            .getOrThrow(e -> new IllegalStateException("could not write the Workbay registry: " + e));
+        list.addAll(unparsedWorkbays);
+        tag.put("Workbays", list);
         return tag;
     }
 
     public static RoomRegistry load(CompoundTag tag, HolderLookup.Provider registries) {
         RoomRegistry registry = new RoomRegistry();
         int version = tag.getInt(VERSION_KEY);
-        // There is no DataFixer to fall back on, so an unknown version has to be loud and has to
-        // refuse rather than silently drop somebody's factory.
+        // There is no DataFixer to fall back on. Never throw here: vanilla catches it, hands out
+        // an empty registry, and the next save writes that over the file.
         if (version != DATA_VERSION) {
-            throw new IllegalStateException("workbay_registry is version " + version + ", this build "
-                + "reads version " + DATA_VERSION + ". Refusing to load rather than lose data.");
+            LOG.error("workbay_registry is version {}, this build reads version {}. Update Workbay. "
+                + "The file is kept as it is and nothing in it is reachable until then.",
+                version, DATA_VERSION);
+            registry.foreign = tag.copy();
+            return registry;
         }
         registry.nextBayColumn = tag.getInt("NextBayColumn");
         registry.nextRoomRegion = tag.getInt("NextRoomRegion");
 
-        Tag roomList = tag.get("Rooms");
-        if (roomList != null) {
-            RoomRecord.CODEC.listOf()
-                .parse(NbtOps.INSTANCE, roomList)
-                .resultOrPartial(e -> LOG.error("dropped a malformed room record: {}", e))
-                .orElse(List.of())
-                .forEach(room -> registry.rooms.put(room.id(), room));
+        for (Tag element : tag.getList("Rooms", Tag.TAG_COMPOUND)) {
+            RoomRecord.CODEC.parse(NbtOps.INSTANCE, element)
+                .resultOrPartial(e -> {
+                    LOG.error("could not read room record {}: {} (kept as it is)", idOf(element), e);
+                    registry.unparsedRooms.add(element);
+                })
+                .ifPresent(room -> registry.rooms.put(room.id(), room));
         }
-
-        Tag list = tag.get("Workbays");
-        if (list != null) {
-            List<WorkbayRecord> records = WorkbayRecord.CODEC.listOf()
-                .parse(NbtOps.INSTANCE, list)
-                .resultOrPartial(e -> LOG.error("dropped a malformed Workbay record: {}", e))
-                .orElse(List.of());
-            for (WorkbayRecord record : records) {
-                registry.byId.put(record.id(), record);
-                registry.byCode.put(normalise(record.code()), record.id());
-            }
+        for (Tag element : tag.getList("Workbays", Tag.TAG_COMPOUND)) {
+            WorkbayRecord.CODEC.parse(NbtOps.INSTANCE, element)
+                .resultOrPartial(e -> {
+                    LOG.error("could not read Workbay record {}: {} (kept as it is)",
+                        idOf(element), e);
+                    registry.unparsedWorkbays.add(element);
+                })
+                .ifPresent(record -> {
+                    registry.byId.put(record.id(), record);
+                    registry.byCode.put(normalise(record.code()), record.id());
+                });
         }
         registry.nameTheUnnamed();
         return registry;
+    }
+
+    private static String idOf(Tag element) {
+        if (element instanceof CompoundTag c) {
+            return c.contains("Code") ? c.getString("Code") : c.get("Id") + "";
+        }
+        return element.toString();
     }
 
     /** Exposed for the gametests: a round trip without touching the level's data storage. */

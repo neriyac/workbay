@@ -8,13 +8,20 @@ import net.minecraft.core.GlobalPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtAccounter;
+import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.Tag;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.level.storage.DimensionDataStorage;
 import net.neoforged.testframework.DynamicTest;
 import net.neoforged.testframework.annotation.ForEachTest;
 import net.neoforged.testframework.annotation.TestHolder;
 import net.neoforged.testframework.gametest.ExtendedGameTestHelper;
 import net.neoforged.testframework.gametest.StructureTemplateBuilder;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -195,11 +202,13 @@ public class RoomRegistryTests {
 
     /**
      * SPEC.md §14: DataVersion is the entire migration mechanism, because NeoForge has no mod
-     * DataFixers. A registry written by a newer build must refuse to load rather than quietly
-     * discard the fields it does not understand.
+     * DataFixers. A registry written by a newer build used to throw -- and vanilla's
+     * {@code DimensionDataStorage#readSavedData} swallowed the throw, handed out an empty registry,
+     * and the next save wrote it over the file (night 2026-09-11, 1B #11b, 1C #5). Now it never
+     * throws: the raw file rides through {@code save} untouched and the memory copy is empty.
      */
     @GameTest
-    @TestHolder(description = "A registry from a newer version refuses to load instead of losing data.")
+    @TestHolder(description = "A registry from a newer version is carried through a load and save untouched.")
     public static void refusesAnUnknownDataVersion(final DynamicTest test) {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(1, 1, 1));
 
@@ -213,13 +222,146 @@ public class RoomRegistryTests {
                 "DataVersion written");
 
             tag.putInt(RoomRegistry.VERSION_KEY, RoomRegistry.DATA_VERSION + 1);
+            tag.putString("FieldFromTheFuture", "kept");
+            RoomRegistry loaded = RoomRegistry.load(tag, registries);
+            helper.assertValueEqual(loaded.all().size(), 0,
+                "records a build that cannot read the file pretends to understand");
+            CompoundTag after = loaded.save(new CompoundTag(), registries);
+            helper.assertValueEqual(after, tag,
+                "what a newer-version registry file reads after this build saved it");
+            helper.succeed();
+        });
+    }
+
+    private static Path dataFile(ExtendedGameTestHelper helper, String name) {
+        // DimensionDataStorage#getDataFile is private; the overworld's storage is built on
+        // <world root>/data, which is what this resolves.
+        return helper.getLevel().getServer()
+            .getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT)
+            .resolve("data").resolve(name + ".dat");
+    }
+
+    private static CompoundTag wrapped(CompoundTag data) {
+        CompoundTag file = new CompoundTag();
+        file.put("data", data);
+        file.putInt("DataVersion", net.minecraft.SharedConstants.getCurrentVersion()
+            .getDataVersion().getVersion());
+        return file;
+    }
+
+    /**
+     * Night 2026-09-11, 1B #11b: the server's own path, not {@code load} by hand. Vanilla's
+     * {@code readSavedData} catches whatever {@code load} throws and hands out an empty registry;
+     * this proves the file survives one save through it.
+     */
+    @GameTest
+    @TestHolder(description = "A registry file from a newer version is not replaced by an empty one on the next save.")
+    public static void aNewerRegistryFileIsNotOverwrittenByAnEmptyOne(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(1, 1, 1));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            HolderLookup.Provider registries = helper.getLevel().registryAccess();
+            RoomRegistry before = new RoomRegistry();
+            before.create(ALICE, "Alice", RandomSource.create(3L));
+            CompoundTag data = before.save(new CompoundTag(), registries);
+            data.putInt(RoomRegistry.VERSION_KEY, RoomRegistry.DATA_VERSION + 1);
+
+            String name = "workbay_registry_probe_" + UUID.randomUUID().toString().substring(0, 8);
+            Path file = dataFile(helper, name);
             try {
-                RoomRegistry.load(tag, registries);
-                helper.fail("a registry from a newer version loaded anyway, silently dropping "
-                    + "whatever that version added");
-            } catch (IllegalStateException expected) {
-                helper.succeed();
+                Files.createDirectories(file.getParent());
+                NbtIo.writeCompressed(wrapped(data), file);
+                DimensionDataStorage storage =
+                    helper.getLevel().getServer().overworld().getDataStorage();
+                RoomRegistry loaded = storage.computeIfAbsent(RoomRegistry.FACTORY, name);
+                loaded.setDirty();
+                storage.save();
+                // NeoForge writes SavedData on the IO pool.
+                net.neoforged.neoforge.common.IOUtilities.waitUntilIOWorkerComplete();
+                CompoundTag after = NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap())
+                    .getCompound("data");
+                helper.assertValueEqual(after.getList("Workbays", Tag.TAG_COMPOUND).size(), 1,
+                    "Workbay records left in a newer-version registry file after one save");
+            } catch (IOException e) {
+                helper.fail("could not stage the probe registry file: " + e);
+            } finally {
+                try {
+                    Files.deleteIfExists(file);
+                } catch (IOException ignored) {
+                }
             }
+            helper.succeed();
+        });
+    }
+
+    /** Night 2026-09-11, 1B #11a / 1C #5c: one bad record used to be dropped, then saved away. */
+    @GameTest
+    @TestHolder(description = "One malformed record in the registry does not vanish from the file on the next save.")
+    public static void aMalformedRecordSurvivesALoadAndSave(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(1, 1, 1));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            HolderLookup.Provider registries = helper.getLevel().registryAccess();
+            RoomRegistry before = new RoomRegistry();
+            before.create(ALICE, "Alice", RandomSource.create(3L));
+            before.create(ALICE, "Alice", RandomSource.create(4L));
+            CompoundTag data = before.save(new CompoundTag(), registries);
+            // The second record loses its owner: a required field, so the codec fails on it.
+            CompoundTag broken = data.getList("Workbays", Tag.TAG_COMPOUND).getCompound(1);
+            broken.remove("Owner");
+
+            RoomRegistry loaded = RoomRegistry.load(data, registries);
+            helper.assertValueEqual(loaded.all().size(), 1, "records this build could read");
+            CompoundTag after = loaded.save(new CompoundTag(), registries);
+            helper.assertValueEqual(after.getList("Workbays", Tag.TAG_COMPOUND).size(), 2,
+                "Workbay records written back after loading a file with one malformed record");
+            helper.assertTrue(after.getList("Workbays", Tag.TAG_COMPOUND).contains(broken),
+                "the malformed record was not written back verbatim");
+            helper.succeed();
+        });
+    }
+
+    /**
+     * Night 2026-09-11, 1C #5a: a file vanilla cannot even parse is replaced by a fresh registry,
+     * and the first {@code put} overwrites it. The only copy is kept beside it before that.
+     */
+    @GameTest
+    @TestHolder(description = "A registry file that cannot be parsed is copied aside before a fresh registry can overwrite it.")
+    public static void anUnreadableRegistryFileIsCopiedAsideBeforeItIsReplaced(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(1, 1, 1));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            String name = "workbay_registry_probe_" + UUID.randomUUID().toString().substring(0, 8);
+            Path file = dataFile(helper, name);
+            try {
+                Files.createDirectories(file.getParent());
+                Files.write(file, new byte[] {1, 2, 3, 4, 5, 6, 7, 8});
+                RoomRegistry fresh = RoomRegistry.read(
+                    helper.getLevel().getServer().overworld().getDataStorage(), file.getParent(), name);
+                helper.assertTrue(fresh.all().isEmpty(), "garbage read as a registry");
+                long copies;
+                try (var siblings = Files.list(file.getParent())) {
+                    copies = siblings
+                        .filter(p -> p.getFileName().toString().startsWith(name + ".dat.corrupt-"))
+                        .peek(p -> {
+                            try {
+                                Files.delete(p);
+                            } catch (IOException ignored) {
+                            }
+                        })
+                        .count();
+                }
+                helper.assertValueEqual(copies, 1L,
+                    "copies of an unreadable registry file kept beside it");
+            } catch (IOException e) {
+                helper.fail("could not stage the probe registry file: " + e);
+            } finally {
+                try {
+                    Files.deleteIfExists(file);
+                } catch (IOException ignored) {
+                }
+            }
+            helper.succeed();
         });
     }
 
