@@ -117,18 +117,27 @@ public final class BusTransfer {
      * is for. {@code faces} is every handler the block exposes, because the roles are the block's
      * and one face on its own cannot see them: a furnace's top is one input slot and looks like a
      * chest.
+     *
+     * <p>{@code roles} remembers the answer per item for one run of the link: a chest answers "no
+     * roles" only after every slot of every face has been asked (162 calls), and without the memo
+     * that was paid for every slot probed and every stack moved, every tick - the 09-14 bench
+     * read the bus section 40% dearer than 09-11 and this was all of it.
      */
-    public static IItemHandler outputsOnly(IItemHandler face, java.util.List<IItemHandler> faces) {
+    public static IItemHandler outputsOnly(IItemHandler face,
+        java.util.function.Supplier<java.util.List<IItemHandler>> faces,
+        java.util.Map<net.minecraft.world.item.Item, Boolean> roles) {
         return new IItemHandler() {
             private boolean hasRoles(ItemStack probe) {
-                for (IItemHandler handler : faces) {
-                    for (int slot = 0; slot < handler.getSlots(); slot++) {
-                        if (!handler.isItemValid(slot, probe)) {
-                            return true;
+                return roles.computeIfAbsent(probe.getItem(), item -> {
+                    for (IItemHandler handler : faces.get()) {
+                        for (int slot = 0; slot < handler.getSlots(); slot++) {
+                            if (!handler.isItemValid(slot, probe)) {
+                                return true;
+                            }
                         }
                     }
-                }
-                return false;
+                    return false;
+                });
             }
 
             @Override

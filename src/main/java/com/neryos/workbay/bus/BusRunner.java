@@ -442,22 +442,29 @@ public class BusRunner {
         BlockPos sourcePos = insert ? machinePos : targetPos;
         ServerLevel sinkLevel = insert ? targetLevel : backshop;
         BlockPos sinkPos = insert ? targetPos : machinePos;
-        java.util.List<IItemHandler> sourceHandlers = new java.util.ArrayList<>(6);
-        for (Direction face : Direction.values()) {
-            IItemHandler handler = sourceLevel.getCapability(Capabilities.ItemHandler.BLOCK,
-                sourcePos, face);
-            if (handler != null) {
-                sourceHandlers.add(handler);
-            }
-        }
+        // Six capability lookups, and only when a stack is actually up for judgement.
+        java.util.function.Supplier<java.util.List<IItemHandler>> sourceHandlers =
+            com.google.common.base.Suppliers.memoize(() -> {
+                java.util.List<IItemHandler> handlers = new java.util.ArrayList<>(6);
+                for (Direction face : Direction.values()) {
+                    IItemHandler handler = sourceLevel.getCapability(Capabilities.ItemHandler.BLOCK,
+                        sourcePos, face);
+                    if (handler != null) {
+                        handlers.add(handler);
+                    }
+                }
+                return handlers;
+            });
         if (sinkLevel.getBlockEntity(sinkPos)
                 instanceof net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity furnace) {
             allowed = allowed.and(stack -> furnaceTakes(sinkLevel, furnace, stack));
         }
         java.util.function.Predicate<net.minecraft.world.item.ItemStack> wanted = allowed;
+        java.util.Map<net.minecraft.world.item.Item, Boolean> roles = new java.util.HashMap<>(4);
         IItemHandler bound = source.resolve(h -> hasAnything(BusTransfer.outputsOnly(h,
-            sourceHandlers), wanted), sourceFaces);
-        IItemHandler from = bound == null ? null : BusTransfer.outputsOnly(bound, sourceHandlers);
+            sourceHandlers, roles), wanted), sourceFaces);
+        IItemHandler from = bound == null ? null
+            : BusTransfer.outputsOnly(bound, sourceHandlers, roles);
         if (from == null) {
             // Nothing came out. Two very different reasons, and one message for both is how a
             // dead link spends a session looking like a resting one.

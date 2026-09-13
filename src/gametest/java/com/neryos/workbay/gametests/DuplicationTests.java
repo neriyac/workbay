@@ -38,6 +38,7 @@ import net.neoforged.testframework.gametest.GameTestPlayer;
 import net.neoforged.testframework.gametest.StructureTemplateBuilder;
 
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * The duplication audit. ROADMAP.md §2.
@@ -313,6 +314,11 @@ public class DuplicationTests {
             second.getInventory().clearContent();
             WorkbayMenu mine = menuFor(workbay, first);
             rack(mine, first, 0, new ItemStack(Blocks.FURNACE, 1));
+            // Unlocked, and asserted: a network is locked at mint, and a locked Workbay refused the
+            // second player every click, so until 09-14 this test never ran the race it names.
+            mine.act(WorkbayAction.TOGGLE_LOCK, 0, Optional.empty());
+            helper.assertTrue(workbay.record().orElseThrow().admits(second.getUUID()),
+                "the second player is refused, so the second eject is never tried");
 
             // Both screens were opened before either clicked, which is the whole point: the second
             // menu's snapshot still says the bay is full when the first eject lands.
@@ -756,6 +762,452 @@ public class DuplicationTests {
                 "charging a Basic Energy Cube stored nothing, so the fixture is now useless");
             helper.assertValueEqual(kept.stored(), inEnergy(level, honest),
                 "FE reported as stored in a Basic Energy Cube, against what it holds");
+            helper.succeed();
+        });
+    }
+
+
+    // ------------------------------------------------- rooms and two hands (phase 5, 09-14)
+
+    /** Iron ingots in every container standing inside a room, plus any lying loose on its floor. */
+    private static int inRoom(ServerLevel backshop, com.neryos.workbay.world.RoomRecord room,
+        Item item) {
+        AABB box = com.neryos.workbay.world.RoomGeometry.interiorBox(room.region(), room.tier());
+        int total = 0;
+        for (BlockPos pos : BlockPos.betweenClosed((int) box.minX, (int) box.minY, (int) box.minZ,
+            (int) box.maxX, (int) box.maxY, (int) box.maxZ)) {
+            total += inContainer(backshop, pos, item);
+        }
+        for (ItemEntity entity : backshop.getEntitiesOfClass(ItemEntity.class, box.inflate(1))) {
+            total += count(entity.getItem(), item);
+        }
+        return total;
+    }
+
+    private static ItemStack roomInHand(GameTestPlayer player) {
+        for (int slot = 0; slot < player.getInventory().getContainerSize(); slot++) {
+            ItemStack stack = player.getInventory().getItem(slot);
+            if (com.neryos.workbay.world.RoomHolding.isRoom(stack)) {
+                return stack;
+            }
+        }
+        return ItemStack.EMPTY;
+    }
+
+    /** The one place an ejected room can be: exactly one stamped room item, on one player. */
+    private static int roomItems(GameTestPlayer... players) {
+        int total = 0;
+        for (GameTestPlayer player : players) {
+            for (int slot = 0; slot < player.getInventory().getContainerSize(); slot++) {
+                if (com.neryos.workbay.world.RoomHolding.isRoom(player.getInventory().getItem(slot))) {
+                    total += player.getInventory().getItem(slot).getCount();
+                }
+            }
+        }
+        return total;
+    }
+
+    /** A chest of {@code n} iron in the room in {@code bay}, entered as {@code who} so the chunk is built. */
+    private static BlockPos chestOfIron(ExtendedGameTestHelper helper, GameTestPlayer who,
+        WorkbayRecord record, int bay, int n) {
+        helper.assertTrue(com.neryos.workbay.world.RoomVisit.enter(who, record, bay),
+            "entering the room to build in it was refused");
+        var room = com.neryos.workbay.world.RoomRegistry.get(helper.getLevel().getServer())
+            .roomInBay(record, bay).orElseThrow();
+        ServerLevel backshop = backshop(helper);
+        BlockPos chest = com.neryos.workbay.world.RoomGeometry.origin(room.region()).offset(1, 1, 1);
+        backshop.setBlock(chest, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+        put(backshop, chest, 0, new ItemStack(Items.IRON_INGOT, 64));
+        put(backshop, chest, 1, new ItemStack(Items.IRON_INGOT, 64));
+        put(backshop, chest, 2, new ItemStack(Items.IRON_INGOT, n - 128));
+        helper.assertValueEqual(inRoom(backshop, room, Items.IRON_INGOT), n, "iron built into the room");
+        com.neryos.workbay.world.RoomVisit.leave(who);
+        return chest;
+    }
+
+    /**
+     * A room with a counted chest goes from one owner's Workbay to another's and back, and the
+     * count never moves. Phase 5 case 1: {@code RoomItemTests#aRoomTravelsWithEverythingInIt}
+     * proves the move for one owner; this one counts across two networks that share nothing,
+     * and counts the old bay and the room's whole interior rather than one slot, so a copy left
+     * in the bay or a second chest minted by the move would show. The copy of the item is then
+     * refused by name and cannot open the room anywhere (SPEC §0's ticket rule).
+     */
+    @GameTest
+    @TestHolder(description = "A room with 165 counted iron moves between two owners' Workbays and back; 165 stays 165 and a copied item opens nothing.")
+    public static void aRoomMovedBetweenTwoOwnersKeepsItsCount(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(7, 3, 7));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            GameTestPlayer alice = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            GameTestPlayer bob = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            ServerLevel backshop = backshop(helper);
+            var registry = com.neryos.workbay.world.RoomRegistry.get(helper.getLevel().getServer());
+            BlockPos aPos = helper.absolutePos(new BlockPos(1, 1, 1));
+            BlockPos bPos = helper.absolutePos(new BlockPos(5, 1, 5));
+            WorkbayBlockEntity a = placeWorkbay(helper, aPos, alice);
+            WorkbayBlockEntity b = placeWorkbay(helper, bPos, bob);
+            helper.assertFalse(a.record().orElseThrow().owner().equals(b.record().orElseThrow().owner()),
+                "the two Workbays share an owner, so this proves nothing about two networks");
+            WorkbayTickets.force(backshop, a.record().orElseThrow().id(), a.record().orElseThrow().bayColumn());
+            WorkbayTickets.force(backshop, b.record().orElseThrow().id(), b.record().orElseThrow().bayColumn());
+            BlockPos aBay0 = BayGeometry.machinePos(a.record().orElseThrow().bayColumn(), 0);
+            BlockPos bBay0 = BayGeometry.machinePos(b.record().orElseThrow().bayColumn(), 0);
+            alice.getInventory().clearContent();
+            bob.getInventory().clearContent();
+
+            final int n = 165;
+            RoomTests.loadRoom(helper, a.record().orElseThrow(), 0, RoomTests.roomItem(1), alice);
+            var room = registry.roomInBay(a.record().orElseThrow(), 0).orElseThrow();
+            chestOfIron(helper, alice, a.record().orElseThrow(), 0, n);
+
+            java.util.function.IntSupplier iron = () -> inRoom(backshop, room, Items.IRON_INGOT)
+                + inContainer(backshop, aBay0, Items.IRON_INGOT) + inContainer(backshop, bBay0, Items.IRON_INGOT)
+                + onPlayer(alice, Items.IRON_INGOT) + onPlayer(bob, Items.IRON_INGOT)
+                + loose(helper, Items.IRON_INGOT);
+
+            // A ejects, hands the item to B, B racks it.
+            alice.moveTo(aPos.getX() + 0.5, aPos.getY(), aPos.getZ() + 0.5);
+            menuFor(a, alice).act(WorkbayAction.EJECT, 0, Optional.empty());
+            ItemStack item = roomInHand(alice);
+            helper.assertFalse(item.isEmpty(), "A's eject handed A no room item");
+            helper.assertValueEqual(roomItems(alice, bob), 1, "room items after A's eject");
+            helper.assertTrue(backshop.getBlockState(aBay0).isAir(), "A's bay 0 still holds a block after the eject");
+            helper.assertTrue(a.record().orElseThrow().bay(0).room().isEmpty(), "A's bay 0 still names the room");
+            helper.assertValueEqual(iron.getAsInt(), n, "iron after A's eject");
+            ItemStack copy = item.copy();
+            alice.getInventory().clearContent();
+            bob.setItemInHand(InteractionHand.MAIN_HAND, item);
+            bob.moveTo(bPos.getX() + 0.5, bPos.getY(), bPos.getZ() + 0.5);
+            menuFor(b, bob).act(WorkbayAction.RACK, 0, Optional.empty());
+            helper.assertTrue(b.record().orElseThrow().bay(0).room().map(room.id()::equals).orElse(false),
+                "B's bay 0 does not hold the room");
+            helper.assertValueEqual(roomItems(alice, bob), 0, "room items after B racked it");
+            helper.assertValueEqual(registry.holderOf(room).map(h -> h.network().id()).orElse(null),
+                b.record().orElseThrow().id(), "the room's holder after B racked it");
+            helper.assertTrue(com.neryos.workbay.world.RoomVisit.enter(bob, b.record().orElseThrow(), 0),
+                "B cannot enter the room B holds");
+            com.neryos.workbay.world.RoomVisit.leave(bob);
+            helper.assertValueEqual(iron.getAsInt(), n, "iron after B racked the room");
+
+            // The copy, same ticket: refused by name, and racking it opens nothing anywhere.
+            helper.assertTrue(com.neryos.workbay.world.RoomHolding.refusal(registry, a.record().orElseThrow(),
+                Optional.of(GlobalPos.of(helper.getLevel().dimension(), aPos)), copy).isPresent(),
+                "a copy of a held room item was not refused");
+            alice.setItemInHand(InteractionHand.MAIN_HAND, copy.copy());
+            alice.moveTo(aPos.getX() + 0.5, aPos.getY(), aPos.getZ() + 0.5);
+            menuFor(a, alice).act(WorkbayAction.RACK, 0, Optional.empty());
+            helper.assertTrue(a.record().orElseThrow().bay(0).room().isEmpty(), "the copy opened the room in A");
+            helper.assertTrue(backshop.getBlockState(aBay0).isAir(), "the copy put a block in A's bay");
+            helper.assertValueEqual(roomItems(alice, bob), 1, "the copy was taken from A's hand");
+            alice.getInventory().clearContent();
+
+            // Back to A: B ejects, A racks, still n.
+            bob.moveTo(bPos.getX() + 0.5, bPos.getY(), bPos.getZ() + 0.5);
+            menuFor(b, bob).act(WorkbayAction.EJECT, 0, Optional.empty());
+            ItemStack back = roomInHand(bob);
+            helper.assertFalse(back.isEmpty(), "B's eject handed B no room item");
+            helper.assertTrue(backshop.getBlockState(bBay0).isAir(), "B's bay 0 still holds a block");
+            bob.getInventory().clearContent();
+            alice.setItemInHand(InteractionHand.MAIN_HAND, back);
+            menuFor(a, alice).act(WorkbayAction.RACK, 0, Optional.empty());
+            helper.assertTrue(a.record().orElseThrow().bay(0).room().map(room.id()::equals).orElse(false),
+                "A's bay 0 does not hold the room again");
+            helper.assertValueEqual(roomItems(alice, bob), 0, "room items after A racked it back");
+            helper.assertTrue(b.record().orElseThrow().bay(0).room().isEmpty(), "B's bay 0 still names the room");
+            helper.assertTrue(com.neryos.workbay.world.RoomVisit.enter(alice, a.record().orElseThrow(), 0),
+                "A cannot enter the room A holds again");
+            com.neryos.workbay.world.RoomVisit.leave(alice);
+            helper.assertValueEqual(iron.getAsInt(), n, "iron after the room came back to A");
+            helper.succeed();
+        });
+    }
+
+    /**
+     * A room inside a room. Workbay A holds Room 1; a Workbay standing in Room 1 holds Room 2; a
+     * chest in Room 2 holds 190 iron. Room 1 is pulled out of A and racked into B's Workbay; Room
+     * 2 is entered from the inner Workbay and the chest still holds 190. Phase 5 case 2. The
+     * cycle (Room 1 into the inner Workbay) is {@code RoomItemTests#aCycleIsRefused}; re-asserted
+     * here in one line because the item is in hand anyway.
+     */
+    @GameTest
+    @TestHolder(description = "A room nested in a room travels with its 190 counted iron when the outer room changes Workbays.")
+    public static void aNestedRoomKeepsItsCountWhenTheOuterRoomMoves(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(7, 3, 7));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            GameTestPlayer alice = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            GameTestPlayer bob = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            ServerLevel backshop = backshop(helper);
+            var registry = com.neryos.workbay.world.RoomRegistry.get(helper.getLevel().getServer());
+            BlockPos aPos = helper.absolutePos(new BlockPos(1, 1, 1));
+            BlockPos bPos = helper.absolutePos(new BlockPos(5, 1, 5));
+            WorkbayBlockEntity a = placeWorkbay(helper, aPos, alice);
+            WorkbayBlockEntity b = placeWorkbay(helper, bPos, bob);
+            WorkbayTickets.force(backshop, a.record().orElseThrow().id(), a.record().orElseThrow().bayColumn());
+            WorkbayTickets.force(backshop, b.record().orElseThrow().id(), b.record().orElseThrow().bayColumn());
+            alice.getInventory().clearContent();
+            bob.getInventory().clearContent();
+
+            RoomTests.loadRoom(helper, a.record().orElseThrow(), 0, RoomTests.roomItem(1), alice);
+            var room1 = registry.roomInBay(a.record().orElseThrow(), 0).orElseThrow();
+            helper.assertTrue(com.neryos.workbay.world.RoomVisit.enter(alice, a.record().orElseThrow(), 0),
+                "entering Room 1 was refused");
+            BlockPos innerPos = com.neryos.workbay.world.RoomGeometry.origin(room1.region()).offset(2, 1, 2);
+            backshop.setBlock(innerPos, WBBlocks.WORKBAY.get().defaultBlockState(), Block.UPDATE_ALL);
+            WBBlocks.WORKBAY.get().setPlacedBy(backshop, innerPos, backshop.getBlockState(innerPos), alice,
+                new ItemStack(WBBlocks.WORKBAY.get()));
+            WorkbayBlockEntity inner = (WorkbayBlockEntity) backshop.getBlockEntity(innerPos);
+            helper.assertTrue(inner.record().isPresent(), "the Workbay inside Room 1 got no network");
+            WorkbayTickets.force(backshop, inner.record().orElseThrow().id(), inner.record().orElseThrow().bayColumn());
+            com.neryos.workbay.world.RoomVisit.leave(alice);
+
+            final int n = 190;
+            RoomTests.loadRoom(helper, inner.record().orElseThrow(), 0, RoomTests.roomItem(1), alice);
+            var room2 = registry.roomInBay(inner.record().orElseThrow(), 0).orElseThrow();
+            chestOfIron(helper, alice, inner.record().orElseThrow(), 0, n);
+            java.util.function.IntSupplier iron = () -> inRoom(backshop, room2, Items.IRON_INGOT)
+                + inRoom(backshop, room1, Items.IRON_INGOT)
+                + onPlayer(alice, Items.IRON_INGOT) + onPlayer(bob, Items.IRON_INGOT)
+                + loose(helper, Items.IRON_INGOT);
+            helper.assertValueEqual(iron.getAsInt(), n, "iron before the outer room moves");
+
+            // Pull Room 1 out of A. The cycle: the inner Workbay stands in it, so it is refused there.
+            alice.moveTo(aPos.getX() + 0.5, aPos.getY(), aPos.getZ() + 0.5);
+            menuFor(a, alice).act(WorkbayAction.EJECT, 0, Optional.empty());
+            ItemStack item = roomInHand(alice);
+            helper.assertFalse(item.isEmpty(), "Room 1 did not come out as an item");
+            helper.assertTrue(com.neryos.workbay.world.RoomHolding.refusal(registry, inner.record().orElseThrow(),
+                Optional.of(GlobalPos.of(WorkbayDimensions.BACKSHOP, innerPos)), item).isPresent(),
+                "Room 1 was allowed into the Workbay standing inside it");
+            alice.getInventory().clearContent();
+
+            // Into B, then in through both doors.
+            bob.setItemInHand(InteractionHand.MAIN_HAND, item);
+            bob.moveTo(bPos.getX() + 0.5, bPos.getY(), bPos.getZ() + 0.5);
+            menuFor(b, bob).act(WorkbayAction.RACK, 0, Optional.empty());
+            helper.assertTrue(b.record().orElseThrow().bay(0).room().map(room1.id()::equals).orElse(false),
+                "B's bay 0 does not hold Room 1");
+            helper.assertTrue(com.neryos.workbay.world.RoomVisit.enter(bob, b.record().orElseThrow(), 0),
+                "B cannot enter Room 1");
+            helper.assertTrue(backshop.getBlockState(innerPos).is(WBBlocks.WORKBAY.get()),
+                "the inner Workbay is gone from Room 1");
+            helper.assertTrue(registry.roomInBay(inner.record().orElseThrow(), 0)
+                .map(r -> r.id().equals(room2.id())).orElse(false), "the inner Workbay lost Room 2");
+            helper.assertTrue(com.neryos.workbay.world.RoomVisit.enter(alice, inner.record().orElseThrow(), 0),
+                "Room 2 cannot be entered from the inner Workbay after the move");
+            helper.assertTrue(com.neryos.workbay.world.RoomGeometry.interiorBox(room2.region(), room2.tier())
+                .inflate(1).contains(alice.position()), "A did not land inside Room 2");
+            helper.assertValueEqual(iron.getAsInt(), n, "iron in the nested room after the outer room moved");
+            com.neryos.workbay.world.RoomVisit.leave(alice);
+            com.neryos.workbay.world.RoomVisit.leave(bob);
+            helper.succeed();
+        });
+    }
+
+    /**
+     * Two players at one screen, each holding a furnace, both Rack into the same empty bay; then
+     * both Add on the same Connector; then both Eject the bay with goods inside. Phase 5 case 3.
+     * The racking half of {@code twoPlayersEjectingOneBayGetOneMachine}, and the goods count that
+     * one did not have: the census is furnaces, raw iron and the chest's iron, and each is what
+     * it was.
+     */
+    @GameTest(timeoutTicks = 400)
+    @TestHolder(description = "Two players racking one bay, adding one Connector and ejecting one bay at once: two furnaces stay two, 7 diamonds stay 7, 64 raw iron stay 64.")
+    public static void twoPlayersOnOneScreenNeverDoubleAThing(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer first = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            GameTestPlayer second = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos chestPos = helper.absolutePos(new BlockPos(4, 1, 4));
+            level.setBlock(chestPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            // Raw iron, because a furnace is only ever offered what it cooks (#120).
+            put(level, chestPos, 0, new ItemStack(Items.RAW_IRON, 64));
+            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, first);
+            second.moveTo(workbayPos.getX() + 0.5, workbayPos.getY(), workbayPos.getZ() + 0.5);
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = backshop(helper);
+            WorkbayTickets.force(backshop, record.id(), record.bayColumn());
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+            first.getInventory().clearContent();
+            second.getInventory().clearContent();
+
+            java.util.function.IntSupplier furnaces = () -> onPlayer(first, Items.FURNACE)
+                + onPlayer(second, Items.FURNACE) + loose(helper, Items.FURNACE)
+                + (backshop.getBlockState(machinePos).is(Blocks.FURNACE) ? 1 : 0);
+            java.util.function.IntSupplier diamonds = () -> onPlayer(first, Items.DIAMOND)
+                + onPlayer(second, Items.DIAMOND) + loose(helper, Items.DIAMOND)
+                + inContainer(backshop, machinePos, Items.DIAMOND);
+            java.util.function.IntSupplier rawIron = () -> inContainer(level, chestPos, Items.RAW_IRON)
+                + inContainer(backshop, machinePos, Items.RAW_IRON) + loose(helper, Items.RAW_IRON)
+                + onPlayer(first, Items.RAW_IRON) + onPlayer(second, Items.RAW_IRON);
+
+            // A network is locked at mint and a locked Workbay refuses a stranger every action, so
+            // the owner unlocks first -- or the second player's every click is a refusal and the
+            // race is never run. Asserted, so this cannot pass vacuously.
+            WorkbayMenu mine = menuFor(workbay, first);
+            mine.act(WorkbayAction.TOGGLE_LOCK, 0, Optional.empty());
+            helper.assertTrue(workbay.record().orElseThrow().admits(second.getUUID()),
+                "the second player is still refused, so two hands never touch one bay");
+            WorkbayMenu theirs = menuFor(workbay, second);
+
+            // Both rack into bay 0, both screens opened before either clicked.
+            mine.act(WorkbayAction.SELECT_BAY, 0, Optional.empty());
+            theirs.act(WorkbayAction.SELECT_BAY, 0, Optional.empty());
+            first.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Blocks.FURNACE, 1));
+            second.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Blocks.FURNACE, 1));
+            mine.act(WorkbayAction.RACK, 0, Optional.empty());
+            theirs.act(WorkbayAction.RACK, 0, Optional.empty());
+            helper.assertTrue(backshop.getBlockState(machinePos).is(Blocks.FURNACE), "nobody's furnace was racked");
+            helper.assertValueEqual(onPlayer(first, Items.FURNACE) + onPlayer(second, Items.FURNACE), 1,
+                "furnaces still in hand after both racked into one bay");
+            helper.assertValueEqual(furnaces.getAsInt(), 2, "furnaces after both racked into one bay");
+
+            // Both Add on the same Connector into bay 0; every channel is switched on and pulls.
+            BusConfig link = connect(helper, workbay, 0, chestPos.above(), first);
+            UUID connectorId = workbay.connectorAt(link.connector()).orElseThrow().id();
+            int before = workbay.buses().size();
+            mine.act(WorkbayAction.ADD_CHANNEL, 0, Optional.of(connectorId));
+            theirs.act(WorkbayAction.ADD_CHANNEL, 0, Optional.of(connectorId));
+            helper.assertValueEqual(workbay.buses().size(), before + 2,
+                "channels on the Connector after both pressed Add (each Add is one channel)");
+            for (BusConfig bus : java.util.List.copyOf(workbay.buses())) {
+                workbay.addBus(bus.withEnabled(true).withMode(BusConfig.Mode.EXTRACT).withRate(16).withSpeed(10));
+            }
+            helper.assertValueEqual(rawIron.getAsInt(), 64, "raw iron after both pressed Add");
+            // Goods that came with the machine and that nothing cooks: parked in the result slot.
+            put(backshop, machinePos, 2, new ItemStack(Items.DIAMOND, 7));
+
+            helper.startSequence()
+                .thenWaitUntil(() -> {
+                    if (inContainer(backshop, machinePos, Items.RAW_IRON) <= 0) {
+                        throw new GameTestAssertException("no raw iron has reached the furnace through any channel");
+                    }
+                })
+                .thenIdle(20)
+                .thenExecute(() -> helper.assertValueEqual(rawIron.getAsInt(), 64, "raw iron with three channels on one Connector"))
+                .thenExecute(() -> {
+                    // Both eject the bay, with the diamonds and whatever raw iron arrived inside.
+                    int arrived = inContainer(backshop, machinePos, Items.RAW_IRON);
+                    mine.act(WorkbayAction.EJECT, 0, Optional.empty());
+                    theirs.act(WorkbayAction.EJECT, 0, Optional.empty());
+                    helper.assertTrue(backshop.getBlockState(machinePos).isAir(), "the bay is not empty after two ejects");
+                    helper.assertValueEqual(furnaces.getAsInt(), 2, "furnaces after both pressed Eject");
+                    helper.assertValueEqual(diamonds.getAsInt(), 7, "diamonds after both pressed Eject");
+                    helper.assertValueEqual(rawIron.getAsInt(), 64, "raw iron after both pressed Eject");
+                    test.framework().logger().info("{} raw iron had arrived in the furnace when it was ejected", arrived);
+                })
+                .thenSucceed();
+        });
+    }
+
+    /**
+     * Transfer-here while a link runs: the network moves from one block to another mid-flow, the
+     * link keeps moving on the new block, and nothing is duplicated at the old one. Phase 5 case 5.
+     */
+    @GameTest(timeoutTicks = 400)
+    @TestHolder(description = "Transferring a network to another block while its link runs keeps the link moving and 64 iron stay 64.")
+    public static void transferringANetworkMidFlowLosesAndDoublesNothing(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(7, 3, 7));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos fromPos = helper.absolutePos(new BlockPos(1, 1, 1));
+            BlockPos toPos = helper.absolutePos(new BlockPos(5, 1, 5));
+            BlockPos chestPos = helper.absolutePos(new BlockPos(1, 1, 5));
+            level.setBlock(chestPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            put(level, chestPos, 0, new ItemStack(Items.IRON_INGOT, 64));
+            WorkbayBlockEntity from = placeWorkbay(helper, fromPos, player);
+            WorkbayRecord record = from.record().orElseThrow();
+            ServerLevel backshop = backshop(helper);
+            WorkbayTickets.force(backshop, record.id(), record.bayColumn());
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+            player.getInventory().clearContent();
+            rack(menuFor(from, player), player, 0, new ItemStack(Blocks.CHEST, 1));
+            BusConfig link = connect(helper, from, 0, chestPos.above(), player);
+            from.addBus(link.withMode(BusConfig.Mode.EXTRACT).withRate(4).withSpeed(10));
+
+            // A second block, holding nothing, the way one placed at the limit does.
+            level.setBlock(toPos, WBBlocks.WORKBAY.get().defaultBlockState(), Block.UPDATE_ALL);
+            WorkbayBlockEntity to = (WorkbayBlockEntity) level.getBlockEntity(toPos);
+            to.energy().deserializeNBT(null, net.minecraft.nbt.IntTag.valueOf(WorkbayBlockEntity.BUFFER_FE));
+
+            java.util.function.IntSupplier iron = () -> inContainer(level, chestPos, Items.IRON_INGOT)
+                + inContainer(backshop, machinePos, Items.IRON_INGOT) + loose(helper, Items.IRON_INGOT)
+                + onPlayer(player, Items.IRON_INGOT);
+            int[] arrivedAtTransfer = { 0 };
+            helper.startSequence()
+                .thenWaitUntil(() -> {
+                    if (inContainer(backshop, machinePos, Items.IRON_INGOT) <= 0) {
+                        throw new GameTestAssertException("nothing has moved through the link yet");
+                    }
+                })
+                .thenExecute(() -> {
+                    arrivedAtTransfer[0] = inContainer(backshop, machinePos, Items.IRON_INGOT);
+                    player.moveTo(toPos.getX() + 0.5, toPos.getY(), toPos.getZ() + 0.5);
+                    menuFor(to, player).act(WorkbayAction.TRANSFER_NETWORK, 0, Optional.of(record.id()));
+                    helper.assertValueEqual(to.workbayId().orElse(null), record.id(), "the network after Transfer");
+                    helper.assertTrue(from.workbayId().isEmpty(), "the old block still holds the network");
+                    helper.assertValueEqual(iron.getAsInt(), 64, "iron the tick the network moved");
+                })
+                .thenWaitUntil(() -> {
+                    if (inContainer(backshop, machinePos, Items.IRON_INGOT) <= arrivedAtTransfer[0]) {
+                        throw new GameTestAssertException("the link stopped moving after the Transfer: "
+                            + to.busStatus(link.id()));
+                    }
+                })
+                .thenIdle(40)
+                .thenExecute(() -> {
+                    helper.assertValueEqual(iron.getAsInt(), 64, "iron after the network moved blocks mid-flow");
+                    helper.assertTrue(from.record().isEmpty(), "the old block grew a record back");
+                })
+                .thenSucceed();
+        });
+    }
+
+    /**
+     * Not a test of the mod: the rig for phase 5 case 4, which a gametest cannot run (a server
+     * has to be stopped and killed). Builds a chest of 1728 iron in the overworld feeding a
+     * racked chest at 64 a move, force-loads its chunks so the link runs with nobody online, and
+     * logs the positions. {@code run-gametest/world} is then copied under a dedicated server and
+     * counted with {@code night/n4/5-count.py} after every stop and kill.
+     */
+    @GameTest
+    @TestHolder(description = "Rig for the dedicated-server stop/kill count (phase 5 case 4). Passes when built.")
+    public static void rigAChestFeedingABayForTheServerKillCount(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 3, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos chestPos = helper.absolutePos(new BlockPos(4, 1, 4));
+            level.setBlock(chestPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            for (int slot = 0; slot < 27; slot++) {
+                put(level, chestPos, slot, new ItemStack(Items.IRON_INGOT, 64));
+            }
+            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = backshop(helper);
+            WorkbayTickets.force(backshop, record.id(), record.bayColumn());
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+            player.getInventory().clearContent();
+            rack(menuFor(workbay, player), player, 0, new ItemStack(Blocks.CHEST, 1));
+            BusConfig link = connect(helper, workbay, 0, chestPos.above(), player);
+            // Switched on but slow enough that the whole stock is still moving when the server
+            // is stopped: 64 a move, one move a second.
+            workbay.addBus(link.withMode(BusConfig.Mode.EXTRACT).withRate(64).withSpeed(20));
+            level.setChunkForced(workbayPos.getX() >> 4, workbayPos.getZ() >> 4, true);
+            level.setChunkForced(chestPos.getX() >> 4, chestPos.getZ() >> 4, true);
+            test.framework().logger().info("PHASE5 RIG workbay {} chest {} bay0 {} network {} column {}",
+                workbayPos.toShortString(), chestPos.toShortString(), machinePos.toShortString(),
+                record.id(), record.bayColumn());
+            helper.assertValueEqual(inContainer(level, chestPos, Items.IRON_INGOT)
+                + inContainer(backshop, machinePos, Items.IRON_INGOT), 1728, "iron in the rig");
             helper.succeed();
         });
     }

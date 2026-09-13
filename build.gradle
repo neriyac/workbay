@@ -279,6 +279,16 @@ publishing {
     }
 }
 
+// MIT asks that the notice travel with every copy, and NeoForge shows nobody the toml's license=.
+tasks.named('jar', Jar) {
+    from('LICENSE')
+    manifest.attributes(
+        'Implementation-Title': mod_name,
+        'Implementation-Version': mod_version,
+        'Implementation-Vendor': 'Neryos',
+    )
+}
+
 // Publishing: `tools/publish.sh` (dry run by default) is the one command. Chosen over
 // CurseGradle + Minotaur + the gh CLI because it is one plugin with one DSL for all three
 // targets and a built-in dry run; over a curl script because the three APIs' upload formats
