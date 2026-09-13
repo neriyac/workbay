@@ -720,34 +720,45 @@ def room_light():
 def _door_sheet():
     """One 32x32 door, sliced into four blocks by the callers below.
 
-    Two leaves in a recessed frame, meeting on a bright seam, with a handle on each. It does not
-    open and it never will -- SPEC.md's way out is the whole shell, and this is the picture that
-    tells a player where to look. So it is drawn SHUT, with no hinge pin and no gap at the floor:
-    every affordance of a door that works is deliberately absent, and what is left is the shape."""
+    **Not greyscale, and not tinted.** It was drawn in the shell's grey, recessed panels and all,
+    and inside a room it was a slightly different grey on grey (OPEN_ISSUES #119, #92): the first
+    exit was found by right-clicking walls. Its model is the lamp's now - no tint, no shading,
+    full-bright - so what is drawn here is what is seen, in every room colour: two leaves in the
+    Workbay's own iron, a lit cyan lintel across the top and a lit threshold along the floor. The
+    door is the way back to the machine, so it wears the machine's colours and the machine's
+    light, which is how it is found from across the room and in the dark.
+
+    Still drawn SHUT, with no hinge pin and no handle: it never opens, and every affordance of a
+    door that works would be a lie. The light is the affordance."""
     im = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
-    # The wall it is set into, so the frame reads as cut in rather than stuck on.
-    rect(d, 0, 0, 31, 31, SHELL)
-    # Frame: two steps down into the wall.
-    rect(d, 2, 1, 29, 31, SHELL_D)
-    rect(d, 3, 2, 28, 31, SHELL_XD)
-    # The two leaves.
-    rect(d, 4, 3, 27, 31, SHELL)
-    # Recessed panels on each leaf: one tall rectangle per leaf, which is what a door has and a
-    # hatch does not.
-    for x0, x1 in ((6, 14), (17, 25)):
-        rect(d, x0, 6, x1, 27, SHELL_D)
-        rect(d, x0 + 1, 7, x1 - 1, 26, SHELL)
-        d.line([(x0 + 1, 7), (x1 - 1, 7)], fill=SHELL_XD)
-        d.line([(x0 + 1, 7), (x0 + 1, 26)], fill=SHELL_XD)
-    # The seam where the leaves meet: the darkest line on the door, dead centre, so the eye reads
-    # two leaves and not one slab.
-    d.line([(15, 3), (15, 31)], fill=SHELL_DEEP)
-    d.line([(16, 3), (16, 31)], fill=SHELL_XD)
-    # A handle either side of the seam, at the height a hand is.
-    for x in (13, 18):
-        d.line([(x, 17), (x, 19)], fill=SHELL_DEEP)
-        px(d, x, 16, SHELL_L)
+    lit = (150, 226, 246, 255)
+    core = (222, 246, 252, 255)
+    glow = (72, 150, 178, 255)
+    # The frame, edge to edge: the four blocks are the whole door, no wall left in the texture.
+    rect(d, 0, 0, 31, 31, DARK)
+    rect(d, 1, 1, 30, 30, STEEL_D)
+    # The lintel lamp: a bar the width of the frame, with a bright core.
+    rect(d, 2, 1, 29, 4, glow)
+    rect(d, 3, 2, 28, 3, lit)
+    d.line([(4, 2), (27, 2)], fill=core)
+    # The two leaves, below the lamp.
+    rect(d, 2, 6, 29, 30, STEEL)
+    for x0, x1 in ((3, 14), (17, 28)):
+        rect(d, x0, 7, x1, 29, STEEL_L)
+        rect(d, x0 + 1, 8, x1 - 1, 28, STEEL)
+        # One tall recessed panel per leaf: what a door has and a hatch does not.
+        rect(d, x0 + 3, 11, x1 - 3, 24, STEEL_D)
+        d.line([(x0 + 3, 11), (x1 - 3, 11)], fill=DARK)
+        d.line([(x0 + 3, 11), (x0 + 3, 24)], fill=DARK)
+    # The seam where the leaves meet, dead centre and darkest, so it is two leaves not one slab.
+    d.line([(15, 6), (15, 30)], fill=DARK)
+    d.line([(16, 6), (16, 30)], fill=STEEL_D)
+    # The threshold: a thin lit line at the floor, so the door reads from the far end of a 13-room
+    # even when the lintel is behind a machine.
+    rect(d, 2, 30, 29, 30, glow)
+    d.line([(3, 30), (28, 30)], fill=lit)
+    d.line([(0, 31), (31, 31)], fill=DARK)
     return im
 
 
@@ -776,10 +787,10 @@ BLOCK_ART = {"connector": connector, "port": port,
              "room_wall": room_wall, "room_floor": room_floor, "room_light": room_light,
              "room_door_tl": room_door_tl, "room_door_tr": room_door_tr,
              "room_door_bl": room_door_bl, "room_door_br": room_door_br}
-ITEM_ART = {"shopsteel": shopsteel, "housing": housing,
-            "expansion_plate": expansion_plate, "resonator": resonator,
-            "multichannel": multichannel, "impeller": impeller,
-            "connector": connector_item}
+# The upgrades are ITEMS, drawn by the icon engine and written by `icons`; the older grids for
+# them below are kept only as the record of what was replaced, and `items` must not write them
+# over the shipped set -- it did once, silently, in a run meant to redraw a door.
+ITEM_ART = {"shopsteel": shopsteel, "housing": housing, "connector": connector_item}
 
 
 def write_pip(root):
@@ -911,6 +922,9 @@ MATERIALS = {
     "wood":  0x9C6B3E,
     "lapis": 0x3E6FD8,
     "green": 0x5FD35A,
+    # The Workbay's own casing (STEEL above), for the blocks: a room stands in a bay beside a
+    # Workbay and a Connector, and the sprites' pale steel is a different metal at that distance.
+    "iron":  0x424A58,
 }
 
 # letter -> (material, how many tones up or down its ramp the pixel sits). The offsets are the
@@ -997,8 +1011,9 @@ def _thick(rows, x, y, w, h):
     return False
 
 
-def shade(rows):
-    """A silhouette to an RGBA image. Light comes from the top left.
+def shade(rows, swap=None):
+    """A silhouette to an RGBA image. Light comes from the top left. `swap` renames materials,
+    so one grid can be drawn in the sprites' steel or the blocks' iron.
 
       * every pixel on the silhouette's edge takes the rim, unless its whole feature is one pixel
         thick, in which case it takes the base tone rather than vanishing;
@@ -1026,7 +1041,7 @@ def shade(rows):
             if z == ".":
                 continue
             material, offset = ZONES[z]
-            bar = ramp(material)
+            bar = ramp((swap or {}).get(material, material))
             edge = rims(x, y)
             seam = at(x - 1, y) != z or at(x, y - 1) != z
             near = at(x - 1, y) == "." or at(x, y - 1) == "."
@@ -1463,62 +1478,34 @@ ITEMS = {
                  "................",
                  "................"],
 
-    # The three rooms, as the block a bay hosts (SPEC.md section 0): a steel frame around a lit
-    # interior, and the whole of what tells them apart is how much room is inside. Written to
-    # textures/block, cube_all, so the item is the cube.
-    "room": ["................",
-                   "................",
-                   "................",
-                   "................",
-                   "....SSSSSSSS....",
-                   "....SCCCCCCS....",
-                   "....SCCCCCCS....",
-                   "....SCCCCCCS....",
-                   "....SCCCCCCS....",
-                   "....SCCCCCCS....",
-                   "....SCCCCCCS....",
-                   "....SSSSSSSS....",
-                   "................",
-                   "................",
-                   "................",
-                   "................"],
-
-    "wide_room": ["................",
-                        "................",
-                        "..SSSSSSSSSSSS..",
-                        "..SCCCCCCCCCCS..",
-                        "..SCCCCCCCCCCS..",
-                        "..SCCCCCCCCCCS..",
-                        "..SCCCCCCCCCCS..",
-                        "..SCCCCCCCCCCS..",
-                        "..SCCCCCCCCCCS..",
-                        "..SCCCCCCCCCCS..",
-                        "..SCCCCCCCCCCS..",
-                        "..SCCCCCCCCCCS..",
-                        "..SCCCCCCCCCCS..",
-                        "..SSSSSSSSSSSS..",
-                        "................",
-                        "................"],
-
-    "vast_room": [".SSSSSSSSSSSSSS.",
-                        ".SCCCCCCCCCCCCS.",
-                        ".SCCCCCCCCCCCCS.",
-                        ".SCCCCCCCCCCCCS.",
-                        ".SCCCCCCCCCCCCS.",
-                        ".SCCCCCCCCCCCCS.",
-                        ".SCCCCCCCCCCCCS.",
-                        ".SCCCCCCCCCCCCS.",
-                        ".SCCCCCCCCCCCCS.",
-                        ".SCCCCCCCCCCCCS.",
-                        ".SCCCCCCCCCCCCS.",
-                        ".SCCCCCCCCCCCCS.",
-                        ".SCCCCCCCCCCCCS.",
-                        ".SCCCCCCCCCCCCS.",
-                        ".SSSSSSSSSSSSSS.",
-                        "................"],
-
 }
 ITEMS["anchor"] = None       # the screen icon, drawn once and used in both places
+
+
+# The room, as the block a bay hosts (SPEC.md section 0). **Edge to edge and opaque**: it was
+# an upgrade-sprite frame on a cube_all, and a cube whose faces are transparent at the margins
+# is a hollow frame you can see into -- Neriya's "gaps inside". A block texture is a block
+# texture. **One picture for all three sizes**: what tells them apart is the block's size
+# (RoomBlock#inset, an 8, 12 and 16 pixel cube), Neriya's call over three pictures with more or
+# fewer windows -- a small room is a small block, and that reads in a hand, a slot and a bay.
+ROOMS = {
+    "room": ["SSSSSSSSSSSSSSSS",
+             "SXXXXXXXXXXXXXXS",
+             "SSSSSSSSSSSSSSSS",
+             "SSSddddddddddSSS",
+             "SSSdECCCCCCCdSSS",
+             "SSSdCCCCCCCCdSSS",
+             "SSSdCCCCCCCCdSSS",
+             "SSSdCCCCCCCCdSSS",
+             "SSSdCCCCCCCCdSSS",
+             "SSSdCCCCCCCCdSSS",
+             "SSSdCCCCCCCCdSSS",
+             "SSSdccccccccdSSS",
+             "SSSdddddddddsSSS",
+             "SSSSSSSSSSSSSSSS",
+             "ssssssssssssssss",
+             "dddddddddddddddd"],
+}
 
 
 PANEL = (43, 46, 51, 255)
@@ -1538,9 +1525,6 @@ def _on_panel(img, ground=PANEL):
     return out
 
 
-ROOM_BLOCKS = ("room", "wide_room", "vast_room")
-
-
 def write_items(root):
     """Every upgrade sprite into assets/workbay/textures/item, and the room cubes into
     textures/block beside it."""
@@ -1548,9 +1532,96 @@ def write_items(root):
         art = icon("ANCHOR") if rows is None else shade(rows)
         if art.size != (16, 16):
             raise SystemExit("%s is %dx%d; every sprite is 16x16" % ((name,) + art.size))
-        where = os.path.join(os.path.dirname(root), "block") if name in ROOM_BLOCKS else root
-        art.save(os.path.join(where, name + ".png"))
-    return len(ITEMS)
+        art.save(os.path.join(root, name + ".png"))
+    block = os.path.join(os.path.dirname(root), "block")
+    for name, rows in ROOMS.items():
+        art = shade_block(rows)
+        if art.size != (16, 16) or art.getextrema()[3][0] != 255:
+            raise SystemExit("%s: a block texture is 16x16 and opaque edge to edge" % name)
+        art.save(os.path.join(block, name + ".png"))
+    return len(ITEMS) + len(ROOMS)
+
+
+def shade_block(rows):
+    """shade() for a texture that tiles: the outer ring is not an edge, so it takes no rim. Drawn
+    one pixel larger all round with the ring repeated, then cropped back."""
+    wide = [r[0] + r + r[-1] for r in rows]
+    wide = [wide[0]] + wide + [wide[-1]]
+    return shade(wide, {"steel": "iron"}).crop((1, 1, len(rows[0]) + 1, len(rows) + 1))
+
+
+def cube(face, size, top=1.0, left=0.8, right=0.6):
+    """An item-slot mock of a cube_all block: the face as the game's item renderer lays it out,
+    top lit, left and right darker -- vanilla's own shading factors -- so a texture is judged in
+    the slot it will actually sit in without restarting the game once per guess."""
+    n = face.size[0]
+    s = size / 2.0
+    out = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    src = face.load()
+    for py in range(size):
+        for px in range(size):
+            u = (px - s) / s
+            v = (py - s * 0.5) / s
+            if abs(u) + abs(v) * 2.0 <= 1.0:
+                a = (u + 1.0 - v * 2.0) / 2.0
+                b = (1.0 - u - v * 2.0) / 2.0
+                tx, ty = int(min(n - 1, max(0, a * n))), int(min(n - 1, max(0, b * n)))
+                r, g, bl, al = src[tx, ty]
+                out.putpixel((px, py), (int(r * top), int(g * top), int(bl * top), 255))
+                continue
+            below = v - (0.5 - abs(u) * 0.5)
+            if below < 0 or below > 1.0:
+                continue
+            tx = int(min(n - 1, max(0, abs(u) * n)))
+            ty = int(min(n - 1, max(0, below * n)))
+            f = left if u < 0 else right
+            r, g, bl, al = src[n - 1 - tx if u < 0 else tx, ty]
+            out.putpixel((px, py), (int(r * f), int(g * f), int(bl * f), 255))
+    return out
+
+
+def rooms_sheet(path, old_dir):
+    """The room block old beside new: the old three faces as the cubes they were, and the one new
+    face as the three sizes of cube the models draw (8, 12, 16 px), in a slot and in an inventory
+    row beside a Workbay -- that row is where a player has to tell them apart."""
+    slot = (139, 139, 139, 255)
+    inv = (198, 198, 198, 255)
+    sizes = (8, 12, 16)
+    sheet = Image.new("RGBA", (760, 60 + 2 * 150 + 120), (24, 26, 30, 255))
+    d = ImageDraw.Draw(sheet)
+    old = [Image.open(os.path.join(old_dir, n + ".png")).convert("RGBA")
+           for n in ("room", "wide_room", "vast_room")]
+    face = shade_block(ROOMS["room"])
+
+    def in_slot(img, px, size, x, y):
+        c = cube(img, px * size // 16)
+        d.rectangle([x - 1, y - 1, x + size, y + size], fill=slot)
+        sheet.alpha_composite(c, (x + (size - c.width) // 2, y + (size - c.height) // 2))
+
+    for row, label in enumerate(("OLD", "NEW")):
+        y = 20 + row * 150
+        d.text((10, y), label, fill=(226, 230, 236, 255))
+        x = 60
+        for i in range(3):
+            img, px = (old[i], 16) if row == 0 else (face, sizes[i])
+            sheet.paste(img.resize((64, 64), Image.NEAREST), (x, y))
+            x += 72
+            for size in (16, 32, 64):
+                in_slot(img, px, size, x, y + 64 - size)
+                x += size + 10
+            x += 20
+    y = 20 + 2 * 150 + 20
+    d.text((10, y), "ROW", fill=(226, 230, 236, 255))
+    for row in range(2):
+        x0 = 60 + row * 350
+        d.rectangle([x0 - 4, y - 4, x0 + 9 * 36, y + 36], fill=inv)
+        for i in range(9):
+            d.rectangle([x0 + i * 36, y, x0 + i * 36 + 32, y + 32], fill=slot)
+        for i in range(3):
+            img, px = (old[i], 16) if row == 0 else (face, sizes[i])
+            in_slot(img, px, 32, x0 + (1 + i * 3) * 36, y)
+    sheet.save(path)
+    return path
 
 
 def write_icons(root):
@@ -1643,6 +1714,9 @@ if __name__ == "__main__":
         icon_dest = os.path.join(here, "src", "main", "resources", "assets", "workbay",
                                  "textures", "gui", "icon")
         print("icons", write_icons(icon_dest), "sprites", write_items(items_dest))
+    elif "--rooms-sheet" in sys.argv:
+        at = sys.argv.index("--rooms-sheet")
+        print(rooms_sheet(sys.argv[at + 1], sys.argv[at + 2]))
     elif "--icons-sheet" in sys.argv:
         java = os.path.join(here, "src", "main", "java", "com", "neryos", "workbay",
                             "client", "screen", "WBIcons.java")

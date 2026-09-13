@@ -76,6 +76,11 @@ public final class WorkbaySounds {
         player.playNotifySound(sound, SoundSource.BLOCKS, 0.7F, pitch);
     }
 
+    /** A line with no verdict in it - where you are, what to do next - so no sound to go with it. */
+    public static void note(Player player, Component what) {
+        player.displayClientMessage(what, true);
+    }
+
     /**
      * A machine going into a bay, in the machine's own voice — a Mekanism cube clanks, a barrel
      * thumps, a beehive rustles. Free variety, and it names what went in without a word.

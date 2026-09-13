@@ -268,10 +268,9 @@ class BaysPage extends WorkbayPage {
             .filter(room -> room.index() == screen.selectedBay()).findFirst().orElse(null);
     }
 
-    /** What a room is called on this panel: its name, or its bay. */
+    /** What a room is called on this panel: the label the record carries (#114). */
     private String roomName(WorkbaySnapshot.Room room) {
-        return room.name().isEmpty()
-            ? WorkbayScreen.gui("rooms.name", room.index() + 1).getString() : room.name();
+        return room.name();
     }
 
     @Override
@@ -738,6 +737,9 @@ class BaysPage extends WorkbayPage {
             WorkbayScreen.gui("rooms.enter"),
             mayEnter ? WorkbayScreen.gui("rooms.enter.tip")
                 : com.neryos.workbay.WorkbayLang.message("room_not_yours"));
+        // What a room has instead of faces, across the width a machine's own details take.
+        wrapped(g, WorkbayScreen.gui("faces.room"), x(50), y(126), FACES_X - 12 - 50,
+            Draw.TEXT_FAINT);
     }
 
     /**
@@ -840,11 +842,9 @@ class BaysPage extends WorkbayPage {
         WorkbaySnapshot snap = snapshot();
         WorkbaySnapshot.Bay bay = snap.bay(screen.selectedBay());
         if (roomHere() != null) {
-            // A room has no faces. The column says so rather than drawing a cube of a block that
-            // answers on none of them.
-            Draw.well(g, x(WELL_X), y(52), WELL_W, WELL_H + WELL_Y - 52);
-            wrapped(g, WorkbayScreen.gui("faces.room"), x(WELL_X + 6), y(60), WELL_W - 12,
-                Draw.TEXT_FAINT);
+            // A room has no faces, and the panel says so where there is room to say it (below,
+            // in roomPanel) rather than in this column: eighty pixels wide, the sentence was six
+            // words deep and the settings window opened on top of it.
             return;
         }
 

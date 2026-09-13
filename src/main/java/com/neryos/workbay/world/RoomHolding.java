@@ -131,9 +131,8 @@ public final class RoomHolding {
             .withConnectors(going));
         stack.set(WBDataComponents.ROOM.get(), new RoomStamp(room.id(), Optional.of(ticket)));
         // The item is named after the room, so a pocketful of rooms can be told apart.
-        room.name().filter(name -> !name.isBlank()).ifPresent(name ->
-            stack.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME,
-                Component.literal(name)));
+        stack.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME,
+            Component.literal(room.label()));
         return now;
     }
 

@@ -271,8 +271,7 @@ class RoomWindow extends WorkbayPage {
         Draw.panel(g, wx, wy, WIN_W, h);
 
         int cursor = wy + WIN_PAD;
-        String name = room.name().isEmpty()
-            ? WorkbayScreen.gui("rooms.name", room.index() + 1).getString() : room.name();
+        String name = room.name();
         Draw.text(g, screen.font(), name, wx + WIN_PAD, cursor, WIN_W - WIN_PAD * 2 - 20,
             Draw.TEXT);
         // A close button, because "click the dark part" is not a control anybody can see. Mekanism

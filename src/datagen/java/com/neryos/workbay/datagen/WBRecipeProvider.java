@@ -36,6 +36,10 @@ public class WBRecipeProvider extends RecipeProvider {
             .requires(Items.IRON_INGOT)
             .requires(Items.AMETHYST_SHARD)
             .unlockedBy("has_amethyst", has(Items.AMETHYST_SHARD))
+            // OPEN_ISSUES #118: the chain's visible start. Every player smelts iron; the recipe
+            // book then shows Shopsteel wanting an amethyst shard, which is what points at a
+            // geode. Criteria on a recipe are OR-ed.
+            .unlockedBy("has_iron", has(Items.IRON_INGOT))
             .save(output);
 
         // Housing is the upgrade tier's material and nothing else's. It is deliberately the

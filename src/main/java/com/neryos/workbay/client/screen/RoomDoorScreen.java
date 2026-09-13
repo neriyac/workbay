@@ -82,10 +82,7 @@ public class RoomDoorScreen extends AbstractContainerScreen<RoomDoorMenu> {
         List<WorkbaySnapshot.Room> all = menu.view().rooms();
         int current = menu.view().current();
         String title = current >= 0 && current < all.size()
-            ? (all.get(current).name().isEmpty()
-                ? WorkbayLang.gui("rooms.name", all.get(current).index() + 1).getString()
-                : all.get(current).name())
-            : WorkbayLang.gui("door.title").getString();
+            ? all.get(current).name() : WorkbayLang.gui("door.title").getString();
         Draw.text(g, font, title, px, topPos + TITLE_Y, ROW_W, Draw.TEXT);
 
         // Out: the answer to the question that made somebody click a wall, at twice a row's height
@@ -122,8 +119,7 @@ public class RoomDoorScreen extends AbstractContainerScreen<RoomDoorMenu> {
                     0xFF000000 | room.colour().tint());
             }
 
-            String name = room.name().isEmpty()
-                ? WorkbayLang.gui("rooms.name", room.index() + 1).getString() : room.name();
+            String name = room.name();
 
             if (here) {
                 // "You are here" is 72 pixels and the button column is 46, so on this one row the

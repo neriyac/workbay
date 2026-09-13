@@ -82,7 +82,14 @@ public class ConnectorBlockEntity extends BlockEntity {
         if (pairing == null) {
             return Optional.empty();
         }
-        return blockAt(server, pairing.workbayPos(), pairing.workbayId());
+        // By id through the registry first: the pairing's position is where the Workbay stood
+        // when the item was paired, and a Workbay broken and re-placed is the same network
+        // somewhere else. Read by position it found nobody, and breaking this Connector then left
+        // it on the record for ever. OPEN_ISSUES #112.
+        return ConnectorBlock.networkOf(server.getServer(), pairing)
+            .filter(WorkbayRecord::live).flatMap(WorkbayRecord::lastKnownPos)
+            .flatMap(at -> blockAt(server, at, pairing.workbayId()))
+            .or(() -> blockAt(server, pairing.workbayPos(), pairing.workbayId()));
     }
 
     /** The room this Connector stands in and who holds it, when it stands in one that is held. */

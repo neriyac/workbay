@@ -124,6 +124,12 @@ public record WorkbayRecord(
             .map(c -> c.pos().equals(pos) ? c.withName(name) : c).toList());
     }
 
+    /** Without the Connector at one position and every channel it anchored, waiting ones too. */
+    public WorkbayRecord withoutConnectorAt(GlobalPos at) {
+        return withConnectors(connectors.stream().filter(c -> !c.pos().equals(at)).toList())
+            .withBuses(buses.stream().filter(b -> !b.connector().equals(at)).toList());
+    }
+
     public WorkbayRecord withConnectors(List<Connector> newConnectors) {
         return new WorkbayRecord(id, code, name, owner, ownerName, locked, bayColumn, upgrades,
             lastKnownPos, bays, buses, deployedCount, List.copyOf(newConnectors));

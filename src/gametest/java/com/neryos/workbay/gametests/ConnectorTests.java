@@ -383,6 +383,96 @@ public class ConnectorTests {
     }
 
     /**
+     * OPEN_ISSUES #112, the root: a Connector reached its Workbay by the <em>position</em> on its
+     * pairing, so once the Workbay had been broken and re-placed somewhere else, breaking the
+     * Connector found nobody and the record kept it - and kept offering it on every Add list.
+     * Proven off {@code run/saves/Correction}: "Ore feed" listed with air where its block was.
+     */
+    @GameTest
+    @TestHolder(description = "Breaking a Connector after its Workbay moved still takes it off the record.")
+    public static void aConnectorBrokenAfterItsWorkbayMovedLeavesNoRecord(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(7, 5, 7));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos first = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos second = helper.absolutePos(new BlockPos(6, 1, 0));
+            BlockPos chestPos = helper.absolutePos(new BlockPos(3, 1, 6));
+            BlockPos connectorPos = chestPos.above();
+
+            level.setBlock(chestPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            WorkbayBlockEntity workbay = placeWorkbay(helper, first, player);
+            java.util.UUID network = workbay.workbayId().orElseThrow();
+            place(level, connectorPos, Direction.DOWN, paired(level, workbay), player);
+
+            // The Workbay moves: broken, the network sleeps; placed again by its owner, it wakes.
+            level.setBlock(first, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            WorkbayBlockEntity moved = placeWorkbay(helper, second, player);
+            helper.assertValueEqual(moved.workbayId().orElseThrow(), network,
+                "the re-placed Workbay's network");
+            helper.assertValueEqual(moved.connectors().size(), 1, "Connectors before the break");
+
+            level.setBlock(connectorPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            helper.assertValueEqual(moved.connectors().size(), 0,
+                "Connectors the record still offers after the block was broken");
+            helper.succeed();
+        });
+    }
+
+    /**
+     * OPEN_ISSUES #112, the loss: a Connector whose block is gone but whose record survived (a
+     * world edit, or the break above before it was fixed) still carries the channels the player
+     * took off a bay with the X. Add attached one, the runner read CONNECTOR_GONE, the sweep
+     * deleted it - the header went 12 to 11 and a named, filtered channel was gone for good.
+     * Add refuses instead, with the reason, and the waiting channel is still there afterwards.
+     */
+    @GameTest
+    @TestHolder(description = "Add on a Connector whose block is gone refuses, and the waiting channel survives.")
+    public static void addOnAGoneConnectorRefusesAndKeepsTheWaitingChannel(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos chestPos = helper.absolutePos(new BlockPos(4, 1, 4));
+            BlockPos connectorPos = chestPos.above();
+
+            level.setBlock(chestPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
+            place(level, connectorPos, Direction.DOWN, paired(level, workbay), player);
+            GlobalPos here = GlobalPos.of(level.dimension(), connectorPos);
+            java.util.UUID connectorId = workbay.connectorAt(here).orElseThrow().id();
+            com.neryos.workbay.menu.WorkbayMenu.addChannel(workbay, workbay.record().orElseThrow(),
+                connectorId, 0);
+            BusConfig made = workbay.buses().get(0);
+            // Taken off the bay with the X: waiting, and still the player's.
+            workbay.addBus(made.withBay(BusConfig.NO_BAY).withName("T"));
+            WorkbayRecord stale = workbay.record().orElseThrow();
+
+            // The block goes, the record does not: put back what the break took off.
+            level.setBlock(connectorPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            RoomRegistry.get(level.getServer()).put(stale);
+            helper.assertValueEqual(workbay.connectors().size(), 1, "the stale Connector, listed");
+            helper.assertValueEqual(workbay.buses().size(), 1, "the waiting channel, before Add");
+
+            net.minecraft.network.chat.Component refusal = com.neryos.workbay.menu.WorkbayMenu
+                .addChannel(workbay, workbay.record().orElseThrow(), connectorId, 0);
+            helper.assertTrue(refusal != null, "Add on a gone Connector must refuse with a reason");
+            helper.runAfterDelay(40, () -> {
+                BusConfig kept = workbay.bus(made.id()).orElseThrow(() ->
+                    new net.minecraft.gametest.framework.GameTestAssertException(
+                        "the waiting channel was eaten"));
+                helper.assertTrue(kept.detached(), "the waiting channel is still waiting");
+                helper.assertValueEqual(kept.name(), "T", "and still the player's");
+                helper.assertValueEqual(workbay.buses().size(), 1, "channels after the refused Add");
+                helper.succeed();
+            });
+        });
+    }
+
+    /**
      * An unpaired Connector is an ordinary block that does nothing. It must not attach itself to
      * whichever Workbay happens to be nearby — a link nobody asked for is worse than no link.
      */

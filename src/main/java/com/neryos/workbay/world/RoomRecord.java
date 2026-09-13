@@ -90,6 +90,17 @@ public record RoomRecord(UUID id, int region, int tier, Optional<String> name, i
      * A fresh room of one size in a region nobody else has. Unbuilt until somebody opens it:
      * SPEC.md §8 spends the shell on first entry.
      */
+    /**
+     * What the room is called everywhere a player reads it: its name, or "Room N" off its own
+     * region, which nothing but the room has. It was its bay's number, so one room was "Room 2"
+     * in this Workbay and "Room 1" in the next. OPEN_ISSUES #114. Written here once and carried
+     * on the snapshot, so no screen derives a default of its own.
+     */
+    public String label() {
+        return name.filter(n -> !n.isBlank())
+            .orElseGet(() -> com.neryos.workbay.WorkbayLang.gui("rooms.name", region + 1).getString());
+    }
+
     public static RoomRecord fresh(UUID id, int region, int tier) {
         return new RoomRecord(id, region, Math.clamp(tier, 1, RoomGeometry.MAX_TIER),
             Optional.empty(), 0, Optional.empty(), RoomColour.DEFAULT, List.of(),

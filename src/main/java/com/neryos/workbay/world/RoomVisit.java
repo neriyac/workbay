@@ -152,6 +152,10 @@ public final class RoomVisit {
             player.removeData(WBAttachments.ROOM_RETURN.get());
             return false;
         }
+        // Where you are and the way out, once, on arrival. OPEN_ISSUES #119: the first exit was
+        // found by right-clicking walls.
+        WorkbaySounds.note(player, com.neryos.workbay.WorkbayLang.message("room_entered",
+            built.label()));
         return true;
     }
 

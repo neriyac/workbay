@@ -27,4 +27,24 @@ public class RoomBlock extends Block {
     public int tier() {
         return tier;
     }
+
+    /**
+     * How far the block's cube sits in from the full block: 4, 2 and 0 pixels a side, so the three
+     * sizes are an 8, a 12 and a 16 pixel cube standing on the block's floor. <b>Size is the size</b> - Neriya's call over three
+     * pictures with more or fewer windows on them: a small room is a small block, in the hand, in
+     * a slot and in a bay, and one texture serves all three. {@code WBBlockStateProvider} draws
+     * the same numbers.
+     */
+    public static int inset(int tier) {
+        return Math.max(0, 6 - tier * 2);
+    }
+
+    @Override
+    protected net.minecraft.world.phys.shapes.VoxelShape getShape(
+        net.minecraft.world.level.block.state.BlockState state,
+        net.minecraft.world.level.BlockGetter level, net.minecraft.core.BlockPos pos,
+        net.minecraft.world.phys.shapes.CollisionContext context) {
+        int in = inset(tier);
+        return Block.box(in, 0, in, 16 - in, 16 - 2 * in, 16 - in);
+    }
 }

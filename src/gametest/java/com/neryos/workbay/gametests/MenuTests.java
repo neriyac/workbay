@@ -321,6 +321,9 @@ public class MenuTests {
             BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
             WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
             GlobalPos connectorPos = GlobalPos.of(level.dimension(), workbayPos.above());
+            // The block as well as the record: Add refuses a Connector whose block is gone (#112).
+            level.setBlock(connectorPos.pos(), WBBlocks.CONNECTOR.get().defaultBlockState(),
+                Block.UPDATE_ALL);
             workbay.addConnector(new com.neryos.workbay.world.WorkbayRecord.Connector(
                 java.util.UUID.randomUUID(), connectorPos, "Furnace feed",
                 GlobalPos.of(level.dimension(), workbayPos.above(2)), Optional.empty()));
@@ -1128,6 +1131,9 @@ public class MenuTests {
             BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
             WorkbayBlockEntity workbay = placeWorkbay(helper, workbayPos, player);
             GlobalPos connectorPos = GlobalPos.of(level.dimension(), workbayPos.above());
+            // The block as well as the record: Add refuses a Connector whose block is gone (#112).
+            level.setBlock(connectorPos.pos(), WBBlocks.CONNECTOR.get().defaultBlockState(),
+                Block.UPDATE_ALL);
             workbay.addConnector(new WorkbayRecord.Connector(java.util.UUID.randomUUID(),
                 connectorPos, "feed", GlobalPos.of(level.dimension(), workbayPos.above(2)),
                 Optional.empty()));

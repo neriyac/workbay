@@ -1726,7 +1726,8 @@ public class BusTests {
                     + "longer the decoy this test is about");
             }
             for (int slot = 0; slot < down.getSlots(); slot++) {
-                if (down.insertItem(slot, new ItemStack(Items.IRON_INGOT, 1), true).isEmpty()) {
+                // Raw iron, not an ingot: a furnace is only ever offered what it can cook (#120).
+                if (down.insertItem(slot, new ItemStack(Items.RAW_IRON, 1), true).isEmpty()) {
                     helper.fail("the furnace's down face accepted iron in slot " + slot
                         + ", so it is not an output-only face and this test proves nothing");
                 }
@@ -1740,16 +1741,16 @@ public class BusTests {
                 helper.fail("the bay does not hold a container after racking a chest");
                 return;
             }
-            hosted.setItem(0, new ItemStack(Items.IRON_INGOT, 16));
+            hosted.setItem(0, new ItemStack(Items.RAW_IRON, 16));
 
             BusConfig link = connect(helper, workbay, targetPos.above(), Direction.DOWN, player);
             workbay.addBus(link.withRate(8).withSpeed(10));
 
             helper.startSequence()
                 .thenWaitUntil(() -> {
-                    if (countIn(level, targetPos, Items.IRON_INGOT) < 16) {
+                    if (countIn(level, targetPos, Items.RAW_IRON) < 16) {
                         throw new GameTestAssertException("the link has moved "
-                            + countIn(level, targetPos, Items.IRON_INGOT) + " of 16 iron into the "
+                            + countIn(level, targetPos, Items.RAW_IRON) + " of 16 iron into the "
                             + "furnace and reads " + workbay.busStatus(link.id())
                             + "; it bound the output-only down face and is moving nothing");
                     }
@@ -1902,6 +1903,68 @@ public class BusTests {
                     // way round: each face takes only what belongs in it.
                     helper.assertValueEqual(countIn(level, outChest, Items.CHICKEN), 0,
                         "raw chicken that reached the output chest");
+                })
+                .thenExecute(() -> tearDown(helper, workbayPos))
+                .thenSucceed();
+        });
+    }
+
+    /**
+     * OPEN_ISSUES #120, verified rather than guessed: one chest of sand and coal, a filterless
+     * chest-to-furnace channel and a second one turned round. The glass the furnace makes goes
+     * back to the chest, where the first channel finds it - and a furnace's top face takes
+     * anything into its input slot ({@code canPlaceItem(0, ..)} is true for every item), so the
+     * glass would ride back in and sit in the input, jamming the sand behind it. This asserts
+     * the chest ends up with every pane and the furnace's input never holds glass.
+     */
+    @GameTest(timeoutTicks = 2400)
+    @TestHolder(description = "A filterless chest-to-furnace channel with a second one turned round never feeds the glass back in.")
+    public static void aFilterlessLoopDoesNotFeedTheFurnaceItsOwnGlass(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(7, 5, 7));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos chest = helper.absolutePos(new BlockPos(5, 1, 2));
+            level.setBlock(chest, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            if (level.getBlockEntity(chest) instanceof Container box) {
+                box.setItem(0, new ItemStack(Items.SAND, 8));
+                box.setItem(1, new ItemStack(Items.COAL, 2));
+            }
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(Blocks.FURNACE));
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+
+            BusConfig in = connect(helper, workbay, chest.above(), Direction.DOWN, player);
+            workbay.addBus(in.withMode(BusConfig.Mode.EXTRACT).withRate(4).withSpeed(10));
+            BusConfig out = connect(helper, workbay, chest.above(), Direction.DOWN, player);
+            workbay.addBus(out.withMode(BusConfig.Mode.INSERT).withRate(4).withSpeed(10));
+
+            helper.startSequence()
+                .thenWaitUntil(() -> {
+                    String input = inSlot(backshop, machinePos, 0);
+                    if (input.contains("glass")) {
+                        throw new GameTestAssertException("glass rode back into the furnace's "
+                            + "input slot: " + input);
+                    }
+                    int glass = countIn(level, chest, Items.GLASS);
+                    if (glass < 8) {
+                        throw new GameTestAssertException("the chest holds " + glass
+                            + " of 8 glass and " + countIn(level, chest, Items.SAND)
+                            + " sand; input=" + input + " fuel=" + inSlot(backshop, machinePos, 1)
+                            + " output=" + inSlot(backshop, machinePos, 2) + "; links read "
+                            + workbay.busStatus(in.id()) + "/" + workbay.busStatus(out.id())
+                            + " of " + workbay.buses().size());
+                    }
+                })
+                .thenExecuteFor(200, () -> {
+                    String input = inSlot(backshop, machinePos, 0);
+                    if (input.contains("glass")) {
+                        throw new GameTestAssertException("glass rode back into the furnace's "
+                            + "input slot after the batch: " + input);
+                    }
                 })
                 .thenExecute(() -> tearDown(helper, workbayPos))
                 .thenSucceed();

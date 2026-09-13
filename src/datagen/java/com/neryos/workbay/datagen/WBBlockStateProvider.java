@@ -46,9 +46,25 @@ public class WBBlockStateProvider extends BlockStateProvider {
             .rotationY(((int) state.getValue(HorizontalDirectionalBlock.FACING).toYRot() + 180) % 360)
             .build());
 
-        // The three rooms: a cube of the same picture on every face, the item being the cube.
+        // The three rooms: one picture, three sizes of cube (RoomBlock#inset), the item being
+        // the cube. Standing on the floor rather than centred, because a cube floating in the
+        // middle of its block is a bug and one on the ground is a small block. Explicit 0..16
+        // UVs, because an element's UVs default to its bounds and an 8-pixel cube would
+        // otherwise show the middle quarter of the texture.
         for (var room : java.util.List.of(WBBlocks.ROOM, WBBlocks.WIDE_ROOM, WBBlocks.VAST_ROOM)) {
-            simpleBlock(room.get(), cubeAll(room.get()));
+            int in = com.neryos.workbay.content.room.RoomBlock.inset(room.get().tier());
+            ModelFile model = models().withExistingParent(room.getId().getPath(), mcBlock("block"))
+                .texture("particle", blockTexture(WBBlocks.ROOM.get()))
+                .texture("all", blockTexture(WBBlocks.ROOM.get()))
+                .element().from(in, 0, in).to(16 - in, 16 - 2 * in, 16 - in)
+                .allFaces((face, builder) -> {
+                    builder.texture("#all").uvs(0, 0, 16, 16);
+                    if (in == 0) {
+                        builder.cullface(face);
+                    }
+                })
+                .end();
+            simpleBlock(room.get(), model);
         }
 
         // A thin plate drawn on the NORTH side, then rotated onto whichever face it is stuck to.
@@ -93,7 +109,9 @@ public class WBBlockStateProvider extends BlockStateProvider {
             new java.util.EnumMap<>(com.neryos.workbay.content.room.RoomPart.class);
         for (com.neryos.workbay.content.room.RoomPart part
                 : com.neryos.workbay.content.room.RoomPart.values()) {
-            parts.put(part, part == com.neryos.workbay.content.room.RoomPart.LIGHT
+            // The door too: it is drawn in the mod's own iron with a lit lintel, the same in
+            // every room colour, so a player sees the way out from across the room (#119).
+            parts.put(part, part == com.neryos.workbay.content.room.RoomPart.LIGHT || part.isDoor()
                 ? lampCube(part.texture(), part.texture())
                 : tintedCube(part.texture(), part.texture()));
         }

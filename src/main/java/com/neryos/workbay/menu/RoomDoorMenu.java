@@ -150,7 +150,7 @@ public class RoomDoorMenu extends AbstractContainerMenu {
             if (room.id().equals(here.id())) {
                 current = rooms.size();
             }
-            rooms.add(new WorkbaySnapshot.Room(entry.getKey(), room.name().orElse(""),
+            rooms.add(new WorkbaySnapshot.Room(entry.getKey(), room.label(),
                 room.interior(), room.built(), room.effectiveBiome().location().toString(),
                 room.colour(),
                 // Never to the door screen. It is a list of doors, and a guest list on it would be

@@ -1,7 +1,6 @@
 package com.neryos.workbay.bus;
 
 import com.neryos.workbay.config.WorkbayConfig;
-import com.neryos.workbay.init.WBBlocks;
 import com.neryos.workbay.world.BayGeometry;
 import com.neryos.workbay.world.RedstoneMode;
 import com.neryos.workbay.world.WorkbayDimensions;
@@ -312,12 +311,9 @@ public class BusRunner {
         // An internal (bay-to-bay) link has no Connector at all — its "connector" field is the
         // Workbay's own position, which is never going to hold a Connector block, so this check
         // would misfire as CONNECTOR_GONE forever if it ran for one.
-        if (!bus.internal()) {
-            ServerLevel connectorLevel = level.getServer().getLevel(bus.connector().dimension());
-            if (connectorLevel != null && connectorLevel.isLoaded(bus.connector().pos())
-                && !connectorLevel.getBlockState(bus.connector().pos()).is(WBBlocks.CONNECTOR.get())) {
-                return BusStatus.CONNECTOR_GONE;
-            }
+        if (!bus.internal() && com.neryos.workbay.content.connector.ConnectorBlock.gone(
+            level.getServer(), bus.connector())) {
+            return BusStatus.CONNECTOR_GONE;
         }
         BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), bus.bay());
 
@@ -438,7 +434,30 @@ public class BusRunner {
         // did not port over. SPEC.md §9, and the third time this fault has been found -
         // aLinkSkipsAnOutputOnlyFaceInsteadOfBindingToIt is the guard.
         java.util.function.Predicate<net.minecraft.world.item.ItemStack> allowed = allowed(bus);
-        IItemHandler from = source.resolve(h -> hasAnything(h, allowed), sourceFaces);
+        // What a source gives up: its outputs, when it is a machine that has any (#120). And what
+        // a vanilla furnace is offered: only what it can burn or cook, because its input slot
+        // says yes to anything and a filterless chest-to-furnace channel would otherwise post the
+        // furnace its own glass back, one stack at a time, until the input was full of it.
+        ServerLevel sourceLevel = insert ? backshop : targetLevel;
+        BlockPos sourcePos = insert ? machinePos : targetPos;
+        ServerLevel sinkLevel = insert ? targetLevel : backshop;
+        BlockPos sinkPos = insert ? targetPos : machinePos;
+        java.util.List<IItemHandler> sourceHandlers = new java.util.ArrayList<>(6);
+        for (Direction face : Direction.values()) {
+            IItemHandler handler = sourceLevel.getCapability(Capabilities.ItemHandler.BLOCK,
+                sourcePos, face);
+            if (handler != null) {
+                sourceHandlers.add(handler);
+            }
+        }
+        if (sinkLevel.getBlockEntity(sinkPos)
+                instanceof net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity furnace) {
+            allowed = allowed.and(stack -> furnaceTakes(sinkLevel, furnace, stack));
+        }
+        java.util.function.Predicate<net.minecraft.world.item.ItemStack> wanted = allowed;
+        IItemHandler bound = source.resolve(h -> hasAnything(BusTransfer.outputsOnly(h,
+            sourceHandlers), wanted), sourceFaces);
+        IItemHandler from = bound == null ? null : BusTransfer.outputsOnly(bound, sourceHandlers);
         if (from == null) {
             // Nothing came out. Two very different reasons, and one message for both is how a
             // dead link spends a session looking like a resting one.
@@ -447,7 +466,7 @@ public class BusRunner {
                 : insert ? BusStatus.MACHINE_NO_PORT : BusStatus.TARGET_NO_PORT;
         }
         int budget = rate(record, bus);
-        IItemHandler to = sink.resolve(h -> BusTransfer.moveItems(from, h, budget, allowed, true) > 0,
+        IItemHandler to = sink.resolve(h -> BusTransfer.moveItems(from, h, budget, wanted, true) > 0,
             sinkFaces);
         if (to == null) {
             // A destination that is merely full is resting, not unreachable - the same distinction
@@ -456,7 +475,7 @@ public class BusRunner {
             return anyHandler ? BusStatus.IDLE
                 : insert ? BusStatus.TARGET_NO_PORT : BusStatus.MACHINE_NO_PORT;
         }
-        int moved = BusTransfer.moveItems(from, to, budget, allowed);
+        int moved = BusTransfer.moveItems(from, to, budget, wanted);
         return moved > 0 ? BusStatus.RUNNING : BusStatus.IDLE;
     }
 
@@ -581,6 +600,24 @@ public class BusRunner {
      * A source only counts if something could actually come out of it. Binding to the first handler
      * that merely exists is how a bus ends up wired to a read-only face and moves nothing forever.
      */
+    /** Fuel, or something this furnace's own recipe type turns into something else. */
+    private static boolean furnaceTakes(ServerLevel level,
+        net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity furnace,
+        net.minecraft.world.item.ItemStack stack) {
+        if (net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity.isFuel(stack)) {
+            return true;
+        }
+        net.minecraft.world.item.crafting.RecipeType<?
+            extends net.minecraft.world.item.crafting.AbstractCookingRecipe> type =
+            furnace instanceof net.minecraft.world.level.block.entity.BlastFurnaceBlockEntity
+                ? net.minecraft.world.item.crafting.RecipeType.BLASTING
+            : furnace instanceof net.minecraft.world.level.block.entity.SmokerBlockEntity
+                ? net.minecraft.world.item.crafting.RecipeType.SMOKING
+            : net.minecraft.world.item.crafting.RecipeType.SMELTING;
+        return level.getRecipeManager().getRecipeFor(type,
+            new net.minecraft.world.item.crafting.SingleRecipeInput(stack), level).isPresent();
+    }
+
     private static boolean hasAnything(IItemHandler handler,
         java.util.function.Predicate<net.minecraft.world.item.ItemStack> allowed) {
         for (int slot = 0; slot < handler.getSlots(); slot++) {

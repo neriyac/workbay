@@ -84,6 +84,9 @@ public class WBBlocks {
                 .mapColor(MapColor.COLOR_BLACK)
                 .sound(SoundType.METAL)
                 .strength(3.5F)
+                // Two of the three are smaller than a block (RoomBlock#inset), so the faces
+                // behind them must not be culled away.
+                .noOcclusion()
                 .noLootTable());
         ITEMS.register(name, () -> new com.neryos.workbay.content.room.RoomItem(holder.get(),
             new net.minecraft.world.item.Item.Properties()));

@@ -466,44 +466,54 @@ public class WorkbayMenu extends AbstractContainerMenu {
      */
     private void addChannel(ServerPlayer serverPlayer, WorkbayRecord record,
         Optional<UUID> connectorId, int bay) {
-        if (connectorId.isPresent() && !addChannel(workbay, record, connectorId.get(), bay)) {
-            atLinkCap(serverPlayer);
-        }
-    }
-
-    /**
-     * The cap is {@code addBus}'s, in the one place a link is minted; this is the only thing that
-     * says so, because the 65th Add otherwise did nothing at all.
-     */
-    private static void atLinkCap(ServerPlayer serverPlayer) {
-        WorkbaySounds.refuse(serverPlayer, com.neryos.workbay.WorkbayLang.message("link_cap",
-            WorkbayBlockEntity.MAX_LINKS));
+        connectorId.map(id -> addChannel(workbay, record, id, bay))
+            .ifPresent(refusal -> WorkbaySounds.refuse(serverPlayer, refusal));
     }
 
     /**
      * Static so a gametest presses the button rather than re-writing what the button does.
      *
-     * @return false only when a new link was refused at {@link WorkbayBlockEntity#MAX_LINKS}
+     * <p>Two refusals, both said out loud because silently doing nothing is how a player concludes
+     * the mod is broken. The cap is {@code addBus}'s, in the one place a link is minted; this is
+     * the only thing that says so, because the 65th Add otherwise did nothing at all. And a
+     * Connector whose block is gone is refused <em>before</em> anything is attached: attached, the
+     * runner read CONNECTOR_GONE and the sweep deleted the channel - a waiting channel with a name
+     * and a filter, eaten by the one button meant to bring it back. OPEN_ISSUES #112.
+     *
+     * @return why nothing was added, or null when a channel was
      */
-    public static boolean addChannel(WorkbayBlockEntity workbay, WorkbayRecord record,
-        UUID connectorId, int bay) {
+    @Nullable
+    public static net.minecraft.network.chat.Component addChannel(WorkbayBlockEntity workbay,
+        WorkbayRecord record, UUID connectorId, int bay) {
         if (bay < 0 || bay >= record.bayCapacity()) {
-            return true;
+            return null;
         }
-        return record.connectors().stream().filter(connector -> connector.id().equals(connectorId))
-            .findFirst()
-            .map(connector -> workbay.addBus(workbay.linksAt(connector.pos()).stream()
-                .filter(BusConfig::detached).findFirst()
-                .map(waiting -> waiting.withBay(bay))
-                // <b>Born EXTRACT</b>: pulling from the target into the bay. The commonest first
-                // channel anybody makes is a chest of ore into a furnace, and born INSERT it moved
-                // the furnace's output the other way -- which looks like nothing happened, on the
-                // first thing a new player builds. OPEN_ISSUES #56, Neriya's call.
-                .orElseGet(() -> BusConfig.create(UUID.randomUUID(), bay,
-                    BusConfig.Resource.ITEM, BusConfig.Mode.EXTRACT,
-                    connector.pos(), connector.target())
-                    .withTargetBlock(connector.targetBlock()))))
-            .orElse(true);
+        WorkbayRecord.Connector connector = record.connectors().stream()
+            .filter(c -> c.id().equals(connectorId)).findFirst().orElse(null);
+        if (connector == null || !(workbay.getLevel() instanceof ServerLevel server)) {
+            return null;
+        }
+        if (com.neryos.workbay.content.connector.ConnectorBlock.gone(server.getServer(),
+            connector.pos())) {
+            // Named the way the Add list names it: its name, or its block's when it has none.
+            return com.neryos.workbay.WorkbayLang.message("connector_gone",
+                connector.name().isBlank() ? connector.targetBlock().map(net.minecraft.core.registries
+                    .BuiltInRegistries.BLOCK::get).map(b -> b.getName().getString()).orElse("It")
+                    : connector.name());
+        }
+        boolean added = workbay.addBus(workbay.linksAt(connector.pos()).stream()
+            .filter(BusConfig::detached).findFirst()
+            .map(waiting -> waiting.withBay(bay))
+            // <b>Born EXTRACT</b>: pulling from the target into the bay. The commonest first
+            // channel anybody makes is a chest of ore into a furnace, and born INSERT it moved
+            // the furnace's output the other way -- which looks like nothing happened, on the
+            // first thing a new player builds. OPEN_ISSUES #56, Neriya's call.
+            .orElseGet(() -> BusConfig.create(UUID.randomUUID(), bay,
+                BusConfig.Resource.ITEM, BusConfig.Mode.EXTRACT,
+                connector.pos(), connector.target())
+                .withTargetBlock(connector.targetBlock())));
+        return added ? null
+            : com.neryos.workbay.WorkbayLang.message("link_cap", WorkbayBlockEntity.MAX_LINKS);
     }
 
     /**
@@ -755,7 +765,8 @@ public class WorkbayMenu extends AbstractContainerMenu {
             BayGeometry.machinePos(record.bayColumn(), targetBay));
         if (!workbay.addBus(BusConfig.createInternal(UUID.randomUUID(), selectedBay, anchor,
             target))) {
-            atLinkCap(serverPlayer);
+            WorkbaySounds.refuse(serverPlayer, com.neryos.workbay.WorkbayLang.message("link_cap",
+                WorkbayBlockEntity.MAX_LINKS));
         }
     }
 
@@ -1186,7 +1197,7 @@ public class WorkbayMenu extends AbstractContainerMenu {
     private static List<WorkbaySnapshot.Room> readRooms(ServerPlayer player, WorkbayRecord record) {
         List<WorkbaySnapshot.Room> out = new ArrayList<>();
         com.neryos.workbay.world.RoomRegistry.get(player.server).roomsOf(record)
-            .forEach((bay, room) -> out.add(new WorkbaySnapshot.Room(bay, room.name().orElse(""),
+            .forEach((bay, room) -> out.add(new WorkbaySnapshot.Room(bay, room.label(),
                 room.interior(), room.built(), room.effectiveBiome().location().toString(),
                 room.colour(),
                 // The owner's alone. Anybody may open an unlocked Workbay, so sending every room's

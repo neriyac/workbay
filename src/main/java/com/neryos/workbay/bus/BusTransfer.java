@@ -104,6 +104,70 @@ public final class BusTransfer {
 
 
     /**
+     * A machine's outputs, and nothing else, when the machine has any. OPEN_ISSUES #120, measured:
+     * a filterless channel turned round on a hosted furnace read RUNNING and cooked nothing,
+     * because the furnace's top face hands out its <em>input</em> slot too ({@code
+     * canTakeItemThroughFace} is true for slot 0 through UP) and the sand went straight back to
+     * the chest it came from. A vanilla hopper never sees that: it only ever pulls through DOWN.
+     *
+     * <p>The rule: a slot that would take the same stack back through the same face is an input,
+     * and a block with any slot that refuses one - a furnace's result slot, a Mekanism output - is
+     * a machine whose inputs are left alone. A block where every slot takes everything (a chest, a
+     * barrel, a bin) has no roles, and everything in it is offered, which is what a buffer in a bay
+     * is for. {@code faces} is every handler the block exposes, because the roles are the block's
+     * and one face on its own cannot see them: a furnace's top is one input slot and looks like a
+     * chest.
+     */
+    public static IItemHandler outputsOnly(IItemHandler face, java.util.List<IItemHandler> faces) {
+        return new IItemHandler() {
+            private boolean hasRoles(ItemStack probe) {
+                for (IItemHandler handler : faces) {
+                    for (int slot = 0; slot < handler.getSlots(); slot++) {
+                        if (!handler.isItemValid(slot, probe)) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }
+
+            @Override
+            public ItemStack extractItem(int slot, int amount, boolean simulate) {
+                ItemStack held = face.extractItem(slot, amount, true);
+                if (held.isEmpty() || (face.isItemValid(slot, held) && hasRoles(held))) {
+                    return ItemStack.EMPTY;
+                }
+                return simulate ? held : face.extractItem(slot, amount, false);
+            }
+
+            @Override
+            public int getSlots() {
+                return face.getSlots();
+            }
+
+            @Override
+            public ItemStack getStackInSlot(int slot) {
+                return face.getStackInSlot(slot);
+            }
+
+            @Override
+            public ItemStack insertItem(int slot, ItemStack stack, boolean simulate) {
+                return face.insertItem(slot, stack, simulate);
+            }
+
+            @Override
+            public int getSlotLimit(int slot) {
+                return face.getSlotLimit(slot);
+            }
+
+            @Override
+            public boolean isItemValid(int slot, ItemStack stack) {
+                return face.isItemValid(slot, stack);
+            }
+        };
+    }
+
+    /**
      * Moves up to {@code budget} millibuckets. Same shape as the item path, for the same reason:
      * ask the source what it is offering, then ask the destination what it would take <em>of that
      * offer</em>, then commit exactly that.

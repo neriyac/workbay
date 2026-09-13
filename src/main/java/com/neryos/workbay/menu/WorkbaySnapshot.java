@@ -192,11 +192,8 @@ public record WorkbaySnapshot(
      * is two rooms as far as the player can tell.
      */
     public net.minecraft.network.chat.Component roomLabel(int index) {
-        String named = rooms.stream().filter(room -> room.index() == index)
-            .map(Room::name).findFirst().orElse("");
-        return named.isBlank()
-            ? com.neryos.workbay.WorkbayLang.gui("rooms.name", index + 1)
-            : net.minecraft.network.chat.Component.literal(named);
+        return net.minecraft.network.chat.Component.literal(rooms.stream()
+            .filter(room -> room.index() == index).map(Room::name).findFirst().orElse(""));
     }
 
     public Bay bay(int index) {

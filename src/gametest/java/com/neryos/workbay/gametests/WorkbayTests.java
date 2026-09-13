@@ -26,6 +26,36 @@ public class WorkbayTests {
 
         framework.init(eventBus, container);
 
+        // -Dworkbay.tests=<regex on the test's method name> runs only those. GameTestServer is
+        // handed its own copy of the registry's list before any mod event fires, and batches it
+        // in initServer right after ServerAboutToStartEvent - so the rest are taken out of that
+        // copy, through the one private field holding it. A day round runs the tests it wrote or
+        // touched; the whole suite is one verify.sh away.
+        String only = System.getProperty("workbay.tests");
+        if (only != null && !only.isBlank()) {
+            java.util.regex.Pattern keep = java.util.regex.Pattern.compile(only);
+            NeoForge.EVENT_BUS.addListener(
+                (final net.neoforged.neoforge.event.server.ServerAboutToStartEvent event) -> {
+                    if (!(event.getServer() instanceof net.minecraft.gametest.framework.GameTestServer server)) {
+                        return;
+                    }
+                    for (java.lang.reflect.Field field : server.getClass().getDeclaredFields()) {
+                        if (java.util.Collection.class.isAssignableFrom(field.getType())) {
+                            try {
+                                field.setAccessible(true);
+                                if (field.get(server) instanceof java.util.Collection<?> held
+                                    && held.stream().allMatch(net.minecraft.gametest.framework.TestFunction.class::isInstance)) {
+                                    held.removeIf(f -> !keep.matcher(
+                                        ((net.minecraft.gametest.framework.TestFunction) f).testName()).find());
+                                }
+                            } catch (ReflectiveOperationException | UnsupportedOperationException e) {
+                                throw new IllegalStateException("workbay.tests could not prune " + field, e);
+                            }
+                        }
+                    }
+                });
+        }
+
         NeoForge.EVENT_BUS.addListener((final RegisterCommandsEvent event) -> {
             final LiteralArgumentBuilder<CommandSourceStack> node = Commands.literal("tests");
             framework.registerCommands(node);

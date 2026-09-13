@@ -6,6 +6,7 @@ import com.neryos.workbay.WorkbaySounds;
 import com.neryos.workbay.bus.BusConfig;
 import com.neryos.workbay.content.workbay.WorkbayBlockEntity;
 import com.neryos.workbay.init.WBBlockEntities;
+import com.neryos.workbay.init.WBBlocks;
 import com.neryos.workbay.init.WBDataComponents;
 import com.neryos.workbay.world.WorkbayRecord;
 import net.minecraft.core.BlockPos;
@@ -157,6 +158,18 @@ public class ConnectorBlock extends BaseEntityBlock {
     }
 
     /**
+     * Whether a Connector the record remembers is no longer standing in the world. Only ever
+     * answered off a chunk already loaded - {@code getBlockState} on an unloaded one loads it
+     * synchronously - so an unloaded Connector is assumed present. The one question behind the
+     * runner's CONNECTOR_GONE and the Add list's refusal. OPEN_ISSUES #112.
+     */
+    public static boolean gone(net.minecraft.server.MinecraftServer server, GlobalPos at) {
+        ServerLevel level = server.getLevel(at.dimension());
+        return level != null && level.isLoaded(at.pos())
+            && !level.getBlockState(at.pos()).is(WBBlocks.CONNECTOR.get());
+    }
+
+    /**
      * The network a Connector placed at {@code pos} would belong to: the holder of the room it
      * stands in, or else the network its pairing names.
      */
@@ -275,7 +288,18 @@ public class ConnectorBlock extends BaseEntityBlock {
         if (!state.is(newState.getBlock()) && !level.isClientSide
             && level.getBlockEntity(pos) instanceof ConnectorBlockEntity connector) {
             GlobalPos here = GlobalPos.of(level.dimension(), pos);
-            connector.workbay().ifPresent(workbay -> workbay.removeConnectorAt(here));
+            // Through the registry when the Workbay is not standing: a sleeping network, or one
+            // whose block is elsewhere now, must still lose the Connector - the record kept it
+            // otherwise and offered it on every Add list. OPEN_ISSUES #112.
+            java.util.Optional<WorkbayBlockEntity> live = connector.workbay();
+            if (live.isPresent()) {
+                live.get().removeConnectorAt(here);
+            } else {
+                net.minecraft.server.MinecraftServer server = ((ServerLevel) level).getServer();
+                networkFor(server, level, pos, connector.pairing().orElse(null)).ifPresent(record ->
+                    com.neryos.workbay.world.RoomRegistry.get(server)
+                        .put(record.withoutConnectorAt(here)));
+            }
             // And off a pulled-out room's own list, where it sits while the room is an item.
             connector.room().filter(room -> connector.roomHolder().isEmpty()).ifPresent(room ->
                 com.neryos.workbay.world.RoomRegistry.get(((ServerLevel) level).getServer())

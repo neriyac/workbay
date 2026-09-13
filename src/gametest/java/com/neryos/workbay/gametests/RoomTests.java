@@ -118,8 +118,15 @@ public class RoomTests {
                 "entering room 1 was refused");
             helper.assertTrue(site.player().level().dimension().equals(WorkbayDimensions.BACKSHOP),
                 "the player is not in the Backshop after entering a room");
-
+            // And told where they are and the way out, on the action bar (#119): the line names
+            // the room by the label the record carries, off its region, not its bay (#114).
             RoomRecord room = room(helper, site);
+            helper.assertTrue(LockTests.actionBar(site.player()).anyMatch(
+                    com.neryos.workbay.WorkbayLang.messageKey("room_entered")::equals),
+                "entering said nothing on the action bar");
+            helper.assertValueEqual(room.label(), "Room " + (room.region() + 1),
+                "an unnamed room's label");
+
             helper.assertTrue(room.builtTier() == 1,
                 "the room records tier " + room.builtTier() + " after being built at tier 1");
             helper.assertTrue(RoomGeometry.inside(site.player().blockPosition(), room.region(), 1),
