@@ -22,8 +22,11 @@ set -u
 cd "$(dirname "$0")/.." || exit 1
 
 ALWAYS_BUDGET=600      # read at the start of every session
-REFERENCE_BUDGET=1690  # looked up, never read whole
+REFERENCE_BUDGET=1760  # looked up, never read whole
 
+# 1690 -> 1760 when the release paperwork arrived (2026-09-14): MODPAGE.md (the store-page text,
+# pasted once per release) and CHANGELOG.md (its top section is what tools/publish.sh posts).
+# Paid in part: README.md shrank from 104 lines of store copy to 50 of repo front door.
 # 1600 -> 1690 when WALKTHROUGH.md arrived (79 lines): the twenty-minute walk of the product,
 # looked up before a release and after any change to a screen, never read by a coding session.
 # It is the one document in this repo that would have prevented the night it came out of --
@@ -52,7 +55,7 @@ REFERENCE_BUDGET=1690  # looked up, never read whole
 # its list of QOL features that have since shipped.
 is_reference() {
   case "$1" in
-    SPEC.md|MOD_MAP.md|ENDERIO_MAP.md|ART.md|README.md|WALKTHROUGH.md) return 0 ;;
+    SPEC.md|MOD_MAP.md|ENDERIO_MAP.md|ART.md|README.md|WALKTHROUGH.md|MODPAGE.md|CHANGELOG.md) return 0 ;;
     *) return 1 ;;
   esac
 }

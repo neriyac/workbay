@@ -3,6 +3,8 @@ plugins {
     id 'maven-publish'
     id 'net.neoforged.moddev' version '2.0.146'
     id 'idea'
+    // One task publishes the jar to GitHub, CurseForge and Modrinth: see publishMods below.
+    id 'me.modmuss50.mod-publish-plugin' version '2.2.0'
 }
 
 tasks.named('wrapper', Wrapper).configure {
@@ -61,7 +63,8 @@ repositories {
 }
 
 base {
-    archivesName = mod_id
+    // Loader and game version in the file name, so a player sorting a mods folder reads it at a glance.
+    archivesName = "${mod_id}-neoforge-${minecraft_version}"
 }
 
 // Mojang ships Java 21 to end users in 1.21.1, so mods should target Java 21.
@@ -273,6 +276,52 @@ publishing {
         maven {
             url "file://${project.projectDir}/repo"
         }
+    }
+}
+
+// Publishing: `tools/publish.sh` (dry run by default) is the one command. Chosen over
+// CurseGradle + Minotaur + the gh CLI because it is one plugin with one DSL for all three
+// targets and a built-in dry run; over a curl script because the three APIs' upload formats
+// are somebody else's problem to keep current. Tokens are never in the repo: the script
+// sources them from a file outside it, and any token missing turns the run into a dry run.
+publishMods {
+    file = jar.archiveFile
+    displayName = "Workbay ${mod_version} for NeoForge ${minecraft_version}"
+    version = mod_version
+    type = STABLE
+    modLoaders.add('neoforge')
+    // The changelog is the top section of CHANGELOG.md: from its first '## ' heading to the next.
+    changelog = providers.fileContents(layout.projectDirectory.file('CHANGELOG.md')).asText.map { t ->
+        def m = (t =~ /(?s)(## [^\n]*\n.*?)(?=\n## |\z)/)
+        m.find() ? m.group(1).trim() : t
+    }
+    def tokens = ['CURSEFORGE_TOKEN', 'MODRINTH_TOKEN', 'GITHUB_TOKEN']
+    dryRun = project.hasProperty('workbay.dryRun') ||
+        tokens.any { providers.environmentVariable(it).getOrNull() == null }
+
+    curseforge {
+        accessToken = providers.environmentVariable('CURSEFORGE_TOKEN')
+        projectId = curseforge_project_id
+        projectSlug = 'workbay'
+        minecraftVersions.add(minecraft_version)
+        javaVersions.add(JavaVersion.VERSION_21)
+        client = true
+        server = true
+        optional('jei', 'emi', 'mekanism')
+    }
+    modrinth {
+        accessToken = providers.environmentVariable('MODRINTH_TOKEN')
+        projectId = modrinth_project_id
+        minecraftVersions.add(minecraft_version)
+        optional { slug = 'jei' }
+        optional { slug = 'emi' }
+        optional { slug = 'mekanism' }
+    }
+    github {
+        accessToken = providers.environmentVariable('GITHUB_TOKEN')
+        repository = 'neriyac/workbay'
+        commitish = 'master'
+        tagName = "v${mod_version}"
     }
 }
 

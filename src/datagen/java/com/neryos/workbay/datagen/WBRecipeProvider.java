@@ -44,7 +44,7 @@ public class WBRecipeProvider extends RecipeProvider {
 
         // Housing is the upgrade tier's material and nothing else's. It is deliberately the
         // expensive intermediate: SPEC.md §0 prices the upgrades, not the entry, so the obsidian
-        // and the ender eye sit above the first Workbay rather than in front of it.
+        // and the ender eye sit above the first Workbay (which costs a pearl) rather than in front of it.
         ShapedRecipeBuilder.shaped(RecipeCategory.MISC, WBItems.HOUSING.get())
             .pattern("SOS")
             .pattern("OEO")
@@ -55,16 +55,18 @@ public class WBRecipeProvider extends RecipeProvider {
             .unlockedBy("has_shopsteel", has(WBItems.SHOPSTEEL.get()))
             .save(output);
 
-        // Glass, Shopsteel and one ender eye: four iron, four amethyst and the eye. No Housing,
-        // because Housing is what the ladder above this block is made of. Reachable the same
-        // evening a player first visits the End, and now genuinely in one sitting.
+        // Glass, Shopsteel and one ender pearl: four iron, four amethyst and the pearl. No Housing,
+        // because Housing is what the ladder above this block is made of. A pearl, not an eye
+        // (2026-09-14): the survival round found the eye put the box a blaze-rod trip after the
+        // first machines it exists to hold; a pearl is an enderman on the first night, so the
+        // Workbay arrives with the first furnace. The eye stays on Housing, where the ladder is.
         ShapedRecipeBuilder.shaped(RecipeCategory.MISC, WBBlocks.WORKBAY.get())
             .pattern("GAG")
             .pattern("AEA")
             .pattern("GAG")
             .define('G', Blocks.GLASS)
             .define('A', WBItems.SHOPSTEEL.get())
-            .define('E', Items.ENDER_EYE)
+            .define('E', Items.ENDER_PEARL)
             .unlockedBy("has_shopsteel", has(WBItems.SHOPSTEEL.get()))
             .save(output);
 

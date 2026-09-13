@@ -4,3 +4,4 @@ set -e
 ./tools/check-docs.sh
 ./tools/check-text.sh
 python tools/check-lang.py
+./tools/check-secrets.sh

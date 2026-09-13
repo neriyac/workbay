@@ -57,3 +57,10 @@ shots/
 .claude/
 
 __pycache__/
+
+# Publishing tokens never live here (tools/publish.sh reads ~/.config/workbay/publish.env),
+# and tools/check-secrets.sh refuses a staged one. Belt and braces:
+*.env
+*.token
+publish.env
+build/publishMods/

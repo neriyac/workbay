@@ -2,103 +2,54 @@
 
 **One block that hosts your machines out of sight and reaches them wirelessly.**
 
-Minecraft 1.21.1 · NeoForge · v0.1.0 · MIT
+Minecraft 1.21.1 · NeoForge 21.1.249+ · Java 21 · MIT · no dependencies
 
-## What it is for
+A Workbay racks up to eight of any mod's machines — real blocks, still ticking, still running their
+own recipes — in a private dimension, and links them to the chests, tanks and machines you left
+standing in the world through small Connector blocks. No cables, no floor of boxes. A Room, in three
+sizes, racks in a bay like a machine and travels as an item.
 
-A tech base ends up as a floor of machines you never look at, joined by cables you look at
-constantly. Workbay takes the machines off the floor: up to eight of them inside one block — real
-machines, from any mod, still ticking, still running their own recipes — linked out to the chests,
-tanks and machines you left standing in the world. No cables, no sorting corridor: one block where
-a room used to be. And a room, when you want one: a 3, 9 or 13-block cube racked in a bay like a
-machine, built inside, moved between Workbays as an item that cannot be destroyed.
+**It saves space, never TPS.** A hosted machine costs exactly what it costs on the floor, because it
+*is* the same block entity in a dimension of the mod's own. The mod's own overhead is measured, not
+claimed: about 0.05 ms per tick per busy network on a dedicated server, no forced chunks
+(`perf/`, `./gradlew runBenchmark`). `MODPAGE.md` is the player-facing text; `CHANGELOG.md` is the
+release history.
 
-## What it does **not** do
+## Install
 
-**It saves space, never TPS.** A hosted machine costs exactly what it costs on the floor, because
-it *is* the same block entity, ticking the same way, in a dimension of the mod's own. Anyone who
-profiles this mod will find that, so it is written here first, with the measurements below.
+Drop `workbay-neoforge-1.21.1-<version>.jar` into `mods/` on the client **and** the server. JEI,
+EMI and Mekanism are optional: with a recipe viewer you can drag an ingredient into a link's
+filter; with Mekanism, links carry chemicals too. Opening a hosted machine's own screen from where
+you stand uses two Mixins; `config/workbay-mixins.properties` turns them off, and the mod then
+falls back to walking into the bay.
 
-It is also not a routing mod. A link has one source and one target — three destinations are three
-links. If you want channels, priorities and round-robin, you want XNet, and the two get along fine.
+## Play
 
-## The measured numbers
+1. Craft **Shopsteel** (1 iron + 1 amethyst shard makes 2), then a **Workbay**: 4 glass,
+   4 Shopsteel, 1 ender pearl. Place it — it binds to you.
+2. Hold a machine, right-click the Workbay, click the large slot beside the name. It lives inside
+   now; its own screen is one button away.
+3. Craft a **Connector** (Shopsteel, redstone, Shopsteel — makes 4), right-click the Workbay with
+   it to pair, place it against any chest, tank or machine. Back at the Workbay, press **Add** on
+   a bay and tick the Connector: a row appears. Switch it on, set direction, resource and filter.
 
-Every figure is a **difference between two recordings**: five 400-tick windows before the scenario
-is built and five after, on minus off, median of five, taken with the game's own metrics profiler
-on a headless server. `./gradlew runBenchmark` reproduces all of it.
+Every item explains itself behind Shift. `/workbay why <block>` says whether a block can be hosted.
 
-| Scenario | ms/tick |
-|---|---|
-| One Workbay, eight busy links, 6.4 items/tick | **0.011** block entity + **0.013–0.029** for its dimension |
-| Sixteen separate networks, 128 busy links, 102 items/tick | **0.102** + **0.208** — linear, no cliff |
-| Sixty-four vanilla hoppers doing the same job, 7.8 items/tick | **0.034** |
-| Sixteen furnaces racked in bays / standing on the floor | **0.0030** / **0.0028** |
-| Four Workbay screens open / four hosted machines' own screens open | **0.0069** / **0.0029** |
+## Build and test
 
-Per item moved, the whole path — block entity plus the hosted chunk it holds — is about **3 µs**,
-against a vanilla hopper's **4 µs**. Sixteen furnaces smelting in bays and sixteen smelting in the
-overworld came out inside each other's spread, and an idle link whose destination is full costs
-**0.006** ms/tick.
+```
+./gradlew build                 # the jar, in build/libs/
+./tools/verify.sh               # build + 179 gametests + doc caps: what CI would run
+./gradlew runClient             # the game, with Mekanism and JEI loaded
+./gradlew runData               # after a datagen change; commit src/generated
+./tools/publish.sh              # dry run of the release; --real uploads (see the script)
+```
 
-## What you need
-
-- **Minecraft 1.21.1** and **NeoForge 21.1.249** or newer, Java 21, and nothing else — no library
-  mod, no dependency.
-- On a server, the mod goes on **both** ends. Opening a hosted machine's own screen from where you
-  stand uses two Mixins; `config/workbay-mixins.properties` turns them off, and the mod then falls
-  back to walking into the bay.
-
-## What it works with
-
-Any mod's machine block that has a block entity and does not need the world around it. Furnaces,
-smelters, tanks, generators, chests. Mekanism is what it is tested against, in a cross-mod test
-suite that runs on every build.
-
-It refuses, and says why in one line, anything that would break: multiblock parts, machines that
-work on neighbouring blocks, anything driven by rotation, and anything a pack denied through the
-`workbay:host_denied` tag. Every block carries a tooltip saying whether it can be hosted, in JEI
-and EMI too.
-
-JEI and EMI are optional: with either installed you can drag an ingredient straight into a link's
-filter, and the mod loads with neither.
-
-## The three screens
-
-Right-click a Workbay with an empty hand. **WORKBAY** is the bays down the left, the machine in the
-one you picked, a cube you drag to set which of its faces take what, and that bay's links — one row
-each, drawing the block it points at as itself, so a chest reads as a chest before you read the row.
-**FLOW** is the whole network as a pan-and-zoom map: a line per link, coloured by what that link is
-doing, with green pips walking it while something is moving. **UPGRADES** is the shelf and the Levy
-dial. When the mod says no, it says so in one line drawn inside the screen that caused it.
-
-## Getting started
-
-1. Drop the jar in `mods/`.
-2. Craft a **Workbay**: 4 glass, 4 Shopsteel (1 iron + 1 amethyst shard makes 2), 1 eye of ender.
-   Reachable the evening you first visit the End.
-3. Place it. It binds to you — lose the block and a fresh one picks the network straight back up.
-4. Hold a machine, right-click the Workbay, click the empty bay slot. It lives inside now, and one
-   button away is its own screen — the real one, opened where you are standing.
-5. Craft a **Connector**, right-click the Workbay with it to pair it, then place it against any
-   chest, tank or machine in the world. A row appears; switch it on.
-
-Everything above the base — more bays, other dimensions, all three resource types down one
-Connector, twice the throughput — is bought with **Levy**, which you make by taxing your own factory
-a percentage you set. The dial starts at 0% and the mod never takes a cut you did not ask for.
-
-## Known rough edges in 0.1.0
-
-It is finished enough to use. The number is 0.1.0 because bay geometry is written into saved
-worlds and the record format may still move.
-
-- **A link's rate and speed cannot be set from the screen yet.** The Impeller upgrade raises both;
-  the per-link dial is not built.
-- **Filters match an item or a fluid by identity — no tags.** "All ores" means listing them.
-- **Links carry items, fluids and energy, but not Mekanism chemicals.** A hosted gas tank keeps
-  working; no link can move what is in it yet.
+`SPEC.md` is the design, with every settled decision and the alternative it rejected. `CLAUDE.md`
+is the working manual; `HANDOFF.md` the current state; `OPEN_ISSUES.md` the known problems.
+Bugs: <https://github.com/neriyac/workbay/issues>.
 
 ## Licence
 
-MIT — do what you like with it, including in a modpack. Parts are derived from
-[EnderIO](https://github.com/Team-EnderIO/EnderIO), which is public domain (Unlicense).
+MIT. Parts are derived from [EnderIO](https://github.com/Team-EnderIO/EnderIO), which is public
+domain (Unlicense). Modpacks welcome.
