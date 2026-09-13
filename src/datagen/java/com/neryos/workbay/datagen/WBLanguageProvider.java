@@ -78,7 +78,8 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.messageKey("network_transferred"), "%s moved here. The block it came from "
             + "is standing empty.");
         add(WorkbayLang.messageKey("break_warning"), "Breaking this Workbay leaves its bays behind. "
-            + "The machines keep running \u2014 place any fresh Workbay to get back in.");
+            + "Nothing is lost: the network sleeps with everything in it, and any fresh Workbay "
+            + "you place picks it straight back up.");
         // Two refusals, two reasons. "Locked" is the stranger's and closes every door; "owner
         // only" is what a shared Workbay says to a guest who reaches for the lock, an upgrade or a
         // room -- calling that "locked" was a lie the screen told (OPEN_ISSUES #107).
@@ -166,8 +167,8 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("count.problems.none"), "no problems");
 
         add(WorkbayLang.guiKey("button.upgrades"), "Upgrades");
-        add(WorkbayLang.guiKey("button.upgrades.tip"), "Install Expansion Plates, a Resonator or "
-            + "an Impeller.");
+        add(WorkbayLang.guiKey("button.upgrades.tip"), "Install Expansion Plates, a Resonator, an "
+            + "Impeller or an Anchor.");
         add(WorkbayLang.guiKey("button.networks"), "Networks");
         add(WorkbayLang.guiKey("button.networks.tip"), "Which network this Workbay is, and every "
             + "other one you own. Move one here, or rename it.");
@@ -553,9 +554,9 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.guiKey("upgrade.anchor"), "Anchor");
         add(WorkbayLang.guiKey("upgrade.anchor.desc"), "While away");
         add(WorkbayLang.guiKey("upgrade.anchor.long"),
-            "Keeps the Backshop running with nobody there. It holds this Workbay's own "
-            + "chunk and its bay column, which is what lets its links keep moving goods after "
-            + "you log out.");
+            "Keeps the Backshop running with nobody standing here. It holds this Workbay's own "
+            + "chunk and its bay column while you are online, anywhere in the world; log out and "
+            + "they are let go until you are back.");
 
         add(WorkbayLang.guiKey("rooms.name"), "Room %s");
         add(WorkbayLang.guiKey("rooms.rename.tip"),
@@ -717,14 +718,16 @@ public class WBLanguageProvider extends LanguageProvider {
             + "machine and click the large slot beside the name to rack it.");
         add(WorkbayLang.infoKey("workbay.4"), "2. Right-click the Workbay with a Connector to pair "
             + "the two, then place that Connector against any chest, tank or machine in the world. "
-            + "Placing it is what makes the link, and the link appears as a row on this screen.");
-        add(WorkbayLang.infoKey("workbay.5"), "3. Set that row's direction and what it carries. "
+            + "Back at the Workbay, press Add on a bay and tick the Connector: that makes the "
+            + "channel, and it appears as a row on this screen, switched off.");
+        add(WorkbayLang.infoKey("workbay.5"), "3. Switch the row on and set its direction and what it carries. "
             + "Insert pushes into the block the Connector is stuck to; Extract pulls out of it. "
             + "The Workbay glows while goods are moving and goes amber when a link needs you.");
         add(WorkbayLang.infoKey("workbay.6"), "Everything past that is an upgrade you craft and "
-            + "fit on the Upgrades tab — more bays, faster links, longer reach. A room is a "
-            + "block that goes in a bay, and you build inside it. "
-            + "Each one is consumed when it goes in, and there is no taking it out again.");
+            + "fit on the Upgrades tab — more bays, faster links, longer reach. Each one is "
+            + "consumed when it goes in, and there is no taking it out again. A room is "
+            + "different: a block that goes in a bay like a machine, that you build inside, and "
+            + "that comes back out as an item with everything in it.");
 
         add(WorkbayLang.infoKey("connector.1"), "One end of a link, as a block you can point at. "
             + "Right-click a Workbay with it to pair the two; its tooltip then names the network. "
@@ -742,8 +745,8 @@ public class WBLanguageProvider extends LanguageProvider {
             + "does not.");
 
 
-        add(WorkbayLang.infoKey("expansion_plate.1"), "One more bay, consumed on install. Each one "
-            + "One more bay, up to the eight the rack holds.");
+        add(WorkbayLang.infoKey("expansion_plate.1"), "One more bay on the rack, consumed on install. "
+            + "A fresh Workbay has two; the rack holds eight.");
         add(WorkbayLang.infoKey("room.1"), "A room: a private, sealed cube you walk into and "
             + "build in. It goes in a bay like a machine does \u2014 open a Workbay and click an "
             + "empty bay's slot while holding it \u2014 and Enter on that bay's panel takes you "
@@ -774,9 +777,9 @@ public class WBLanguageProvider extends LanguageProvider {
             + "the wait between steps \u2014 both, on every link this network has. Two may be "
             + "fitted. Throughput is the one thing a fresh Workbay is deliberately short of.");
 
-        add(WorkbayLang.infoKey("shopsteel.1"), "An intermediate. Smelted, and used in almost "
-            + "everything this mod makes.");
-        add(WorkbayLang.infoKey("housing.1"), "An intermediate. The shell every craftable in this "
-            + "mod is built on.");
+        add(WorkbayLang.infoKey("shopsteel.1"), "An intermediate: one iron ingot and one amethyst shard "
+            + "make two. Used in everything this mod makes.");
+        add(WorkbayLang.infoKey("housing.1"), "An intermediate. The shell every upgrade and every "
+            + "room is built on; the Workbay and the Connector need none.");
     }
 }
