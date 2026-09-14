@@ -38,7 +38,7 @@ for f in gradlew gradlew.bat settings.gradle .gitattributes .gitignore \
          tools/check-docs.sh tools/check-text.sh tools/install-hooks.sh \
          tools/mc-drive.ps1 tools/verify.sh \
          src/main/templates/META-INF/neoforge.mods.toml \
-         MOD_MAP.md; do
+         docs/dev/MOD_MAP.md; do
   copy "$f"
 done
 chmod +x "$stage"/tools/*.sh "$stage"/.githooks/* "$stage/gradlew"
@@ -58,8 +58,8 @@ rename() {
 }
 
 rename src/main/java/com/neryos/workbay/client/screen/Draw.java \
-  | sed -e '/^import com\.example\.newmod\.world\.FaceConfig;$/d' \
-        -e '/public static int roleColour/,/^    }$/d' \
+  | sed -e '/^import com\.example\.newmod\.world\.FaceConfig;\r\?$/d' \
+        -e '/public static int roleColour/,/^    }\r\?$/d' \
   > "$src/client/screen/Draw.java"
 rename src/main/java/com/neryos/workbay/client/screen/WBIcons.java > "$src/client/screen/NMIcons.java"
 rename src/main/java/com/neryos/workbay/WorkbayLang.java > "$src/NewModLang.java"
@@ -82,6 +82,15 @@ for block in [
     r"\n *// Mekanism's API.*?\n *compileOnly \"mekanism[^\n]*\n",
 ]:
     text = re.sub(block, '\n', text, flags=re.S)
+# The publish block is worth keeping, but it names this mod's optional dependencies,
+# its slug and its repository. A new mod fills those in; it does not inherit them.
+text = text.replace("        optional('jei', 'emi', 'mekanism')\n", '')
+for line in ["        optional { slug = 'jei' }\n",
+             "        optional { slug = 'emi' }\n",
+             "        optional { slug = 'mekanism' }\n"]:
+    text = text.replace(line, '')
+text = text.replace("projectSlug = 'workbay'", "projectSlug = 'newmod'")
+text = text.replace("repository = 'neriyac/workbay'", "repository = 'you/newmod'")
 text = text.replace(
     "            programArguments.addAll '--quickPlaySingleplayer', 'New World'\n", '')
 open(sys.argv[2], 'w', encoding='utf-8', newline='\n').write(text)

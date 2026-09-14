@@ -55,8 +55,17 @@ REFERENCE_BUDGET=1785  # looked up, never read whole
 # never read by a coding session, which is the reference category exactly. Part of the
 # raise was paid rather than printed: SPEC lost its stale filter-item screen spec and
 # its list of QOL features that have since shipped.
+# Night-run reports and the long-range list. Written by a run, read by a human afterwards,
+# never by a coding session, so they belong to neither budget.
+is_skipped() {
+  case "${1##*/}" in
+    STATUS.md|MORNING.md|ROADMAP.md) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 is_reference() {
-  case "$1" in
+  case "${1##*/}" in
     SPEC.md|MOD_MAP.md|ENDERIO_MAP.md|ART.md|README.md|WALKTHROUGH.md|MODPAGE.md|CHANGELOG.md) return 0 ;;
     *) return 1 ;;
   esac
@@ -74,21 +83,23 @@ report() {
 report "ALWAYS-READ"
 while IFS= read -r f; do
   [ -f "$f" ] || continue
+  is_skipped "$f" && continue
   is_reference "$f" && continue
   n=$(grep -c '' "$f")
   always=$((always + n))
   printf '%-18s %6s\n' "$f" "$n"
-done < <(git ls-files '*.md')
+done < <(ls *.md docs/dev/*.md 2>/dev/null)
 printf '%s\n%-18s %6s / %s\n' "-------------------------" TOTAL "$always" "$ALWAYS_BUDGET"
 
 report "REFERENCE"
 while IFS= read -r f; do
   [ -f "$f" ] || continue
+  is_skipped "$f" && continue
   is_reference "$f" || continue
   n=$(grep -c '' "$f")
   reference=$((reference + n))
   printf '%-18s %6s\n' "$f" "$n"
-done < <(git ls-files '*.md')
+done < <(ls *.md docs/dev/*.md 2>/dev/null)
 printf '%s\n%-18s %6s / %s\n' "-------------------------" TOTAL "$reference" "$REFERENCE_BUDGET"
 
 printf '\n(~%s tokens if every tracked doc is read)\n' "$(((always + reference) * 10))"
