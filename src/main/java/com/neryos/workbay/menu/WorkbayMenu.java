@@ -1010,11 +1010,15 @@ public class WorkbayMenu extends AbstractContainerMenu {
 
         // 1. The block the network is leaving, if it has one. Loaded or not: the record is the
         //    registry's, and the block finds out it is empty the next time it ticks or is opened.
+        //    Only if that block still holds *this* network: a sleeping network's last position is
+        //    a block another network may have moved into since; the 09-14 QA lost a
+        //    network's screen to it. `transferringASleepingNetworkDoesNotUnbindTheBlockItLastStoodIn`.
         target.lastKnownPos().ifPresent(where -> {
             ServerLevel level = player.server.getLevel(where.dimension());
             if (level != null && level.isLoaded(where.pos())
                 && level.getBlockEntity(where.pos()) instanceof WorkbayBlockEntity was
-                && was != workbay) {
+                && was != workbay
+                && was.workbayId().map(target.id()::equals).orElse(false)) {
                 was.unbind();
             }
         });

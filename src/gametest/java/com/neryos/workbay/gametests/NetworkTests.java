@@ -215,6 +215,49 @@ public class NetworkTests {
     }
 
     /**
+     * The new-player QA of 2026-09-14 (fixed the same night): Smeltery moved A -> B, then the network
+     * B was born with (asleep, its last block <em>B</em>) moved into A, and B opened on "This
+     * Workbay holds no network" while its own list said Smeltery was placed at B. Transfer unbound
+     * whatever block stood at the incoming network's last position without asking whether that
+     * block still held <em>that</em> network.
+     */
+    @GameTest
+    @TestHolder(description = "Transferring a sleeping network into A does not unbind B, the block it last stood in, when B now holds another network.")
+    public static void transferringASleepingNetworkDoesNotUnbindTheBlockItLastStoodIn(
+        final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(9, 5, 5));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+
+            // Two placed blocks, two networks: A holds "Smeltery", B the one it was born with.
+            BlockPos aPos = helper.absolutePos(new BlockPos(1, 1, 1));
+            BlockPos bPos = helper.absolutePos(new BlockPos(6, 1, 1));
+            WorkbayBlockEntity a = place(level, aPos, player, new ItemStack(WBBlocks.WORKBAY.get()));
+            WorkbayBlockEntity b = place(level, bPos, player, new ItemStack(WBBlocks.WORKBAY.get()));
+            UUID smeltery = a.workbayId().orElseThrow();
+            UUID second = b.workbayId().orElseThrow();
+            helper.assertFalse(smeltery.equals(second), "the second block minted no network of its own");
+
+            // Smeltery to B: B holds Smeltery, A stands empty, the second network sleeps and
+            // remembers B as the block it last stood in.
+            menuFor(b, player).act(com.neryos.workbay.menu.WorkbayAction.TRANSFER_NETWORK, 0,
+                java.util.Optional.of(smeltery));
+            helper.assertTrue(smeltery.equals(b.workbayId().orElse(null)), "B does not hold Smeltery after the first Transfer");
+            helper.assertTrue(a.workbayId().isEmpty(), "A still holds Smeltery");
+
+            // The sleeping network into A.
+            menuFor(a, player).act(com.neryos.workbay.menu.WorkbayAction.TRANSFER_NETWORK, 0,
+                java.util.Optional.of(second));
+            helper.assertTrue(second.equals(a.workbayId().orElse(null)), "A does not hold the second network after the second Transfer");
+            helper.assertTrue(smeltery.equals(b.workbayId().orElse(null)),
+                "B lost Smeltery when a network that last stood in it was moved elsewhere");
+            helper.succeed();
+        });
+    }
+
+    /**
      * <b>A network with no block sleeps, and wakes with everything intact.</b> Nothing in it may
      * run: the whole promise of "place as many Workbays as you like" is that the blocks holding
      * nothing, and the networks with no block, cost the server nothing at all.
