@@ -2152,6 +2152,72 @@ public class BusTests {
     // ------------------------------------------------------- chemicals (#31)
 
     /**
+     * OPEN_ISSUES #98, the row three drivers could not light: an item link feeding a full
+     * hydrogen bucket into a racked Rotary Condensentrator's bucket slot. Measured here instead
+     * of guessed: if the link moves it, the drivers' rig was wrong; if not, the failure message
+     * says whether Mekanism's side handler refuses the bucket or the bus never offers it.
+     */
+    @GameTest(timeoutTicks = 200)
+    @TestHolder(description = "An item link feeds a hydrogen bucket into a racked Rotary Condensentrator (#98).")
+    public static void anItemLinkFeedsABucketIntoARackedRotaryCondensentrator(final DynamicTest test) {
+        test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(7, 5, 7));
+
+        test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            ServerLevel level = helper.getLevel();
+            GameTestPlayer player = helper.makeTickingMockServerPlayerInLevel(GameType.SURVIVAL);
+            BlockPos workbayPos = helper.absolutePos(new BlockPos(0, 1, 0));
+            BlockPos chest = helper.absolutePos(new BlockPos(5, 1, 0));
+            Block rc = BuiltInRegistries.BLOCK.get(ResourceLocation.parse("mekanism:rotary_condensentrator"));
+            net.minecraft.world.item.Item bucket = BuiltInRegistries.ITEM.get(
+                ResourceLocation.parse("mekanism:hydrogen_bucket"));
+            helper.assertFalse(rc == Blocks.AIR || bucket == Items.AIR,
+                "mekanism:rotary_condensentrator or mekanism:hydrogen_bucket is not registered");
+
+            level.setBlock(chest, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            if (level.getBlockEntity(chest) instanceof Container in) {
+                in.setItem(0, new ItemStack(bucket, 1));
+            }
+            WorkbayBlockEntity workbay = setUp(helper, workbayPos, player, new ItemStack(rc));
+            WorkbayRecord record = workbay.record().orElseThrow();
+            ServerLevel backshop = level.getServer().getLevel(WorkbayDimensions.BACKSHOP);
+            BlockPos machinePos = BayGeometry.machinePos(record.bayColumn(), 0);
+            // Decondensentrating (mode true): the bucket slot takes a FULL bucket and drains it.
+            var machine = backshop.getBlockEntity(machinePos);
+            var tag = machine.saveWithoutMetadata(level.registryAccess());
+            tag.putBoolean("mode", true);
+            machine.loadWithComponents(tag, level.registryAccess());
+
+            BusConfig feed = connect(helper, workbay, chest.above(), Direction.DOWN, player);
+            workbay.addBus(feed.withMode(BusConfig.Mode.EXTRACT).withRate(4).withSpeed(10));
+
+            helper.startSequence()
+                .thenIdle(100)
+                .thenExecute(() -> {
+                    int left = countIn(level, chest, bucket);
+                    if (left != 0) {
+                        // Say which end refused. Ask the machine directly through every face.
+                        StringBuilder why = new StringBuilder("the bucket never left the chest; link reads ")
+                            .append(workbay.busStatus(feed.id())).append(". Machine faces: ");
+                        for (Direction side : Direction.values()) {
+                            IItemHandler h = backshop.getCapability(Capabilities.ItemHandler.BLOCK, machinePos, side);
+                            if (h == null) { why.append(side).append("=none "); continue; }
+                            boolean valid = false, takes = false;
+                            for (int slot = 0; slot < h.getSlots(); slot++) {
+                                ItemStack probe = new ItemStack(bucket, 1);
+                                valid |= h.isItemValid(slot, probe);
+                                takes |= h.insertItem(slot, probe, true).getCount() < 1;
+                            }
+                            why.append(side).append("=slots").append(h.getSlots()).append(valid ? "/valid" : "/invalid")
+                                .append(takes ? "/takes " : "/refuses ");
+                        }
+                        throw new GameTestAssertException(why.toString());
+                    }
+                })
+                .thenSucceed();
+        });
+    }
+
+    /**
      * Gas moves the way items, fluids and energy already move. OPEN_ISSUES #31.
      *
      * <p>A chemical is the one resource with no NeoForge capability behind it, so this is the only
