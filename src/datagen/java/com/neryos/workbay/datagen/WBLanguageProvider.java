@@ -307,7 +307,7 @@ public class WBLanguageProvider extends LanguageProvider {
             + "one go, then closes the picker.");
         add(WorkbayLang.guiKey("links.add.connector"), "New channel through %s");
         add(WorkbayLang.guiKey("links.add.connector.tip"), "Gives bay %s its own channel through "
-            + "this Connector — its own resource, direction, filter and rate. Every other bay "
+            + "this Connector: its own resource, direction, filter and rate. Every other bay "
             + "keeps what it has; one Connector can serve all of them at once.");
         add(WorkbayLang.guiKey("links.add.connector.back"), "Give %s its channel back");
         add(WorkbayLang.guiKey("links.add.connector.back.tip"), "A channel through this Connector "
@@ -746,7 +746,7 @@ public class WBLanguageProvider extends LanguageProvider {
             + "Insert pushes into the block the Connector is stuck to; Extract pulls out of it. "
             + "The Workbay glows while goods are moving and goes amber when a link needs you.");
         add(WorkbayLang.infoKey("workbay.6"), "Everything past that is an upgrade you craft and "
-            + "fit on the Upgrades tab — more bays, faster links, longer reach. Every one of them "
+            + "fit on the Upgrades tab: more bays, faster links, longer reach. Every one of them "
             + "is Shopsteel around a Housing (four Shopsteel, four obsidian, an Ender Eye) and a "
             + "core, and their recipes appear once you hold a Housing. Each one is "
             + "consumed when it goes in, and there is no taking it out again. A room is "
@@ -756,10 +756,10 @@ public class WBLanguageProvider extends LanguageProvider {
         add(WorkbayLang.infoKey("connector.1"), "One end of a link, as a block you can point at. "
             + "Right-click a Workbay with it to pair the two; its tooltip then names the network. "
             + "Place it against a chest, tank or machine and the network can reach that block. It "
-            + "carries nothing yet — open a bay, press Add, and pick it. Break it and every "
+            + "carries nothing yet. Open a bay, press Add, and pick it. Break it and every "
             + "channel through it is gone.");
         add(WorkbayLang.infoKey("connector.2"), "It reaches all six faces of the block it is stuck "
-            + "to, so which side you put it on does not matter — and one Connector serves every "
+            + "to, so which side you put it on does not matter, and one Connector serves every "
             + "bay at once. Add it on the bay holding your power cube for energy, and again on the "
             + "bay holding your generator for items: two channels, one plate, each with its own "
             + "resource, direction, filter and rate. Its name is the block's, so renaming it "

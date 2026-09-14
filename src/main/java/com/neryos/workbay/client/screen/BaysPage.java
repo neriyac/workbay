@@ -2138,7 +2138,7 @@ class BaysPage extends WorkbayPage {
      */
     /** Which bay a row is on, or a dash for one that is on none. OPEN_ISSUES #70. */
     private static String bayBadge(BusConfig config) {
-        return config.detached() ? "—" : "B" + (config.bay() + 1);
+        return config.detached() ? "-" : "B" + (config.bay() + 1);
     }
 
     private static Component statusShort(WorkbaySnapshot.Link link) {
