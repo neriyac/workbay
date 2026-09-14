@@ -40,12 +40,10 @@ repo/
 !**/src/**/repo/
 run-gametest/
 
-# Deliberately untracked: tracking these puts the always-read doc set over budget.
-ROADMAP.md
-# Night-run reports. STATUS.md is written at the end of each phase; MORNING.md is the one
-# file to read afterwards. Neither is a document a coding session reads.
-STATUS.md
-MORNING.md
+# Working notes, plans, specs, benchmarks and night-run reports. They are how the project is
+# built, not part of what is shipped, and they stay off the public repository.
+docs/dev/
+CLAUDE.md
 
 # Night-run logs.
 night/

@@ -42,17 +42,17 @@ A network belongs to the player who placed it and is born locked. When the mod s
 
 Drop `workbay-neoforge-1.21.1-<version>.jar` into `mods/` on the client **and** the server. No
 library mod. It saves space, never TPS: a hosted machine is the same block entity, ticking the
-same way, in a dimension of the mod's own (`perf/`). **JEI** or **EMI** let you drag an ingredient
+same way, in a dimension of the mod's own. **JEI** or **EMI** let you drag an ingredient
 into a link's filter; **Mekanism** adds chemical links. Every upgrade and room is built on a
 **Housing** (Shopsteel, obsidian, an Ender Eye), and holding one unlocks their recipes. Every item
 explains itself behind Shift; `/workbay why <block>` says whether a block can be hosted.
 
 `./gradlew build` makes the jar, `./tools/verify.sh` runs the 186 gametests, `./gradlew runClient`
 opens the game (`-Pworkbay.world=<save>`, `-Pworkbay.noJei`, `-Pworkbay.user=<name>`),
-`./tools/publish.sh` dry-runs the release. `SPEC.md` is the design, `CLAUDE.md` the manual,
-`HANDOFF.md` the state, `OPEN_ISSUES.md` the known problems. Bugs: <https://github.com/neriyac/workbay/issues>.
+`./tools/publish.sh` dry-runs the release. Bugs and feature requests:
+<https://github.com/neriyac/workbay/issues>.
 
 ## Licence
 
-MIT. Parts are derived from [EnderIO](https://github.com/Team-EnderIO/EnderIO), which is public
+MIT. Some patterns follow [EnderIO](https://github.com/Team-EnderIO/EnderIO), which is public
 domain (Unlicense). Modpacks welcome, no permission needed.
