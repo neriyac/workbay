@@ -24,6 +24,8 @@ with its own screen one button away. It saves space, never TPS.
 - **Networks belong to players.** One block is one network; lose the block and a fresh one picks
   the network back up. A network is born locked; Unlock shares it. Two networks per player by
   default (`workbay-server.toml`).
+- **On the ground, a room spins.** The room item's entity never expires, ages like any item so
+  it bobs and turns, and never stacks; one saved with a frozen age reads back fresh.
 - **Servers.** Every packet is bounded and validated; a menu is budgeted to 80 actions per five
   ticks; a network holds at most 64 links; the registry is written on every change and never
   throws on load — what it cannot read is carried, not dropped. Measured cost: about 0.05 ms per

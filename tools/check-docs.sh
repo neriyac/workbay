@@ -22,8 +22,10 @@ set -u
 cd "$(dirname "$0")/.." || exit 1
 
 ALWAYS_BUDGET=600      # read at the start of every session
-REFERENCE_BUDGET=1760  # looked up, never read whole
+REFERENCE_BUDGET=1785  # looked up, never read whole
 
+# 1760 -> 1785 when the gallery arrived (2026-09-14): MODPAGE.md carries the image order and the
+# caption per picture, which is what whoever pastes the store page needs and nothing else records.
 # 1690 -> 1760 when the release paperwork arrived (2026-09-14): MODPAGE.md (the store-page text,
 # pasted once per release) and CHANGELOG.md (its top section is what tools/publish.sh posts).
 # Paid in part: README.md shrank from 104 lines of store copy to 50 of repo front door.

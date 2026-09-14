@@ -417,7 +417,7 @@ public class RoomItemTests {
      * ours on the next tick, which is what the first wait is for.
      */
     @GameTest(timeoutTicks = 200)
-    @TestHolder(description = "A room item survives lava, an explosion and the void, and never ages.")
+    @TestHolder(description = "A room item survives lava, an explosion and the void, never expires, and still ages (spins).")
     public static void aRoomItemCannotBeDestroyed(final DynamicTest test) {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(5, 5, 5));
 
@@ -444,7 +444,11 @@ public class RoomItemTests {
                 .thenExecute(() -> {
                     RoomItemEntity room = one(level, at);
                     helper.assertTrue(room != null && room.isAlive(), "lava destroyed the room");
-                    helper.assertValueEqual(room.getAge(), -32768, "the room's age (it must never age)");
+                    // It ages like any item, because the age is what spins it; the lifespan is
+                    // what never runs out. Frozen at -32768 was the release candidate's bug.
+                    helper.assertTrue(room.getAge() > 30, "the room's age stopped counting: "
+                        + room.getAge() + " (it lies frozen on the ground)");
+                    helper.assertValueEqual(room.lifespan, Integer.MAX_VALUE, "the room's lifespan");
                     level.setBlock(at, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
                     level.explode(null, at.getX() + 0.5, at.getY() + 0.5, at.getZ() + 0.5, 4.0F,
                         Level.ExplosionInteraction.TNT);

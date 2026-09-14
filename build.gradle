@@ -106,7 +106,9 @@ neoForge {
     runs {
         client {
             client()
-            programArguments.addAll '--quickPlaySingleplayer', 'Correction'
+            programArguments.addAll '--quickPlaySingleplayer', (findProperty('workbay.world') ?: 'Correction')
+            // -Pworkbay.user=Stranger logs in as somebody else, for the stranger's side of a lock.
+            if (project.hasProperty('workbay.user')) programArguments.addAll '--username', project.property('workbay.user')
             // To drive the client without a human, add:
             //   programArguments.addAll '--quickPlaySingleplayer', '<world name in run/saves>'
             // It boots straight past the menus. Left out by default because it fails on a fresh
@@ -217,7 +219,8 @@ dependencies {
     // installed. The full JEI is available to runClient so the drag can actually be tried.
     compileOnly "mezz.jei:jei-${minecraft_version}-common-api:${jei_version}"
     compileOnly "mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}"
-    localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
+    // -Pworkbay.noJei leaves it out, for a shot that must show no other mod's overlay.
+    if (!project.hasProperty('workbay.noJei')) localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
     compileOnly "dev.emi:emi-neoforge:${emi_version}:api"
 
     // Mekanism's API, for chemicals only. compileOnly and guarded exactly as JEI and EMI are: a

@@ -704,8 +704,10 @@ public class WBLanguageProvider extends LanguageProvider {
             + "through Connectors.");
         add(WorkbayLang.tooltipKey("item.shopsteel"), "Iron and an amethyst shard. Everything here "
             + "is built from it.");
-        add(WorkbayLang.tooltipKey("item.housing"), "An Ender Eye cased in obsidian. Every upgrade "
-            + "and room is built on one.");
+        // OPEN_ISSUES #130: the upgrade and room recipes unlock on holding one, so this is the
+        // line that tells a player without a recipe viewer where the rest of the mod is.
+        add(WorkbayLang.tooltipKey("item.housing"), "Shopsteel, obsidian and an Ender Eye. Holding "
+            + "one unlocks every upgrade and room recipe.");
         add(WorkbayLang.tooltipKey("item.expansion_plate"), "One more bay, up to eight. Fitted on "
             + "the Upgrades tab and used up.");
         add(WorkbayLang.tooltipKey("item.anchor"), "Keeps this network running while you are "
@@ -744,7 +746,9 @@ public class WBLanguageProvider extends LanguageProvider {
             + "Insert pushes into the block the Connector is stuck to; Extract pulls out of it. "
             + "The Workbay glows while goods are moving and goes amber when a link needs you.");
         add(WorkbayLang.infoKey("workbay.6"), "Everything past that is an upgrade you craft and "
-            + "fit on the Upgrades tab — more bays, faster links, longer reach. Each one is "
+            + "fit on the Upgrades tab — more bays, faster links, longer reach. Every one of them "
+            + "is Shopsteel around a Housing (four Shopsteel, four obsidian, an Ender Eye) and a "
+            + "core, and their recipes appear once you hold a Housing. Each one is "
             + "consumed when it goes in, and there is no taking it out again. A room is "
             + "different: a block that goes in a bay like a machine, that you build inside, and "
             + "that comes back out as an item with everything in it.");
@@ -799,7 +803,8 @@ public class WBLanguageProvider extends LanguageProvider {
 
         add(WorkbayLang.infoKey("shopsteel.1"), "An intermediate: one iron ingot and one amethyst shard "
             + "make two. Used in everything this mod makes.");
-        add(WorkbayLang.infoKey("housing.1"), "An intermediate. The shell every upgrade and every "
-            + "room is built on; the Workbay and the Connector need none.");
+        add(WorkbayLang.infoKey("housing.1"), "An intermediate: four Shopsteel, four obsidian and "
+            + "an Ender Eye. The shell every upgrade and every room is built on, and holding one is "
+            + "what puts their recipes in the recipe book; the Workbay and the Connector need none.");
     }
 }

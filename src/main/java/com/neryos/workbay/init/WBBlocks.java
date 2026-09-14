@@ -89,7 +89,7 @@ public class WBBlocks {
                 .noOcclusion()
                 .noLootTable());
         ITEMS.register(name, () -> new com.neryos.workbay.content.room.RoomItem(holder.get(),
-            new net.minecraft.world.item.Item.Properties()));
+            new net.minecraft.world.item.Item.Properties().stacksTo(1)));
         return holder;
     }
 
