@@ -110,19 +110,17 @@ public final class RoomGeometry {
     }
 
     /**
-     * The four doors, as a block position to the part it draws. One <b>2×2 door</b> in the middle
-     * of each of the four walls, sitting on the floor.
-     *
-     * <p>Two wide because a wall is a whole number of chunks across and sixteen has no middle
-     * block: a one-block doorway is off-centre by half a block, which is exactly what it looks
-     * like. Two straddles the seam and is dead centre.
+     * The four doors, as a block position to the part it draws, one in the middle of each wall,
+     * standing on the floor. <b>An odd wall gets a 1x2 door on its middle block; an even wall gets
+     * a 2x2 door on its middle seam</b> - the eye wants the door dead centre either way (Neriya,
+     * 2026-09-14: every shipped interior is odd, and the 2x2 sat half a block off).
      *
      * <p><b>Left and right are the viewer's, and the viewer is inside.</b> The first draft named
-     * them looking <em>into</em> the room, which is the one side nobody is ever on — a player
+     * them looking <em>into</em> the room, which is the one side nobody is ever on - a player
      * stands in the room and looks <em>out</em> at the wall. Every wall came out mirrored: both
      * handles on the outer edges, a hinge stile down the middle of each leaf, two single doors hung
      * backwards rather than one double door. Found by Neriya on the first screenshot of a room.
-     * {@code aDoorsLeavesMeetInTheMiddle} is the guard.
+     * {@code everyDoorIsCentredOnItsWall} and {@code aDoorsLeavesMeetInTheMiddle} are the guards.
      */
     public static java.util.Map<BlockPos, RoomPart> doors(int region, int tier) {
         int side = footprint(tier);
@@ -130,11 +128,20 @@ public final class RoomGeometry {
         if (side < 4) {
             return out;
         }
+        BlockPos o = origin(region);
+        boolean odd = (side - 2) % 2 == 1;
         int a = side / 2 - 1;
         int b = side / 2;
-        BlockPos o = origin(region);
         for (int i = 0; i < 2; i++) {
             int y = 1 + i;
+            if (odd) {
+                RoomPart part = i == 0 ? RoomPart.DOOR_BOTTOM : RoomPart.DOOR_TOP;
+                out.put(o.offset(0, y, b), part);
+                out.put(o.offset(side - 1, y, b), part);
+                out.put(o.offset(b, y, 0), part);
+                out.put(o.offset(b, y, side - 1), part);
+                continue;
+            }
             RoomPart left = i == 0 ? RoomPart.DOOR_BOTTOM_LEFT : RoomPart.DOOR_TOP_LEFT;
             RoomPart right = i == 0 ? RoomPart.DOOR_BOTTOM_RIGHT : RoomPart.DOOR_TOP_RIGHT;
             // West wall (x = 0), seen from inside looking west: +z is on the viewer's left.

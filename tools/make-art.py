@@ -783,10 +783,48 @@ def room_door_br():
     return _door_quarter(1, 1)
 
 
+def _door_single_sheet():
+    """One 16x32 door, one leaf, sliced into two blocks: the door of a wall with an odd number of
+    blocks, which has a middle block for it (2026-09-14). Same frame, same lit lintel and
+    threshold, same shut leaf as the double door, so the two read as one family."""
+    im = Image.new("RGBA", (16, 32), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    lit = (150, 226, 246, 255)
+    core = (222, 246, 252, 255)
+    glow = (72, 150, 178, 255)
+    rect(d, 0, 0, 15, 31, DARK)
+    rect(d, 1, 1, 14, 30, STEEL_D)
+    # The lintel lamp.
+    rect(d, 2, 1, 13, 4, glow)
+    rect(d, 3, 2, 12, 3, lit)
+    d.line([(4, 2), (11, 2)], fill=core)
+    # One leaf, with its recessed panel.
+    rect(d, 2, 6, 13, 30, STEEL)
+    rect(d, 3, 7, 12, 29, STEEL_L)
+    rect(d, 4, 8, 11, 28, STEEL)
+    rect(d, 6, 11, 9, 24, STEEL_D)
+    d.line([(6, 11), (9, 11)], fill=DARK)
+    d.line([(6, 11), (6, 24)], fill=DARK)
+    # The threshold.
+    rect(d, 2, 30, 13, 30, glow)
+    d.line([(3, 30), (12, 30)], fill=lit)
+    d.line([(0, 31), (15, 31)], fill=DARK)
+    return im
+
+
+def room_door_t():
+    return _door_single_sheet().crop((0, 0, 16, 16))
+
+
+def room_door_b():
+    return _door_single_sheet().crop((0, 16, 16, 32))
+
+
 BLOCK_ART = {"connector": connector, "port": port,
              "room_wall": room_wall, "room_floor": room_floor, "room_light": room_light,
              "room_door_tl": room_door_tl, "room_door_tr": room_door_tr,
-             "room_door_bl": room_door_bl, "room_door_br": room_door_br}
+             "room_door_bl": room_door_bl, "room_door_br": room_door_br,
+             "room_door_t": room_door_t, "room_door_b": room_door_b}
 # The upgrades are ITEMS, drawn by the icon engine and written by `icons`; the older grids for
 # them below are kept only as the record of what was replaced, and `items` must not write them
 # over the shipped set -- it did once, silently, in a run meant to redraw a door.

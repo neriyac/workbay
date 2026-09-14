@@ -868,34 +868,45 @@ public class RoomTests {
     }
 
     /**
-     * The door is <b>centred</b>, and that is why it is two blocks wide: a wall is a whole number
-     * of chunks across and sixteen has no middle block, so a one-block doorway sits off-centre by
-     * half a block. The assertion is the symmetry, because that is the thing that would silently
-     * break if the footprints ever changed.
+     * The door is <b>centred</b> on every wall: on a wall with an odd number of blocks it is one
+     * block wide and stands on the middle block; on an even one it is two wide and straddles the
+     * middle seam. Every shipped size is odd, and the 2x2 door sat half a block off on all of them
+     * until Neriya's eye caught it (2026-09-14). The assertion is the symmetry, because that is
+     * the thing that would silently break if the footprints ever changed.
      */
     @GameTest
-    @TestHolder(description = "Each wall's door is two blocks wide and exactly centred.")
+    @TestHolder(description = "Each wall's door is exactly centred: 1x2 on an odd wall, 2x2 on an even one.")
     public static void everyDoorIsCentredOnItsWall(final DynamicTest test) {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
 
         test.onGameTest(ExtendedGameTestHelper.class, helper -> {
             for (int tier = 1; tier <= RoomGeometry.MAX_TIER; tier++) {
                 int side = RoomGeometry.footprint(tier);
+                boolean odd = (side - 2) % 2 == 1;
                 var doors = RoomGeometry.doors(0, tier);
-                helper.assertTrue(doors.size() == 16,
-                    "tier " + tier + " has " + doors.size() + " door blocks, not four 2x2 doors");
+                helper.assertTrue(doors.size() == (odd ? 8 : 16),
+                    "tier " + tier + " has " + doors.size() + " door blocks, not four "
+                        + (odd ? "1x2" : "2x2") + " doors");
                 BlockPos origin = RoomGeometry.origin(0);
-                for (BlockPos at : doors.keySet()) {
+                for (var door : doors.entrySet()) {
+                    BlockPos at = door.getKey();
                     int dx = at.getX() - origin.getX();
                     int dz = at.getZ() - origin.getZ();
-                    // On a wall, the run along it must straddle the middle: the two columns either
-                    // side of the seam are side/2 - 1 and side/2, and they mirror each other.
                     int along = (dx == 0 || dx == side - 1) ? dz : dx;
-                    helper.assertTrue(along + (side - 1 - along) == side - 1
-                            && (along == side / 2 - 1 || along == side / 2),
-                        "a door block at " + at + " is not centred on its wall of " + side);
+                    boolean centred = odd ? along == side / 2
+                        : along == side / 2 - 1 || along == side / 2;
+                    helper.assertTrue(centred, "a door block at " + at + " is not centred on its wall of " + side);
                     helper.assertTrue(at.getY() == 1 || at.getY() == 2,
                         "a door block at " + at + " is not on the floor");
+                    var part = door.getValue();
+                    boolean single = part == com.neryos.workbay.content.room.RoomPart.DOOR_BOTTOM
+                        || part == com.neryos.workbay.content.room.RoomPart.DOOR_TOP;
+                    helper.assertTrue(single == odd, "a door block at " + at + " is " + part
+                        + " on a wall of " + side);
+                    helper.assertTrue((at.getY() == 1) == (part == com.neryos.workbay.content.room.RoomPart.DOOR_BOTTOM
+                        || part == com.neryos.workbay.content.room.RoomPart.DOOR_BOTTOM_LEFT
+                        || part == com.neryos.workbay.content.room.RoomPart.DOOR_BOTTOM_RIGHT),
+                        "a door block at " + at + " is " + part + " at that height");
                 }
             }
             helper.succeed();
@@ -921,10 +932,18 @@ public class RoomTests {
         test.registerGameTestTemplate(() -> StructureTemplateBuilder.withSize(3, 3, 3));
 
         test.onGameTest(ExtendedGameTestHelper.class, helper -> {
+            int evenWalls = 0;
             for (int tier = 1; tier <= RoomGeometry.MAX_TIER; tier++) {
                 int side = RoomGeometry.footprint(tier);
                 BlockPos origin = RoomGeometry.origin(0);
                 var doors = RoomGeometry.doors(0, tier);
+                // A 2x2 door with two leaves is the even wall's; an odd wall has one 1x2 door on
+                // its middle block (everyDoorIsCentredOnItsWall). Every shipped size is odd, so
+                // this loop guards the even rule for the day a size is even.
+                if ((side - 2) % 2 == 1) {
+                    continue;
+                }
+                evenWalls++;
                 int walls = 0;
                 for (Direction outward : Direction.Plane.HORIZONTAL) {
                     // The wall this direction faces out of, and the axis that runs along it.

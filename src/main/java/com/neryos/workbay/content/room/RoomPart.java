@@ -9,10 +9,11 @@ import net.minecraft.util.StringRepresentable;
  * broken and the right-click that opens the way out, and every one of those would otherwise be
  * written six times.
  *
- * <p>The four {@code DOOR_*} parts are the quarters of one <b>2×2 door</b>. Two wide because a
- * room's wall is sixteen blocks across and sixteen has no middle block — a one-block doorway sits
- * off-centre by half a block and looks like a hatch somebody forgot to finish. Two wide is exactly
- * centred on the seam, and it reads as a door because it is the shape of one.
+ * <p>The {@code DOOR_*} parts are two doors: a <b>1×2</b> one ({@code DOOR_BOTTOM}, {@code
+ * DOOR_TOP}) for a wall with an odd number of blocks, which has a middle block, and the quarters
+ * of a <b>2×2</b> one for a wall with an even number, which has a middle seam. Either way the door
+ * is dead centre, which is what Neriya asked for on 2026-09-14: every shipped size is odd, so
+ * the 2×2 sat half a block off and the eye caught it.
  */
 public enum RoomPart implements StringRepresentable {
     WALL("wall"),
@@ -50,7 +51,9 @@ public enum RoomPart implements StringRepresentable {
     DOOR_BOTTOM_LEFT("door_bl"),
     DOOR_BOTTOM_RIGHT("door_br"),
     DOOR_TOP_LEFT("door_tl"),
-    DOOR_TOP_RIGHT("door_tr");
+    DOOR_TOP_RIGHT("door_tr"),
+    DOOR_BOTTOM("door_b"),
+    DOOR_TOP("door_t");
 
     private final String name;
 
@@ -63,10 +66,9 @@ public enum RoomPart implements StringRepresentable {
         return this == FLOOR;
     }
 
-    /** True for the four quarters of a drawn door, which are the only blocks that open one. */
+    /** True for every piece of a drawn door, which are the only blocks that open one. */
     public boolean isDoor() {
-        return this == DOOR_BOTTOM_LEFT || this == DOOR_BOTTOM_RIGHT
-            || this == DOOR_TOP_LEFT || this == DOOR_TOP_RIGHT;
+        return name.startsWith("door_");
     }
 
     /** The texture this part draws, under {@code textures/block/}. */

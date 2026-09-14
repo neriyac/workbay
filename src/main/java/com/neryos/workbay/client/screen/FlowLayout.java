@@ -89,11 +89,21 @@ final class FlowLayout {
      * edges and want two ports, and a map keyed on the pair would hand them one.
      */
     private final java.util.IdentityHashMap<int[], Integer> ports = new java.util.IdentityHashMap<>();
+    /**
+     * Where a <em>parallel</em> edge leaves its box. Two or more edges between the same pair of
+     * boxes — chemical out, fluid back, energy along — used to leave from one point, share one
+     * vertical and land five pixels apart: three arrowheads in a scribble, and a reversed one
+     * drawn over them (OPEN_ISSUES #124). Each now leaves at the same offset it arrives at, so
+     * level boxes get straight parallel lanes and each arrow is its own line end to end.
+     */
+    private final java.util.IdentityHashMap<int[], Integer> departures = new java.util.IdentityHashMap<>();
 
     /** One vertical run: everything leaving one box into one channel, and where it branches to. */
     private static final class Run {
         int from;
         int start;
+        /** The one segment this run carries, when it is a parallel edge's private lane. */
+        int[] only;
         int[] ends = new int[0];
         int slot;
         final List<Run> before = new ArrayList<>();
@@ -471,7 +481,21 @@ final class FlowLayout {
             for (int i = 0; i < here.size(); i++) {
                 ports.put(here.get(i), first + i * pitch);
             }
+            // Parallel edges: the same source twice or more. Each leaves at its arrival's offset.
+            java.util.Map<Integer, Integer> perSource = new java.util.HashMap<>();
+            here.forEach(seg -> perSource.merge(seg[0], 1, Integer::sum));
+            for (int[] seg : here) {
+                if (perSource.get(seg[0]) > 1 && size[seg[0]] == NODE_H) {
+                    departures.put(seg, anchor(seg[0]) + ports.get(seg) - middle);
+                }
+            }
         }
+    }
+
+    /** Where this edge leaves its box: its own lane if it is one of a parallel set, else the middle. */
+    private int departure(int[] seg) {
+        Integer at = departures.get(seg);
+        return at == null ? anchor(seg[0]) : at;
     }
 
     // ------------------------------------------------------------------------------- phase 5
@@ -481,16 +505,19 @@ final class FlowLayout {
         List<Run> runs = new ArrayList<>();
         for (int[] seg : segments) {
             Run mine = null;
-            for (Run run : runs) {
-                if (run.from == seg[0]) {
-                    mine = run;
-                    break;
+            if (departures.get(seg) == null) {
+                for (Run run : runs) {
+                    if (run.from == seg[0] && run.only == null) {
+                        mine = run;
+                        break;
+                    }
                 }
             }
             if (mine == null) {
                 mine = new Run();
                 mine.from = seg[0];
-                mine.start = anchor(seg[0]);
+                mine.start = departure(seg);
+                mine.only = departures.get(seg) == null ? null : seg;
                 runs.add(mine);
             }
             int[] grown = Arrays.copyOf(mine.ends, mine.ends.length + 1);
@@ -599,13 +626,15 @@ final class FlowLayout {
             for (int i = 0; i + 1 < chain.length; i++) {
                 int l = vertexLayer[chain[i]];
                 Run run = null;
+                boolean parallel = departures.get(segs[i]) != null;
                 for (Run candidate : runs.get(l)) {
-                    if (candidate.from == chain[i]) {
+                    if (parallel ? candidate.only == segs[i]
+                        : candidate.from == chain[i] && candidate.only == null) {
                         run = candidate;
                         break;
                     }
                 }
-                int startY = anchor(chain[i]);
+                int startY = departure(segs[i]);
                 int endY = port(segs[i]);
                 if (i > 0) {
                     add(xs, ys, layerX[l], startY);

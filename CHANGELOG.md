@@ -18,7 +18,7 @@ with its own screen one button away. It saves space, never TPS.
   and the bay's links. FLOW: the whole network as a map, a line per link, pips walking where
   something is moving. UPGRADES: more bays, other dimensions, higher rates, chunk loading.
 - **Rooms.** A Room, a Wide Room and a Vast Room (3, 9 and 13 blocks inside) rack in a bay like a
-  machine. Build inside; enter from the bay; a lit door in each wall leads out. A room travels
+  machine. Build inside; enter from the bay; a lit door dead centre in each wall leads out. A room travels
   as an item that cannot be destroyed, keeps everything built in it, and nests as deep as you
   like — only a room inside itself is refused.
 - **Networks belong to players.** One block is one network; lose the block and a fresh one picks
