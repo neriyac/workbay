@@ -78,6 +78,7 @@ def main():
     ap.add_argument('--fps', type=float, default=12)
     ap.add_argument('--seconds', type=float, default=4)
     ap.add_argument('--pid', type=int)
+    ap.add_argument('--npy', action='store_true', help='raw .npy frames: PNG encoding caps a 1600x900 capture near 28 fps')
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     h = find_window(a.pid)
@@ -102,7 +103,10 @@ def main():
         if f is None or f.max() == 0:
             black += 1
             continue
-        Image.fromarray(f).save(os.path.join(a.out, f'{i:04d}.png'), compress_level=1)
+        if a.npy:
+            np.save(os.path.join(a.out, f'{i:04d}.npy'), f)
+        else:
+            Image.fromarray(f).save(os.path.join(a.out, f'{i:04d}.png'), compress_level=1)
     print(f'{n - black} frames {g.w}x{g.hgt} at {a.fps} fps -> {a.out} ({black} black dropped)')
 
 
