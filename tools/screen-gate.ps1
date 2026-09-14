@@ -19,9 +19,14 @@ public class Gate {
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
   [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr h, int x, int y, int w, int hgt, bool repaint);
   [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr ctx);
 }
 '@
 Add-Type -TypeDefinition $sig
+# Per-monitor-v2 DPI awareness BEFORE any window exists: the OLED runs at 150%, and an unaware
+# process sees window rects divided by 1.5 and MoveWindow multiplies them back, so a window on the
+# other screen was "moved" into the gap between screens and shrank by two thirds every second.
+[Gate]::SetProcessDpiAwarenessContext([IntPtr]::op_Explicit(-4)) | Out-Null
 $root = Split-Path $PSScriptRoot -Parent
 $log = Join-Path $root 'night\gate.log'
 $stop = Join-Path $root 'night\gate-stop'
@@ -49,6 +54,7 @@ $timer.Add_Tick({
     if (-not [Gate]::GetWindowRect($h, [ref]$r)) { continue }
     $cx = [int](($r.L + $r.R) / 2); $cy = [int](($r.T + $r.B) / 2)
     if ($keep.Bounds.Contains($cx, $cy)) { continue }
+    if (($r.R - $r.L) -lt 200 -or ($r.B - $r.T) -lt 100) { continue }   # a splash or a shrunken rect: never touch
     $w = [Math]::Min($r.R - $r.L, $keep.Bounds.Width); $hgt = [Math]::Min($r.B - $r.T, $keep.Bounds.Height)
     $x = $keep.Bounds.X + [Math]::Max(0, [int](($keep.Bounds.Width - $w) / 2))
     $y = $keep.Bounds.Y + [Math]::Max(0, [int](($keep.Bounds.Height - $hgt) / 2))
