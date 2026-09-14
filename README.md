@@ -21,7 +21,7 @@ dimension, still ticking, still running its own recipes. Its real screen opens f
 
 A Connector is a small plate you stick to any chest, tank or machine; press Add on a bay, tick it,
 switch the row on. Items, fluids, energy or Mekanism chemicals move with a direction, a filter and
-a rate — and FLOW draws the whole network as a map.
+a rate, and FLOW draws the whole network as a map.
 
 ![The FLOW map: an ore chest linked to two furnaces, both linked to an ingot chest; a line per link, coloured by its state](docs/media/04-flow-map.png)
 

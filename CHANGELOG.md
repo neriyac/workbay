@@ -2,7 +2,7 @@
 
 The top section is what `tools/publish.sh` posts with the release. Newest first.
 
-## 1.0.0 — 2026-09-14
+## 1.0.0 - 2026-09-14
 
 First release. Minecraft 1.21.1, NeoForge 21.1.249 or newer, Java 21, no dependencies.
 
@@ -20,7 +20,7 @@ with its own screen one button away. It saves space, never TPS.
 - **Rooms.** A Room, a Wide Room and a Vast Room (3, 9 and 13 blocks inside) rack in a bay like a
   machine. Build inside; enter from the bay; a lit door dead centre in each wall leads out. A room travels
   as an item that cannot be destroyed, keeps everything built in it, and nests as deep as you
-  like — only a room inside itself is refused.
+  like. Only a room inside itself is refused.
 - **Networks belong to players.** One block is one network; lose the block and a fresh one picks
   the network back up. A network is born locked; Unlock shares it. Two networks per player by
   default (`workbay-server.toml`).
@@ -28,7 +28,7 @@ with its own screen one button away. It saves space, never TPS.
   it bobs and turns, and never stacks; one saved with a frozen age reads back fresh.
 - **Servers.** Every packet is bounded and validated; a menu is budgeted to 80 actions per five
   ticks; a network holds at most 64 links; the registry is written on every change and never
-  throws on load — what it cannot read is carried, not dropped. Measured cost: about 0.05 ms per
+  throws on load: what it cannot read is carried, not dropped. Measured cost: about 0.05 ms per
   tick per busy network, no forced chunks, no growth over an hour.
 - **Without Mekanism** a world that had Mekanism machines racked opens clean; those bays empty
   and keep a record of what was there.
